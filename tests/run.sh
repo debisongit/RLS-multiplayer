@@ -20,4 +20,5 @@ luajit tests/client_test.lua
 luajit tests/fleet_client_test.lua
 luajit tests/guard_test.lua
 luajit tests/unstuck_test.lua
+luajit tests/join_protect_test.lua
 echo "All tests passed."

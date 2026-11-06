@@ -8,6 +8,8 @@
 
 local M = {}
 
+local mp = require("rlsmp/lib/mp")
+
 local enabled = false
 local reverting = false
 
@@ -21,7 +23,8 @@ end
 -- true = the player must not sit in this vehicle.
 function M.isBlocked(id)
   if not id or id < 0 then return false end
-  if MPVehicleGE and MPVehicleGE.isOwn and not MPVehicleGE.isOwn(id) then return true end
+  -- Only vehicles BeamMP knows as another player's. A car RLS just spawned is not registered yet and stays allowed.
+  if mp.isRemote(id) then return true end
   if gameplay_traffic and gameplay_traffic.getTrafficData then
     local td = gameplay_traffic.getTrafficData()[id]
     if td and td.isAi == true then return true end

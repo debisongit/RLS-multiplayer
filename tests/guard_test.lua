@@ -3,7 +3,12 @@ package.path = "Resources/Client/RLS-Career-MP/lua/ge/extensions/?.lua;" .. pack
 function setExtensionUnloadMode() end
 local own = {[1] = true, [2] = true, [3] = true}
 local entered, walking, toasts
-MPVehicleGE = {isOwn = function(id) return own[id] == true end}
+MPVehicleGE = {getVehicles = function()
+  local t = {}
+  for id in pairs(own) do t["0-" .. id] = {gameVehicleID = id, isLocal = true} end
+  t["1-9"] = {gameVehicleID = 9, isLocal = false}
+  return t
+end}
 local traffic = {[2] = {isAi = true}, [3] = {isAi = false}}  -- 3 = player-driven traffic-system car (RLS job)
 gameplay_traffic = {getTrafficData = function() return traffic end}
 gameplay_parking = {getParkedCarsList = function() return {5} end}
@@ -18,6 +23,7 @@ local passed = 0
 local function check(c, m) if not c then error("FAIL: " .. m, 2) end passed = passed + 1 end
 
 check(g.isBlocked(9) == true, "other player's car blocked")
+check(g.isBlocked(77) == false, "a car BeamMP does not know yet (just spawned) is allowed")
 check(g.isBlocked(2) == true, "own AI traffic blocked")
 check(g.isBlocked(5) == true, "parked car blocked")
 check(g.isBlocked(1) == false, "own car allowed")

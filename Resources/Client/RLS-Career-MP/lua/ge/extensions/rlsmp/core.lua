@@ -12,6 +12,8 @@ local M = {}
 
 local net = require("rlsmp/lib/net")
 local transfer = require("rlsmp/lib/transfer")
+local removeGuard = require("rlsmp/lib/removeGuard")
+local mapGate = require("rlsmp/lib/mapGate")
 
 local START_TIMEOUT = 180     -- seconds to wait for RLS to report the career as active
 local RLS_WAIT_TIMEOUT = 60   -- seconds to wait for RLS itself to finish loading
@@ -22,7 +24,12 @@ local pending                 -- {profile, isNew, slot, opts}
 local isNewCareer = false
 local firstSaveTimer
 
-local function setState(s) state = s stateTime = 0 end
+-- Lines tagged [rlsmp-timing] show where join time goes (send them with the log if joining feels slow).
+local function timing(what)
+  log("I", "RLS-Career-MP", string.format("[rlsmp-timing] %s t=%.1f", what, os.clock()))
+end
+
+local function setState(s) timing("state " .. s) state = s stateTime = 0 end
 function M.getState() return state end
 
 local function isMP()
@@ -53,6 +60,7 @@ end
 
 local function fail(reason, userMsg)
   log("E", "RLS-Career-MP", "Career start failed: " .. tostring(reason))
+  removeGuard.enable(false)
   setState("failed")
   toast("error", userMsg or ("Could not start your career (" .. tostring(reason) .. ")"))
   net.send("rlsmpLoaded", {ok = false, err = tostring(reason)})
@@ -69,6 +77,10 @@ local function startCareer()
   local opts = {}
   for k, v in pairs(p.opts or {}) do opts[k] = v end
   opts.startingMap = getCurrentLevelIdentifier()
+
+  -- RLS activation deletes every vehicle in the scene; keep the other players' cars.
+  removeGuard.install()
+  removeGuard.enable(true)
 
   local ok, result, problem
   if overhaul_shell_gameMode and overhaul_shell_gameMode.start then
@@ -115,6 +127,7 @@ function M.onOverhaulActive(active)
     rlsmp_fleet.enable(false)
     rlsmp_vehicleGuard.enable(false)
     rlsmp_unstuck.enable(false)
+    removeGuard.enable(false)
     setState("idle")
   end
 end
@@ -148,17 +161,20 @@ function M.onUpdate(dtReal)
 end
 
 function M.onServerLeave()
+  removeGuard.enable(false)
   rlsmp_saveBridge.enable(false)
   rlsmp_wallet.enable(false)
   rlsmp_fleet.enable(false)
-    rlsmp_vehicleGuard.enable(false)
-    rlsmp_unstuck.enable(false)
+  rlsmp_vehicleGuard.enable(false)
+  rlsmp_unstuck.enable(false)
   net.reset()
   pending, firstSaveTimer = nil, nil
   setState("idle")
 end
 
 function M.onExtensionLoaded()
+  mapGate.install()
+  removeGuard.install()
   net.init()
   net.onBig("profile", onProfile)
   net.on("rlsmpError", function(e) toast("error", tostring(e.msg or e.code)) end)
