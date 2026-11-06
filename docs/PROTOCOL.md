@@ -46,6 +46,16 @@ or no `rlsmpHello` within `handshake.helloTimeoutSeconds`.
 | C→S | `rlsmpWalletDelta` | `{d = moneyChange, r = reasonLabel}` |
 | S→C | `rlsmpWalletSet` | `{money, why}` server-approved balance; client applies it |
 
+## Business (chat commands, server-side)
+
+Typed in BeamMP chat, hidden from other players. Money moves through the server wallet and
+the client gets a normal `rlsmpWalletSet`.
+
+`/biz create <name>` · `invite <player>` · `accept` · `leave` · `deposit <n>` · `withdraw <n>` · `info`
+
+Rules: max `business.maxMembers` (4); owner leaving hands ownership to the oldest member; the last member
+leaving closes the business and gets the bank. Saved in `businesses/<id>.json`.
+
 ## Reserved prefixes for later phases
 
 - `rlsmpBiz*` – Phase 2 business / syndicate (Claude A)

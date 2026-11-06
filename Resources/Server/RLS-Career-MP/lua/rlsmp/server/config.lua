@@ -56,6 +56,12 @@ M.defaults = {
     minBalance = -10000000,
   },
 
+  business = {
+    maxMembers = 4,
+    membersCanWithdraw = true,
+    inviteSeconds = 60,
+  },
+
   -- How often the server asks clients to save, in minutes (0 = rely on RLS autosave only).
   forceSaveMinutes = 5,
 }

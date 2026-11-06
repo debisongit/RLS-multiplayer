@@ -15,5 +15,6 @@ find Resources/Client -name '*.lua' -print0 | while IFS= read -r -d '' f; do lua
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 lua5.3 tests/server_test.lua "$tmp"
+lua5.3 tests/business_test.lua "$(mktemp -d -p "$tmp")"
 luajit tests/client_test.lua
 echo "All tests passed."
