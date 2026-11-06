@@ -19,10 +19,13 @@ local M = {}
 
 local cfg
 local sessions = {}   -- pid -> session
+local bigHandlers = {}  -- kind -> fn(pid, session, data); lets other modules receive big client uploads
 
 -- Public: other modules (business, traffic) can look up who is online and in which stage.
 function M.get(pid) return sessions[pid] end
 function M.all() return sessions end
+-- Other modules: receive a big upload that the client labelled with `kind` (see client fleet.lua).
+function M.onBig(kind, fn) bigHandlers[kind] = fn end
 function M.isLoaded(pid) return sessions[pid] ~= nil and sessions[pid].stage == "loaded" end
 
 local function startingOptions()
@@ -126,6 +129,11 @@ local function finishUpload(pid, s, id, up)
     return
   end
   local upload = util.jsonDecode(text)
+  if type(upload) == "table" and upload.kind then
+    local fn = bigHandlers[upload.kind]
+    if fn and s.stage == "loaded" then fn(pid, s, upload.data or {}) end
+    return
+  end
   local result, reason = profiles.applyUpload(s.profile, upload)
   if not result then
     net.send(pid, "rlsmpUpAck", {id = id, ok = false, err = reason, resync = (reason == "resync")})
@@ -167,7 +175,7 @@ end
 local function onWalletDelta(pid, data)
   local s = sessions[pid]
   if not s or not s.profile then return end
-  local ok, why = wallet.applyDelta(s.profile.ledger, data.d, data.r)
+  local ok, why = wallet.applyDelta(s.profile.ledger, data.d, data.r, data.c)
   s.ledgerDirty = true
   if not ok then
     util.warn(string.format("Refused money change %s for %s (%s, reason: %s)",

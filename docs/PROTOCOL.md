@@ -43,7 +43,7 @@ or no `rlsmpHello` within `handshake.helloTimeoutSeconds`.
 
 | Direction | Event | Body |
 |---|---|---|
-| C→S | `rlsmpWalletDelta` | `{d = moneyChange, r = reasonLabel}` |
+| C→S | `rlsmpWalletDelta` | `{d = moneyChange, r = reasonLabel, c = rlsMoneyCategory}` |
 | S→C | `rlsmpWalletSet` | `{money, why}` server-approved balance; client applies it |
 
 ## Traffic director (Phase 3)
@@ -64,6 +64,34 @@ or no `rlsmpHello` within `handshake.helloTimeoutSeconds`.
 While the player is chased (their traffic-data `pursuit.mode` >= 1) and `antiTeleport` is on, the client keeps every police unit
 from respawning (`enableRespawn = false`), refuses RLS roadblocks (if `blockRoadblocks`) and
 refuses `gameplay_traffic.forceTeleport` on police units. Everything is restored when the pursuit ends.
+
+## Business (chat commands, server-side)
+
+Typed in BeamMP chat, hidden from other players. Money moves through the server wallet and
+the client gets a normal `rlsmpWalletSet`.
+
+`/biz create <name>` · `invite <player>` · `accept` · `leave` · `deposit <n>` · `withdraw <n>` · `info`
+
+Rules: max `business.maxMembers` (4); owner leaving hands ownership to the oldest member; the last member
+leaving closes the business and gets the bank. Saved in `businesses/<id>.json`.
+
+### Business fleet
+
+Chat: `/biz fleet` (list) · `fleet add` (car you sit in) · `fleet take <n>` · `fleet return`.
+A fleet car exists in exactly one place: stored in the business, or in one member's RLS inventory (tagged `fleetId`).
+
+| Direction | Event | Body |
+|---|---|---|
+| S→C | `rlsmpFleetDo` | `{act = "add" \| "return", fid?}` client uploads the car it sits in |
+| C→S | upload with `{kind = "fleetAdd"/"fleetReturn", data = {inv, fid?, rec}}` | `rec` = RLS inventory record (model, config, ...) |
+| S→C | `rlsmpFleetAck` | `{act, ok, inv, fid?}` client removes the car from its inventory only when `ok` |
+| S→C | big payload `kind = "fleetVehicle"` | `{fid, rec}` client spawns it and adds it to its inventory |
+| C→S | `rlsmpFleetRelease` | `{fid, why}` take failed (garage full, spawn error): free the car |
+
+## Quality of life
+
+Chat `/unstuck` or `/road`. Server checks career loaded and `unstuck.cooldownSeconds`, then sends `rlsmpUnstuck {}`;
+the client teleports the car or walking character to the nearest road (not during pursuits or above 6 m/s).
 
 ## Reserved prefixes for later phases
 

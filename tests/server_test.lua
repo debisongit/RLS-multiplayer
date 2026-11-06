@@ -196,4 +196,26 @@ check(storage.readJson(tmp .. "/x.json").a == 1, "backup used")
 -- 16. Console ------------------------------------------------------------------------------------------
 check(fire("onConsoleInput", "rlsmp status"):find("bob") ~= nil, "status lists player")
 
+-- 17. Money categories: moving money is not earning ----------------------------------------------------------
+local wallet = require("rlsmp.server.wallet")
+local led = wallet.newLedger()
+led.seeded, led.money = true, 1000
+check(wallet.applyDelta(led, 2000000, "Loan payout", "loan") == true and led.money == 2001000, "big loan payout accepted")
+check(wallet.applyDelta(led, 1500000, "Sold car", "sale") == true, "big car sale accepted")
+check(#led.window == 0, "moving money does not use up the earning limit")
+local ok, why = wallet.applyDelta(led, 6000000, "x", "transfer")
+check(ok == false and why == "gain_too_large", "even a transfer has a cap")
+ok, why = wallet.applyDelta(led, 1000, "debug", "cheat")
+check(ok == false and why == "cheat_category", "cheat money refused")
+ok = wallet.applyDelta(led, 800000, "x", "reward")
+check(ok == false, "earnings category still limited")
+ok = wallet.applyDelta(led, 800000, "x", nil)
+check(ok == false, "no category counts as earning")
+check(wallet.applyDelta(led, -5000, "Fuel", "fuel") == true, "spending always fine")
+local led2 = wallet.newLedger()
+led2.seeded, led2.money = true, 0
+check(wallet.applyDelta(led2, 5000000, "a", "transfer") and wallet.applyDelta(led2, 5000000, "b", "transfer"), "two big transfers fit the window")
+ok, why = wallet.applyDelta(led2, 1000000, "c", "transfer")
+check(ok == false and why == "gain_rate_limited", "endless transfers are rate limited")
+
 print(string.format("server_test: %d checks passed", passed))

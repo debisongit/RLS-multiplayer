@@ -15,24 +15,33 @@ local M = {}
 local cfg
 
 function M.newLedger()
-  return {money = 0, seeded = false, rejected = 0, window = {}}
+  return {money = 0, seeded = false, rejected = 0, window = {}, exemptWindow = {}}
 end
 
 -- Sum of gains inside the time window. Also drops entries that are too old.
-local function windowTotal(ledger, now)
+local function windowTotal(ledger, now, field)
+  field = field or "window"
   local kept, total = {}, 0
-  for _, e in ipairs(ledger.window) do
+  for _, e in ipairs(ledger[field]) do
     if e.t > now - cfg.wallet.windowSeconds then
       kept[#kept + 1] = e
       total = total + e.a
     end
   end
-  ledger.window = kept
+  ledger[field] = kept
   return total
 end
 
+local function isExempt(category)
+  for _, c in ipairs(cfg.wallet.exemptCategories) do
+    if c == category then return true end
+  end
+  return false
+end
+
 -- Apply one reported change. Returns true if accepted, false + reason if refused.
-function M.applyDelta(ledger, amount, reason)
+-- `category` is RLS's money category for the change (see overhaul/lib/ledger/categories.lua).
+function M.applyDelta(ledger, amount, reason, category)
   amount = tonumber(amount)
   if not amount or amount ~= amount or amount == math.huge or amount == -math.huge then
     return false, "not_a_number"
@@ -43,7 +52,22 @@ function M.applyDelta(ledger, amount, reason)
     return true
   end
   local now = util.now()
-  if amount > 0 then
+  if amount > 0 and category == "cheat" then
+    ledger.rejected = ledger.rejected + 1
+    return false, "cheat_category"
+  end
+  if amount > 0 and isExempt(category) then
+    if amount > cfg.wallet.maxExemptGain then
+      ledger.rejected = ledger.rejected + 1
+      return false, "gain_too_large"
+    end
+    -- moving money around: not counted as earnings, but it has its own (larger) cap per window
+    if windowTotal(ledger, now, "exemptWindow") + amount > cfg.wallet.maxExemptPerWindow then
+      ledger.rejected = ledger.rejected + 1
+      return false, "gain_rate_limited"
+    end
+    table.insert(ledger.exemptWindow, {t = now, a = amount})
+  elseif amount > 0 then
     if amount > cfg.wallet.maxSingleGain then
       ledger.rejected = ledger.rejected + 1
       return false, "gain_too_large"

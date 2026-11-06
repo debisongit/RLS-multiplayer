@@ -1,0 +1,25 @@
+-- RLS-Career-MP client: tiny BeamMP helpers (plain module).
+-- SPDX-License-Identifier: AGPL-3.0-only
+local M = {}
+
+-- Game vehicle ids that BeamMP knows and that belong to OTHER players.
+-- A vehicle BeamMP does not know yet (e.g. a car we just spawned) is never "remote".
+function M.remoteSet()
+  local set = {}
+  if not (MPVehicleGE and MPVehicleGE.getVehicles) then return set end
+  for _, v in pairs(MPVehicleGE.getVehicles()) do
+    if v.isLocal ~= true and v.gameVehicleID and v.gameVehicleID ~= -1 then set[v.gameVehicleID] = true end
+  end
+  return set
+end
+
+function M.isRemote(id)
+  return M.remoteSet()[id] == true
+end
+
+function M.isMPSession()
+  return MPCoreNetwork ~= nil and ((MPCoreNetwork.isMPSession and MPCoreNetwork.isMPSession())
+    or (MPCoreNetwork.isGoingMPSession and MPCoreNetwork.isGoingMPSession())) or false
+end
+
+return M

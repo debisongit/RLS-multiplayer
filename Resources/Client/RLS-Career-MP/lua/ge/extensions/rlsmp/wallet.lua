@@ -21,6 +21,13 @@ local function reasonLabel(reason)
   return nil
 end
 
+-- RLS tags every money change with a category (loan, sale, transfer, reward, "activity:<job>", ...).
+local function reasonCategory(reason)
+  local c = type(reason) == "table" and reason.category or nil
+  if type(c) == "string" and #c <= 60 then return c end
+  return nil
+end
+
 function M.enable(on) enabled = on == true end
 
 -- RLS fires this after every attribute change (money, XP, ...).
@@ -29,7 +36,7 @@ function M.onOverhaulPlayerAttributesChanged(change, reason)
   local money = change.money
   if type(money) ~= "number" or money == 0 then return end
   if type(reason) == "table" and reason.rlsmpSync then return end
-  net.send("rlsmpWalletDelta", {d = money, r = reasonLabel(reason)})
+  net.send("rlsmpWalletDelta", {d = money, r = reasonLabel(reason), c = reasonCategory(reason)})
 end
 
 local function onWalletSet(data)

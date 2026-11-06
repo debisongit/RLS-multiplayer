@@ -11,7 +11,8 @@ return {
   "rlsmp.server.wallet",
   "rlsmp.server.profiles",
   "rlsmp.server.sessions",
-  -- Phase 2: "rlsmp.server.business",
+  "rlsmp.server.business",
+  "rlsmp.server.qol",
   "rlsmp.server.traffic",
   "rlsmp.server.trafficPolice",
 }
