@@ -166,6 +166,19 @@ check(sessions.get(2).profile.ledger.money == before + 250, "bank paid out to la
 local f = io.open(tmp .. "/businesses/" .. biz.id .. ".json")
 check(f == nil, "business file removed")
 
+-- /unstuck (qol module): cooldown and loading check
+say(1, "/unstuck")
+check(lastSent(1, "rlsmpUnstuck") ~= nil, "unstuck sent to client")
+local unstuckCount = 0
+for _, m in ipairs(sent[1]) do if m.name == "rlsmpUnstuck" then unstuckCount = unstuckCount + 1 end end
+say(1, "/road")
+for _, m in ipairs(sent[1]) do if m.name == "rlsmpUnstuck" then unstuckCount = unstuckCount - 1 end end
+check(unstuckCount == -0 or unstuckCount == 0, "second use inside cooldown is not sent")
+check(last(1):find("cooldown"), "cooldown message")
+now = now + 31
+say(1, "/road")
+check(lastSent(1, "rlsmpUnstuck") ~= nil, "works again after cooldown")
+
 -- loading state
 players[6] = {name = "slow", ids = {beammp = "606"}}
 fire("onPlayerJoin", 6)

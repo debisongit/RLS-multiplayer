@@ -64,6 +64,10 @@ M.defaults = {
     maxRecordBytes = 400000,
   },
 
+  unstuck = {
+    cooldownSeconds = 30,
+  },
+
   -- How often the server asks clients to save, in minutes (0 = rely on RLS autosave only).
   forceSaveMinutes = 5,
 }

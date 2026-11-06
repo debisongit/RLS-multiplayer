@@ -43,6 +43,19 @@ function M.onClient(eventName, fn)
   end)
 end
 
+-- Chat commands: net.onChat("biz", fn(pid, rest)) handles "/biz <rest>". The message is hidden from other players.
+-- (One BeamMP event can only have one handler, so every module goes through this router.)
+local chatCommands = {}
+function M.onChat(command, fn) chatCommands[command] = fn end
+
+local function chatRouter(pid, _, message)
+  local command, rest = tostring(message):match("^/(%S+)%s*(.-)%s*$")
+  local fn = command and chatCommands[command:lower()]
+  if not fn then return nil end
+  fn(pid, rest)
+  return 1
+end
+
 function M.send(pid, eventName, data)
   return MP.TriggerClientEvent(pid, eventName, util.jsonEncode(data or {}))
 end
@@ -93,6 +106,7 @@ M.pump = pump
 
 function M.init(config)
   cfg = config
+  M.on("onChatMessage", chatRouter)
   M.on("rlsmpPump", pump)
   MP.CreateEventTimer("rlsmpPump", 50)
 end

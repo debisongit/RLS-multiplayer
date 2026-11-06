@@ -41,8 +41,8 @@ RLS 2.8 is not a patch on vanilla career. It is a **fork that lives in its own n
    `vehicleTools`, `guards`, `settings`, `late` (the rest load on demand).
 3. `overhaul_world_levelProxy` runs `generate` **when it loads**: it builds `rls_west_coast` from `west_coast_usa`
    (copies text files with patches, references big binaries by path) into `/temp/rls_career/levelCache`, then mounts it.
-   Takes a while on first run; removed again when RLS unloads. **This is why a server-sent RLS zip is too late
-   for BeamMP's map message.**
+   Takes a while on first run; removed again when RLS unloads. **This is why the proxy does not exist yet when BeamMP
+   sends the map** (log: mods activated at 218 s, map at 221 s, proxy generated at 270 s).
 4. `extensionManager.refuseCareerStart()` blocks any career start while the `multiplayerbeammp` mod is active.
    We wrap that function at runtime (client `core.lua`).
 5. Player starts a career: `overhaul_shell_gameMode.start(profile, slot, startingOptions)` →
@@ -194,7 +194,8 @@ RLS does **not** ship vanilla `gameplay/traffic.lua`. It keeps the vanilla modul
 
 ## 12. What this changes in our plan
 
-1. **Server map must be `rls_west_coast`** (RLS's only registered map); RLS installed locally so the proxy level exists first.
+1. **Server map must be `rls_west_coast`** (RLS's only registered map). BeamMP disables local mods the server does not send, so RLS comes
+   from the server and its proxy level is built late; a client map gate must make the level load wait for it.
 2. **Phase 3** must hook RLS's owned traffic methods (`tryRespawn`, `updateActiveRadius`, police `setPursuitMode`),
    not vanilla `gameplay_traffic` alone. The key lever: make `focus`/`focusDist` consider all players
    (distance to the *nearest* player) and treat remote vehicles as potential witnesses for "out of sight".

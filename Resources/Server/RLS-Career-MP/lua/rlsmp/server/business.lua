@@ -310,22 +310,20 @@ function cmds.help(pid)
   say(pid, "/biz create <name> | invite <player> | accept | leave | deposit <n> | withdraw <n> | info | fleet")
 end
 
--- BeamMP chat hook: returning 1 hides the message from other players.
-local function onChat(pid, _, message)
-  local cmd, arg = tostring(message):match("^/biz%s*(%S*)%s*(.-)%s*$")
-  if not cmd then return nil end
+-- /biz <command> <argument>
+local function onChat(pid, text)
+  local cmd, arg = text:match("^(%S*)%s*(.-)$")
   local s = sessions.get(pid)
   if cmd == "" or cmd == "help" then cmds.help(pid)
   elseif not cmds[cmd] then say(pid, "Unknown command. Try /biz help")
   elseif not s or s.stage ~= "loaded" then say(pid, "Your career is still loading.")
   else cmds[cmd](pid, s, myBusiness(s), arg) end
-  return 1
 end
 
 function M.init(config, pluginRoot)
   cfg, root = config, pluginRoot
   storage.ensureDir(root .. "businesses")
-  net.on("onChatMessage", onChat)
+  net.onChat("biz", onChat)
   sessions.onBig("fleetAdd", onFleetAdd)
   sessions.onBig("fleetReturn", onFleetReturn)
   net.onClient("rlsmpFleetRelease", onFleetRelease)

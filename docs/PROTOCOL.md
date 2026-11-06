@@ -69,6 +69,11 @@ A fleet car exists in exactly one place: stored in the business, or in one membe
 | S→C | big payload `kind = "fleetVehicle"` | `{fid, rec}` client spawns it and adds it to its inventory |
 | C→S | `rlsmpFleetRelease` | `{fid, why}` take failed (garage full, spawn error): free the car |
 
+## Quality of life
+
+Chat `/unstuck` or `/road`. Server checks career loaded and `unstuck.cooldownSeconds`, then sends `rlsmpUnstuck {}`;
+the client teleports the car or walking character to the nearest road (not during pursuits or above 6 m/s).
+
 ## Reserved prefixes for later phases
 
 - `rlsmpBiz*` – Phase 2 business / syndicate (Claude A)

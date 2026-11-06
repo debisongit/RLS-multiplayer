@@ -19,4 +19,5 @@ lua5.3 tests/business_test.lua "$(mktemp -d -p "$tmp")"
 luajit tests/client_test.lua
 luajit tests/fleet_client_test.lua
 luajit tests/guard_test.lua
+luajit tests/unstuck_test.lua
 echo "All tests passed."
