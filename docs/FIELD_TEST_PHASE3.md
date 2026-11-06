@@ -26,7 +26,10 @@ Vanilla BeamNG's traffic code was never read; only RLS's code was.
    ```
    The result is `Resources/Client/RLS-Career-MP.zip`. Do not unzip it.
 3. Put the RLS Career Overhaul zip in the server's `Resources/Client/` as well.
-4. In `ServerConfig.toml`: `Map = "/levels/west_coast_usa/info.json"` and `MaxCars = 100` or more.
+4. In `ServerConfig.toml`: `Map = "/levels/rls_west_coast/info.json"` (this is what Claude A's branch requires; the old
+   `west_coast_usa` value makes RLS rebuild its level on every join) and `MaxCars = 100` or more.
+   On your own PC, delete any local `rls_career_overhaul_v2.8.0_hotfix.zip` from your BeamNG mods folder, so RLS
+   is not unloaded and rebuilt on every join.
 5. Start the server once, then stop it. This writes
    `Resources/Server/RLS-Career-MP/config/config.json`.
 6. Edit that file. Under `"traffic"` set `"totalBudget": 6` and `"minPerPlayer": 2`; leave
