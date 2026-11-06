@@ -147,6 +147,19 @@ check(biz.fleet["1"].heldBy == nil, "failed take frees the car")
 disk = json.decode(io.open(tmp .. "/businesses/" .. biz.id .. ".json"):read("*a"))
 check(disk.fleet["1"] ~= nil and disk.nextFleet == 2, "fleet saved to disk")
 
+-- retire: owner turns a held fleet car into a personal one
+say(2, "/biz fleet take 1")
+for _ = 1, 20 do fire("rlsmpPump") end
+say(2, "/biz fleet retire")
+check(biz.fleet["1"] ~= nil and lastSent(2, "rlsmpFleetRetire") == nil, "a member cannot retire a car")
+fire("rlsmpFleetRelease", 2, json.encode({fid = "1", why = "test"}))
+say(1, "/biz fleet retire")
+check(last(1):find("Take the car first"), "retire needs a held car")
+say(1, "/biz fleet take 1")
+for _ = 1, 20 do fire("rlsmpPump") end
+say(1, "/biz fleet retire")
+check(biz.fleet["1"] == nil and lastSent(1, "rlsmpFleetRetire").fid == "1", "owner retires a fleet car for good")
+
 -- full business + invite expiry
 require("rlsmp.server.business") -- already loaded
 say(1, "/biz invite carol")
@@ -175,6 +188,7 @@ RLSMP.config.business.membersCanWithdraw = true
 -- last member leaving closes the business and pays out
 for _, p in ipairs({3, 4}) do say(p, "/biz leave") end
 local before = sessions.get(2).profile.ledger.money
+biz.fleet["9"] = {name = "Leftover", model = "x", rec = {}}
 say(2, "/biz leave")
 check(last(2):find("Fleet cars would be lost"), "last member cannot abandon fleet cars")
 biz.fleet = {}

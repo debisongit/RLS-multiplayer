@@ -20,6 +20,7 @@ overhaul_career_garage_inventory = {
   hasFreeSlot = function() return free end,
   addVehicle = function(vehId) vehicles[10] = {model = "etk800", config = {}} return 10 end,
   setVehicleDirty = function(id) dirty[#dirty + 1] = id end,
+  getVehicles = function() return vehicles end,
 }
 overhaul_career_logistics_general = {canRemoveLogisticsVehicle = function() return true end}
 getPlayerVehicle = function() return nil end
@@ -85,5 +86,12 @@ check(up.kind == "fleetReturn" and up.data.fid == "1" and up.data.inv == 10, "re
 -- already-fleet car cannot be added again
 server("rlsmpFleetDo", {act = "add"})
 check(#sent == 0, "fleet car can't be added twice")
+
+-- retire: the fleet tag is removed from the inventory record
+vehicles[10].fleetId = "1"
+dirty = {}
+server("rlsmpFleetRetire", {fid = "1"})
+check(vehicles[10].fleetId == nil and dirty[1] == 10, "retired car loses its fleet tag")
+overhaul_career_garage_inventory.getVehicles = function() return vehicles end
 
 print(string.format("fleet_client_test: %d checks passed", passed))

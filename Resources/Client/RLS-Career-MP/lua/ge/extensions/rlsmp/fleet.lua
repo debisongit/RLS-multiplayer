@@ -105,13 +105,27 @@ local function onVehicle(text, extra, problem)
   toast("info", "Fleet car ready. Return it with /biz fleet return.")
 end
 
+-- The owner retired this car from the fleet: it becomes a normal personal car (just drop the fleet tag).
+local function onRetire(msg)
+  local i = inv()
+  if not (enabled and i and i.getVehicles) then return end
+  for id, rec in pairs(i.getVehicles()) do
+    if tostring(rec.fleetId) == tostring(msg.fid) then
+      rec.fleetId = nil
+      i.setVehicleDirty(id)
+      toast("info", "This car is now yours.")
+    end
+  end
+end
+
 function M.onExtensionLoaded()
+  net.on("rlsmpFleetRetire", onRetire)
   net.on("rlsmpFleetDo", onDo)
   net.on("rlsmpFleetAck", onAck)
   net.onBig("fleetVehicle", onVehicle)
 end
 
-M._onDo, M._onAck, M._onVehicle = onDo, onAck, onVehicle
+M._onDo, M._onAck, M._onVehicle, M._onRetire = onDo, onAck, onVehicle, onRetire
 M.onInit = function() setExtensionUnloadMode(M, "manual") end
 
 return M

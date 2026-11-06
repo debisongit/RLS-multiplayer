@@ -247,6 +247,17 @@ function cmds.fleet(pid, s, b, arg)
     save(b)
     net.sendBig(pid, "fleetVehicle", util.jsonEncode({fid = tostring(fid), rec = v.rec}), {fid = tostring(fid)})
     say(pid, "Sending " .. v.name .. " to your garage...")
+  elseif sub == "retire" then
+    -- Owner only: the car you currently hold leaves the fleet for good and becomes your own.
+    local fid = heldBy(b, s.accountId)
+    if b.members[s.accountId].role ~= "owner" then return say(pid, "Only the owner can retire a fleet car.") end
+    if not fid then return say(pid, "Take the car first (/biz fleet take <n>), then /biz fleet retire.") end
+    local name = b.fleet[fid].name
+    b.fleet[fid] = nil
+    addLog(b, s.name, "fleet retire", tonumber(fid))
+    save(b)
+    net.send(pid, "rlsmpFleetRetire", {fid = fid})
+    say(pid, name .. " left the fleet and is now your own car.")
   elseif sub == "return" then
     if not heldBy(b, s.accountId) then return say(pid, "You don't have a fleet car.") end
     net.send(pid, "rlsmpFleetDo", {act = "return", fid = heldBy(b, s.accountId)})

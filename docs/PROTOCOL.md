@@ -77,7 +77,8 @@ leaving closes the business and gets the bank. Saved in `businesses/<id>.json`.
 
 ### Business fleet
 
-Chat: `/biz fleet` (list) · `fleet add` (car you sit in) · `fleet take <n>` · `fleet return`.
+Chat: `/biz fleet` (list) · `fleet add` (car you sit in) · `fleet take <n>` · `fleet return` · `fleet retire` (owner: the car you hold leaves the fleet for good).
+Payout split: `/biz split <0-50>` sends that % of your earned money (not loans, sales or transfers) to the business bank.
 A fleet car exists in exactly one place: stored in the business, or in one member's RLS inventory (tagged `fleetId`).
 
 | Direction | Event | Body |
@@ -86,6 +87,7 @@ A fleet car exists in exactly one place: stored in the business, or in one membe
 | C→S | upload with `{kind = "fleetAdd"/"fleetReturn", data = {inv, fid?, rec}}` | `rec` = RLS inventory record (model, config, ...) |
 | S→C | `rlsmpFleetAck` | `{act, ok, inv, fid?}` client removes the car from its inventory only when `ok` |
 | S→C | big payload `kind = "fleetVehicle"` | `{fid, rec}` client spawns it and adds it to its inventory |
+| S→C | `rlsmpFleetRetire` | `{fid}` owner retired the car you hold (`/biz fleet retire`): drop its fleet tag, it is now your own car |
 | C→S | `rlsmpFleetRelease` | `{fid, why}` take failed (garage full, spawn error): free the car |
 
 ## Quality of life
