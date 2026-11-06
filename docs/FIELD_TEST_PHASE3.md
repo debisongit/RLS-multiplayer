@@ -8,7 +8,7 @@ Plan for about 30 minutes, one player (a second player is optional, see the end)
 
 | Component | Version |
 |---|---|
-| RLS-Career-MP (this repo) | default branch `claude/amazing-sagan-kh6ecn`, code commit `18ddeac` (PR #1 merge: Phase 1-3 together; later commits only change this document) |
+| RLS-Career-MP (this repo) | default branch `claude/amazing-sagan-kh6ecn`, code commit `2a2430f` (Phase 1-3 together, build `0.3.0`; later commits only change this document) |
 | RLS Career Overhaul source read | v2.8.0, commit `e701d9e2218ca12ff70ba4a09c0c91514e96e380` (29 Oct 2026) |
 | BeamNG.drive | **not pinned, write yours down** (docs target 0.38 / 0.39) |
 | BeamMP (server and client) | **not pinned, write yours down** |
@@ -19,17 +19,18 @@ Vanilla BeamNG's traffic code was never read; only RLS's code was.
 
 ## Install
 
-1. Copy the folder `Resources/Server/RLS-Career-MP/` into your BeamMP server's `Resources/Server/`.
-2. Build the client mod from the repo root, then copy the zip into the server's `Resources/Client/`:
+1. From the repo root, install (or update) the mod into your BeamMP server folder in one command. It copies the
+   server plugin, builds the client zip and puts it into the server's `Resources/Client/`, and keeps your `config/`,
+   `profiles/` and `businesses/` folders. Do not unzip the client zip.
    ```bash
-   tools/build_client_zip.sh
+   tools/install_to_server.sh /path/to/BeamMP-Server
    ```
-   The result is `Resources/Client/RLS-Career-MP.zip`. Do not unzip it.
-3. Put the RLS Career Overhaul zip in the server's `Resources/Client/` as well.
-4. In `ServerConfig.toml`: `Map = "/levels/rls_west_coast/info.json"` (this is what Claude A's branch requires; the old
-   `west_coast_usa` value makes RLS rebuild its level on every join) and `MaxCars = 100` or more.
-   On your own PC, delete any local `rls_career_overhaul_v2.8.0_hotfix.zip` from your BeamNG mods folder, so RLS
-   is not unloaded and rebuilt on every join.
+   It prints `Installed RLS-Career-MP build 0.3.0`. It is a bash script: on Windows run it from Git Bash or WSL.
+2. Put the RLS Career Overhaul zip in the server's `Resources/Client/` as well.
+3. On your own PC, delete any local `rls_career_overhaul_v2.8.0_hotfix.zip` (or any other copy of RLS) from your BeamNG
+   mods folder, so RLS is not unloaded and rebuilt on every join.
+4. In `ServerConfig.toml`: `Map = "/levels/rls_west_coast/info.json"` and `MaxCars = 100` or more. The server warns, and
+   tells joining players, if the map is wrong.
 5. Start the server once, then stop it. This writes
    `Resources/Server/RLS-Career-MP/config/config.json`.
 6. Edit that file. Under `"traffic"` set `"totalBudget": 6` and `"minPerPlayer": 2`; leave
@@ -37,6 +38,9 @@ Vanilla BeamNG's traffic code was never read; only RLS's code was.
    which is above what you will normally have, so the limit would never visibly act. Under `"police"`,
    leave `"antiTeleport": true` and `"blockRoadblocks": true`. Start the server again.
 7. Join with BeamNG. In BeamNG's own settings, set the **traffic amount to 15 or more** (the max is fine).
+8. **Check the build.** The server log must say `joined with client build 0.3.0 (server build 0.3.0)` and the game log must
+   say `client loaded, build 0.3.0`. If the two builds differ, you are running an old client zip: re-run the install
+   command, restart the server and rejoin.
 
 Client-side settings are not stored in the server file, so nothing else needs changing. Do not rename the zip.
 
