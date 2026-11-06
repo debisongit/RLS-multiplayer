@@ -8,7 +8,7 @@ Plan for about 30 minutes, one player (a second player is optional, see the end)
 
 | Component | Version |
 |---|---|
-| RLS-Career-MP (this repo) | default branch `claude/amazing-sagan-kh6ecn`, code commit `163b578`, build `0.4.0` (Phase 1-3 together; later commits only change documents) |
+| RLS-Career-MP (this repo) | default branch `claude/amazing-sagan-kh6ecn`, code commit `0648ee6`, build `0.4.1` (Phase 1-3 together; later commits only change documents) |
 | RLS Career Overhaul source read | v2.8.0, commit `e701d9e2218ca12ff70ba4a09c0c91514e96e380` (29 Oct 2026) |
 | BeamNG.drive | **not pinned, write yours down** (docs target 0.38 / 0.39) |
 | BeamMP (server and client) | **not pinned, write yours down** |
@@ -25,7 +25,7 @@ Vanilla BeamNG's traffic code was never read; only RLS's code was.
    ```bash
    tools/install_to_server.sh /path/to/BeamMP-Server
    ```
-   It prints `Installed RLS-Career-MP build 0.4.0`. It is a bash script: on Windows run it from Git Bash or WSL.
+   It prints `Installed RLS-Career-MP build 0.4.1`. It is a bash script: on Windows run it from Git Bash or WSL.
 2. Put the RLS Career Overhaul zip in the server's `Resources/Client/` as well.
 3. On your own PC, delete any local `rls_career_overhaul_v2.8.0_hotfix.zip` (or any other copy of RLS) from your BeamNG
    mods folder, so RLS is not unloaded and rebuilt on every join.
@@ -39,8 +39,8 @@ Vanilla BeamNG's traffic code was never read; only RLS's code was.
    would never visibly act. Any `totalBudget` above 0 fixes the budget instead. Under `"police"`,
    leave `"antiTeleport": true` and `"blockRoadblocks": true`. Start the server again.
 7. Join with BeamNG. In BeamNG's own settings, set the **traffic amount to 15 or more** (the max is fine).
-8. **Check the build.** The server log must say `joined with client build 0.4.0 (server build 0.4.0)` and the game log must
-   say `client loaded, build 0.4.0`. If the two builds differ, you are running an old client zip (this has already wasted a test round): re-run the install
+8. **Check the build.** The server log must say `joined with client build 0.4.1 (server build 0.4.1)` and the game log must
+   say `client loaded, build 0.4.1`. If the two builds differ, you are running an old client zip (this has already wasted a test round): re-run the install
    command, restart the server and rejoin.
 
 Client-side settings are not stored in the server file, so nothing else needs changing. Do not rename the zip.
