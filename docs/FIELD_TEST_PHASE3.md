@@ -8,7 +8,7 @@ Plan for about 30 minutes, one player (a second player is optional, see the end)
 
 | Component | Version |
 |---|---|
-| RLS-Career-MP (this repo) | branch `claude/practical-ramanujan-citvkg`, commit `27388d3` |
+| RLS-Career-MP (this repo) | branch `claude/practical-ramanujan-citvkg`, code commit `dac9289` (Phase 3 merged with Claude A's Phase 1-2 branch up to `65fdeaa`; later commits only change this document) |
 | RLS Career Overhaul source read | v2.8.0, commit `e701d9e2218ca12ff70ba4a09c0c91514e96e380` (29 Oct 2026) |
 | BeamNG.drive | **not pinned, write yours down** (docs target 0.38 / 0.39) |
 | BeamMP (server and client) | **not pinned, write yours down** |
