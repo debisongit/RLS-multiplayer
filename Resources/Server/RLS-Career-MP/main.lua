@@ -32,10 +32,27 @@ local function onConsoleInput(line)
   return "RLS-Career-MP commands: rlsmp status | rlsmp save"
 end
 
+-- RLS only has its garages, spawn point and jobs on its own map; warn loudly when the server is set to something else.
+local function checkServerMap(cfg)
+  if cfg.expectedMap == "" then return nil end
+  local f = io.open("ServerConfig.toml", "r")
+  if not f then return nil end
+  local text = f:read("*a")
+  f:close()
+  local map = text:match('[\n^]%s*Map%s*=%s*"([^"]*)"')
+  if map and not map:find("/" .. cfg.expectedMap .. "/", 1, true) then
+    return string.format("This server's map is %s, but RLS needs /levels/%s/info.json (no starter garage, garage slots or jobs otherwise).",
+      map, cfg.expectedMap)
+  end
+  return nil
+end
+
 function onInit()
-  util.info("Loading v" .. RLSMP.version)
+  util.info("Loading v" .. RLSMP.version .. " build " .. require("rlsmp.shared.transfer").BUILD)
   local cfg = config.load(PLUGIN_ROOT .. "config/config.json")
   RLSMP.config = cfg
+  RLSMP.mapWarning = checkServerMap(cfg)
+  if RLSMP.mapWarning then util.warn(RLSMP.mapWarning) end
   net.init(cfg)
   for _, modulePath in ipairs(require("rlsmp.server.modules")) do
     local mod = require(modulePath)

@@ -68,7 +68,7 @@ end
 
 local function sendHello()
   setState("hello_sent")
-  net.send("rlsmpHello", {v = transfer.PROTOCOL})
+  net.send("rlsmpHello", {v = transfer.PROTOCOL, build = transfer.BUILD})
 end
 
 local function startCareer()
@@ -183,7 +183,7 @@ function M.onExtensionLoaded()
   net.on("rlsmpError", function(e) toast("error", tostring(e.msg or e.code)) end)
   extensions.load("rlsmp_saveBridge", "rlsmp_wallet", "rlsmp_fleet", "rlsmp_vehicleGuard", "rlsmp_unstuck")
   for _, name in ipairs({"rlsmp_saveBridge", "rlsmp_wallet", "rlsmp_fleet", "rlsmp_vehicleGuard", "rlsmp_unstuck"}) do setExtensionUnloadMode(name, "manual") end
-  log("I", "RLS-Career-MP", "client loaded")
+  log("I", "RLS-Career-MP", "client loaded, build " .. transfer.BUILD)
 end
 
 M.onInit = function() setExtensionUnloadMode(M, "manual") end

@@ -11,6 +11,9 @@ M.defaults = {
   -- Random tag for this server, so saves from two servers never mix on a player's PC.
   serverTag = "",
 
+  -- The map RLS needs (its garages, spawn, auctions and jobs exist only there). "" turns the check off.
+  expectedMap = "rls_west_coast",
+
   identity = {
     -- Guests have no BeamMP account ID, so their progress cannot be tied to them.
     allowGuests = false,

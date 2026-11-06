@@ -13,15 +13,16 @@ Play **RLS Career Overhaul** together on **BeamMP**, with saves stored on the se
 
 ## Install (server owner)
 
-1. Copy `Resources/Server/RLS-Career-MP/` into your BeamMP server's `Resources/Server/`.
-2. Build the client mod and copy it into `Resources/Client/`:
+1. Install or update in one command (keeps your config, profiles and businesses):
    ```bash
-   tools/build_client_zip.sh
+   tools/install_to_server.sh /path/to/BeamMP-Server
    ```
+   This copies the server plugin and builds the client zip into `Resources/Client/`. Re-run it after every update, then restart the server.
 3. Put the **RLS Career Overhaul** zip in `Resources/Client/` too. BeamMP switches off every local mod the server does not send, so
    players must not keep a differently named copy of RLS in their own mods folder (that makes RLS load and unload twice).
-4. In `ServerConfig.toml`: `Map = "/levels/rls_west_coast/info.json"` (needed for auctions, drop-offs, businesses) and `MaxCars = 100` or more.
-   Plain `west_coast_usa` works too, but RLS loses its map features there.
+4. In `ServerConfig.toml`: `Map = "/levels/rls_west_coast/info.json"` and `MaxCars = 100` or more.
+   **This is required**, not optional: on `west_coast_usa` RLS has no starter garage, no garage slots (you cannot buy cars), no auctions or jobs.
+   The server logs a warning and tells joining players when the map is wrong.
 5. Start the server once. Edit `Resources/Server/RLS-Career-MP/config/config.json`, then restart.
 
 Console: `rlsmp status`, `rlsmp save`.
@@ -33,6 +34,8 @@ Player chat commands: `/unstuck` (or `/road`) moves you to the nearest road, in 
 - **Slow join / "Preparing the RLS map..."**: RLS builds `rls_west_coast` on your PC the first time (about a minute) and reuses it afterwards,
   but it deletes that map whenever RLS unloads. A second RLS zip in your own `mods` folder makes BeamMP unload/reload RLS on every join.
   Keep only the server's copy.
+- **Check the build**: the client logs `client loaded, build X` and the server logs each player's build on join. They must match.
+- **Black character**: `unicycle/beamling.dae` failing to load means a broken game file; use Steam "Verify integrity of game files".
 - **Send logs with** the lines containing `[rlsmp-timing]` (join phases) from `beamng.log`.
 - Other players' cars are kept when your career starts; if they still look black, send the log.
 

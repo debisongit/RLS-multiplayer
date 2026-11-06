@@ -21,6 +21,7 @@ MP = {
   GetPlayerIdentifiers = function(pid) return players[pid].ids end,
   GetPlayerName = function(pid) return players[pid].name end,
   DropPlayer = function(pid, reason) dropped[pid] = reason end,
+  SendChatMessage = function(pid, text) _G.__chat = _G.__chat or {} table.insert(_G.__chat, text) end,
   GetPlayers = function() local t = {} for pid, p in pairs(players) do t[pid] = p.name end return t end,
 }
 Util = {}
@@ -81,6 +82,14 @@ end
 -- 1. Guests are refused at auth ----------------------------------------------------------------------
 check(type(fire("onPlayerAuth", "guestguy", "USER", true, {ip = "1.2.3.4"})) == "string", "guest refused")
 check(fire("onPlayerAuth", "bob", "USER", false, {beammp = "1001"}) == nil, "account allowed")
+
+-- 1b. Build mismatch is reported to the player (not fatal)
+players[9] = {name = "stale", ids = {beammp = "9009"}}
+fire("onPlayerJoin", 9)
+fromClient(9, "rlsmpHello", {v = 1, build = "0.0.1"})
+check(_G.__chat and _G.__chat[#_G.__chat]:find("differs from the server"), "old client build gets a warning")
+check(dropped[9] == nil, "old build is not kicked")
+fire("onPlayerDisconnect", 9)
 
 -- 2. First join: new profile is streamed down --------------------------------------------------------
 players[0] = {name = "bob", ids = {beammp = "1001"}}

@@ -73,6 +73,12 @@ local function onHello(pid, data)
     return
   end
 
+  util.info(string.format("%s joined with client build %s (server build %s)", tostring(s.name), tostring(data.build), transfer.BUILD))
+  if data.build ~= transfer.BUILD then
+    MP.SendChatMessage(pid, "[RLS] Your RLS-Career-MP version differs from the server's. Restart BeamMP so it downloads the server's mod again.")
+  end
+  if RLSMP and RLSMP.mapWarning then MP.SendChatMessage(pid, "[RLS] " .. RLSMP.mapWarning) end
+
   local accountId = s.accountId
   if not accountId then
     if not cfg.identity.allowGuests then
