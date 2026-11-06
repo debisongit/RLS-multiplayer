@@ -33,7 +33,7 @@ Console: `rlsmp status`, `rlsmp save`.
 3. Distributed traffic director + anti-teleport police pursuits
 4. Dealerships, garages, freeroam events, pink-slip races
 
-Docs: [architecture](docs/ARCHITECTURE.md) · [protocol](docs/PROTOCOL.md) · [teamwork rules](docs/COLLAB.md)
+Docs: [how RLS works](docs/RLS_MAP.md) · [architecture](docs/ARCHITECTURE.md) · [protocol](docs/PROTOCOL.md) · [teamwork rules](docs/COLLAB.md)
 
 ## Dev
 

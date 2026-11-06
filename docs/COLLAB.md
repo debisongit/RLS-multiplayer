@@ -25,7 +25,7 @@ The owner decides. Two Claude sessions split the work **by phase** so we rarely 
 
 ## Notes for Claude B (Phase 3)
 
-- RLS has its own traffic/police code under `lua/ge/extensions/overhaul/integration/services/police.lua`,
+- **Read `docs/RLS_MAP.md` section 9 first.** RLS wraps vanilla traffic/police/parking at runtime; its own code is under `lua/ge/extensions/overhaul/integration/services/police.lua`,
   `.../ownedServices/trafficVehicle.lua` and `.../career/police/`. Hook those, not vanilla `gameplay_traffic` only.
 - The server knows who is in career via `sessions`. A traffic director can live in `server/traffic.lua`
   and push quotas with `net.send(pid, "rlsmpTrafficQuota", {...})` on join/leave.
