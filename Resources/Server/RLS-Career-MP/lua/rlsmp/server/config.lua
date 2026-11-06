@@ -119,7 +119,9 @@ M.defaults = {
     chainStep = 0.5,
     chainMax = 3,
     maxPayout = 25000,
-    -- Chance of being caught: base + witnesses nearby + a dashcam on either car. Both cars with dashcams = certain.
+    -- A dashcam on either car always settles a crash (no dice roll). Set to false to keep it a chance instead.
+    dashcamAlwaysCaught = true,
+    -- Chance of being caught without that rule: base + witnesses nearby + a dashcam on either car. Both cars with dashcams = certain.
     baseConfidence = 0.35,
     perWitness = 0.15,
     witnessCap = 3,

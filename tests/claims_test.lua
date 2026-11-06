@@ -124,9 +124,26 @@ now = now + 400
 math.random = function() return 0.99 end
 local m1 = sa.profile.ledger.money
 sb.profile.dashcams = nil
+local aCams = sa.profile.dashcams
+sa.profile.dashcams = nil
 report(0, "0-1", "1-1", 3, "etk800", A, B, 100, 0)
 report(1, "1-1", "0-1", 7, "pickup", B, A, 2000, 0)
-check(sa.profile.ledger.money == m1 and lastChat(0):find("Nobody could prove"), "no dashcam, nobody around, bad luck: nobody is charged")
+check(sa.profile.ledger.money == m1 and lastChat(0):find("Nobody could prove") and lastChat(0):find("No dashcam"), "no dashcam, nobody around, bad luck: nobody is charged")
+-- one dashcam is enough, even with the worst luck
+sa.profile.dashcams = aCams
+now = now + 400
+report(0, "0-1", "1-1", 3, "etk800", A, B, 100, 0)
+report(1, "1-1", "0-1", 7, "pickup", B, A, 2000, 0)
+check(sa.profile.ledger.money == m1 - 2000, "one dashcam: always caught, no dice")
+m1 = sa.profile.ledger.money
+-- with the rule switched off it is a gamble again
+cfg.dashcamAlwaysCaught = false
+now = now + 400
+report(0, "0-1", "1-1", 3, "etk800", A, B, 100, 0)
+report(1, "1-1", "0-1", 7, "pickup", B, A, 2000, 0)
+check(sa.profile.ledger.money == m1, "rule off: one dashcam is only a 75% chance")
+cfg.dashcamAlwaysCaught = true
+sa.profile.dashcams = nil
 -- with two dashcams there is no luck involved
 sa.profile.dashcams = {["3"] = "etk800"} sb.profile.dashcams = {["7"] = "pickup"}
 now = now + 400
