@@ -14,6 +14,7 @@ local net = require("rlsmp/lib/net")
 local transfer = require("rlsmp/lib/transfer")
 local removeGuard = require("rlsmp/lib/removeGuard")
 local mapGate = require("rlsmp/lib/mapGate")
+local downloadWatch = require("rlsmp/lib/downloadWatch")
 
 local START_TIMEOUT = 180     -- seconds to wait for RLS to report the career as active
 local RLS_WAIT_TIMEOUT = 60   -- seconds to wait for RLS itself to finish loading
@@ -23,6 +24,7 @@ local stateTime = 0
 local pending                 -- {profile, isNew, slot, opts}
 local isNewCareer = false
 local firstSaveTimer
+local watch = downloadWatch.new()   -- spots a download that stopped
 
 -- Lines tagged [rlsmp-timing] show where join time goes (send them with the log if joining feels slow).
 local function timing(what)
@@ -67,6 +69,7 @@ local function fail(reason, userMsg)
 end
 
 local function sendHello()
+  downloadWatch.reset(watch)
   setState("hello_sent")
   net.send("rlsmpHello", {v = transfer.PROTOCOL, build = transfer.BUILD})
 end
@@ -152,9 +155,17 @@ function M.onUpdate(dtReal)
     elseif stateTime > RLS_WAIT_TIMEOUT then
       fail("rls_missing", "RLS Career Overhaul is not installed or failed to load.")
     end
-  elseif state == "hello_sent" then
-    local got = net.incomingProgress()
-    if got > 0 then setState("downloading") end
+  elseif state == "hello_sent" or state == "downloading" then
+    local got, total = net.incomingProgress()
+    if state == "hello_sent" and got > 0 then setState("downloading") end
+    local verdict, logNow = downloadWatch.step(watch, dtReal, got, state)
+    if logNow then timing(string.format("download %d/%d chunks", got, total)) end
+    if verdict == "stalled" then
+      log("E", "RLS-Career-MP", string.format("Save download stalled at %d/%d chunks", got, total))
+      fail("download_stalled", "Your save stopped downloading. Please leave and rejoin the server.")
+    elseif verdict == "no_answer" then
+      fail("no_answer", "The server did not send your save. Please leave and rejoin the server.")
+    end
   elseif state == "starting" and stateTime > START_TIMEOUT then
     fail("start_timeout")
   end

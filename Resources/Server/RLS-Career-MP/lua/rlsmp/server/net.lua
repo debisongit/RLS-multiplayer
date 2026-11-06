@@ -89,12 +89,15 @@ local function pump()
       if job.next == 0 then
         M.send(pid, "rlsmpChunkBegin", job.header)
         job.next = 1
+        job.startedAt = os.clock()
       else
         MP.TriggerClientEvent(pid, "rlsmpChunk",
           util.jsonEncode({id = job.header.id, i = job.next, d = job.chunks[job.next]}))
         job.next = job.next + 1
         budget = budget - 1
         if job.next > #job.chunks then
+          util.info(string.format("[rlsmp-timing] sent %s #%s to player %s: %d chunks in %.1fs",
+            tostring(job.header.kind), tostring(job.header.id), tostring(pid), #job.chunks, os.clock() - (job.startedAt or os.clock())))
           table.remove(queue, 1)
           util.info(string.format("[rlsmp-timing] sent %s to player %d: %d bytes in %d chunks, %.2fs",
             tostring(job.header.kind), pid, job.bytes, #job.chunks, os.clock() - job.t0))
