@@ -6,7 +6,8 @@
 -- The server pairs the two reports (one report is enough), works out who drove into whom, and decides if anybody "got caught":
 --
 --   fault     = whose velocity pointed INTO the other car at first contact (closing speed), 50/50 when both did or neither did
---   caught    = chance = base + dashcam bonus + witnesses nearby. No dashcam and nobody around = a gamble you may win.
+--   caught    = a dashcam on either car settles it (claims.dashcamAlwaysCaught). Without one it is a dice roll:
+--               chance = base + witnesses nearby. No dashcam and nobody around = a gamble you may win.
 --   payout    = damage the other car took x your share of fault x chain multiplier (several accidents in a row cost more)
 --   insurance = the at-fault game applies an RLS claim for that amount, which lowers the driver score
 --
@@ -133,15 +134,18 @@ local function resolve(key, entry)
   local witnesses = math.min(tonumber(ra and ra.nearby) or math.huge, tonumber(rb and rb.nearby) or math.huge)
   if witnesses == math.huge then witnesses = 0 end
   local chance = M.confidence(dashA, dashB, witnesses)
-  local caught = math.random() <= chance
+  -- A recorded crash is not a gamble: with a dashcam on either car the verdict always sticks (switchable in the config).
+  local proven = cfg.claims.dashcamAlwaysCaught and (dashA or dashB)
+  local caught = proven or math.random() <= chance
 
   local header = string.format("%s vs %s: closing %.0f m/s, fault %d%% / %d%%, evidence %d%%.",
     tostring(sa.name), tostring(sb.name), closing, math.floor(shareA * 100 + 0.5), math.floor(shareB * 100 + 0.5), math.floor(chance * 100 + 0.5))
-  util.info("[claims] " .. header .. (caught and " CAUGHT" or " got away"))
+  util.info("[claims] " .. header .. " dashcams " .. (dashA and "A" or "-") .. (dashB and "B" or "-") .. (caught and (proven and " CAUGHT (dashcam)" or " CAUGHT") or " got away"))
 
   if not caught then
-    say(aPid, "Nobody could prove who caused that crash. No claim. (" .. math.floor(chance * 100 + 0.5) .. "% evidence)")
-    say(bPid, "Nobody could prove who caused that crash. No claim. (" .. math.floor(chance * 100 + 0.5) .. "% evidence)")
+    local why = "No dashcam on either car, " .. math.floor(chance * 100 + 0.5) .. "% chance of being caught."
+    say(aPid, "Nobody could prove who caused that crash. No claim. (" .. why .. ")")
+    say(bPid, "Nobody could prove who caused that crash. No claim. (" .. why .. ")")
     return
   end
 
