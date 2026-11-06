@@ -116,6 +116,7 @@ local function onHello(pid, data)
     end
   end
 
+  local t0 = os.clock()
   local profile, isNew = profiles.loadOrCreate(accountId, s.name)
   -- A career made on another map has no starter garage here (RLS only grants one to brand-new careers).
   local careerMap = profiles.mapOf(profile)
@@ -129,6 +130,7 @@ local function onHello(pid, data)
   s.stage = "downloading"
 
   local payload = profiles.encodeForDownload(profile)
+  util.info(string.format("[rlsmp-timing] loaded and encoded %s's profile: %d bytes, %.2fs", tostring(s.name), #payload, os.clock() - t0))
   net.sendBig(pid, "profile", payload, {
     profile = identity.localProfileName(accountId),
     isNew = isNew,

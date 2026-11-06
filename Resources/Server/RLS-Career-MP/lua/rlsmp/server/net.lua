@@ -68,7 +68,7 @@ function M.sendBig(pid, kind, payload, extra)
   header.kind = kind
   header.extra = extra
   outbox[pid] = outbox[pid] or {}
-  table.insert(outbox[pid], {header = header, chunks = chunks, next = 0})
+  table.insert(outbox[pid], {header = header, chunks = chunks, next = 0, t0 = os.clock(), bytes = #payload})
   return header.id
 end
 
@@ -96,6 +96,8 @@ local function pump()
         budget = budget - 1
         if job.next > #job.chunks then
           table.remove(queue, 1)
+          util.info(string.format("[rlsmp-timing] sent %s to player %d: %d bytes in %d chunks, %.2fs",
+            tostring(job.header.kind), pid, job.bytes, #job.chunks, os.clock() - job.t0))
         end
       end
     end
