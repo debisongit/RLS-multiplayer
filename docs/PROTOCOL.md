@@ -46,6 +46,25 @@ or no `rlsmpHello` within `handshake.helloTimeoutSeconds`.
 | C→S | `rlsmpWalletDelta` | `{d = moneyChange, r = reasonLabel, c = rlsMoneyCategory}` |
 | S→C | `rlsmpWalletSet` | `{money, why}` server-approved balance; client applies it |
 
+## Traffic director (Phase 3)
+
+| Direction | Event | Body |
+|---|---|---|
+| S→C | `rlsmpTrafficQuota` | `{active, players, rev}` ceiling for active traffic cars on this client; sent on join and whenever the number of career players changes |
+
+`quota = clamp(floor(traffic.totalBudget / players), minPerPlayer, maxPerPlayer)`. The client only ever *lowers*
+`gameplay_traffic` active amount to the quota (re-checked every 3 s); RLS events that lower traffic are left alone.
+
+## Police pursuits (Phase 3)
+
+| Direction | Event | Body |
+|---|---|---|
+| S→C | `rlsmpPoliceConfig` | `{antiTeleport, blockRoadblocks}` sent once when a player finishes loading |
+
+While the player is chased (their traffic-data `pursuit.mode` >= 1) and `antiTeleport` is on, the client keeps every police unit
+from respawning (`enableRespawn = false`), refuses RLS roadblocks (if `blockRoadblocks`) and
+refuses `gameplay_traffic.forceTeleport` on police units. Everything is restored when the pursuit ends.
+
 ## Business (chat commands, server-side)
 
 Typed in BeamMP chat, hidden from other players. Money moves through the server wallet and

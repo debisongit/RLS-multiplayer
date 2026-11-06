@@ -61,6 +61,27 @@ M.defaults = {
     minBalance = -10000000,
   },
 
+  -- Phase 3: traffic director. The budget is shared between everyone who is in career.
+  traffic = {
+    enabled = true,
+    -- Traffic cars that may be active across the whole server.
+    totalBudget = 40,
+    -- Every player gets at least / at most this many (a lone player gets maxPerPlayer).
+    minPerPlayer = 3,
+    maxPerPlayer = 15,
+    -- How often the director looks for players joining or leaving.
+    checkSeconds = 1,
+  },
+
+  -- Phase 3: police pursuits.
+  police = {
+    enabled = true,
+    -- Police cars may not be re-placed (respawned / teleported) while the player is being chased.
+    antiTeleport = true,
+    -- Refuse RLS roadblocks (they put police cars on the road ahead of you).
+    blockRoadblocks = true,
+  },
+
   business = {
     maxMembers = 4,
     membersCanWithdraw = true,
