@@ -18,8 +18,10 @@ Play **RLS Career Overhaul** together on **BeamMP**, with saves stored on the se
    ```bash
    tools/build_client_zip.sh
    ```
-3. Also put the **RLS Career Overhaul** mod zip in `Resources/Client/` so players get it.
-4. In `ServerConfig.toml`: `Map = "/levels/west_coast_usa/info.json"` and `MaxCars = 100` or more.
+3. Every player installs **RLS Career Overhaul** themselves (normal mod folder). Do **not** put the RLS zip in `Resources/Client/`:
+   RLS builds its map (`rls_west_coast`) when the game starts, and a server-sent copy is built too late.
+4. In `ServerConfig.toml`: `Map = "/levels/rls_west_coast/info.json"` (needed for auctions, drop-offs, businesses) and `MaxCars = 100` or more.
+   Plain `west_coast_usa` works too, but RLS loses its map features there.
 5. Start the server once. Edit `Resources/Server/RLS-Career-MP/config/config.json`, then restart.
 
 Console: `rlsmp status`, `rlsmp save`.
