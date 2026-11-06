@@ -8,7 +8,7 @@ Plan for about 30 minutes, one player (a second player is optional, see the end)
 
 | Component | Version |
 |---|---|
-| RLS-Career-MP (this repo) | default branch `claude/amazing-sagan-kh6ecn`, code commit `2a2430f` (Phase 1-3 together, build `0.3.0`; later commits only change this document) |
+| RLS-Career-MP (this repo) | default branch `claude/amazing-sagan-kh6ecn`, code commit `163b578`, build `0.4.0` (Phase 1-3 together; later commits only change documents) |
 | RLS Career Overhaul source read | v2.8.0, commit `e701d9e2218ca12ff70ba4a09c0c91514e96e380` (29 Oct 2026) |
 | BeamNG.drive | **not pinned, write yours down** (docs target 0.38 / 0.39) |
 | BeamMP (server and client) | **not pinned, write yours down** |
@@ -25,7 +25,7 @@ Vanilla BeamNG's traffic code was never read; only RLS's code was.
    ```bash
    tools/install_to_server.sh /path/to/BeamMP-Server
    ```
-   It prints `Installed RLS-Career-MP build 0.3.0`. It is a bash script: on Windows run it from Git Bash or WSL.
+   It prints `Installed RLS-Career-MP build 0.4.0`. It is a bash script: on Windows run it from Git Bash or WSL.
 2. Put the RLS Career Overhaul zip in the server's `Resources/Client/` as well.
 3. On your own PC, delete any local `rls_career_overhaul_v2.8.0_hotfix.zip` (or any other copy of RLS) from your BeamNG
    mods folder, so RLS is not unloaded and rebuilt on every join.
@@ -34,12 +34,13 @@ Vanilla BeamNG's traffic code was never read; only RLS's code was.
 5. Start the server once, then stop it. This writes
    `Resources/Server/RLS-Career-MP/config/config.json`.
 6. Edit that file. Under `"traffic"` set `"totalBudget": 6` and `"minPerPlayer": 2`; leave
-   `"maxPerPlayer"` at 15. This is deliberate: with the default budget of 40 a single player gets 15 cars,
-   which is above what you will normally have, so the limit would never visibly act. Under `"police"`,
+   `"maxPerPlayer"` at 18. This is deliberate. The default (`totalBudget` 0) means automatic: 30 cars plus 10 per player,
+   at most 18 per player, so a single player would get 18 cars, which is above what you will normally have, and the limit
+   would never visibly act. Any `totalBudget` above 0 fixes the budget instead. Under `"police"`,
    leave `"antiTeleport": true` and `"blockRoadblocks": true`. Start the server again.
 7. Join with BeamNG. In BeamNG's own settings, set the **traffic amount to 15 or more** (the max is fine).
-8. **Check the build.** The server log must say `joined with client build 0.3.0 (server build 0.3.0)` and the game log must
-   say `client loaded, build 0.3.0`. If the two builds differ, you are running an old client zip: re-run the install
+8. **Check the build.** The server log must say `joined with client build 0.4.0 (server build 0.4.0)` and the game log must
+   say `client loaded, build 0.4.0`. If the two builds differ, you are running an old client zip (this has already wasted a test round): re-run the install
    command, restart the server and rejoin.
 
 Client-side settings are not stored in the server file, so nothing else needs changing. Do not rename the zip.
@@ -73,7 +74,8 @@ This is the most important one. The anti-teleport only works if the player's own
 ```
 RLSMP-P3 ... probe: player vehicle in traffic data = true
 ```
-`= true` → good, pursuits are read directly from the game.
+`= true` → good, pursuits are read directly from the game. This is the expected result: RLS inserts the player's car into the
+traffic data (`gameplay_traffic.insertTraffic(id, true)`).
 `= false` → the code falls back to the RLS hook (`hook onPursuitModeUpdate mode=N` lines). That path works in
 unit tests but has never run in the game, so tell me if you see it.
 If you are chased and there is **no** `pursuit START` line at all, the feature is inert. Send the log.
@@ -88,6 +90,8 @@ RELEASED police id=123 enableRespawn back to true
 `LEAK police id=123 was re-placed during the pursuit` → a police car was put somewhere new even though we
 switched respawn off. That is a path I do not block and cannot see (it lives in vanilla BeamNG). **This is the
 line I most want to see if it appears.** Note roughly what you were doing at that moment.
+The freeze relies on RLS's own `tryRespawn` (in `trafficVehicle.lua`), which returns early when a unit's `enableRespawn` is off.
+So with the freeze on, a police car that is out of sight should simply stay where it is, not reappear ahead of you.
 If a cop visibly pops in ahead of you and there is **no** `LEAK` line, tell me when it happened. That means the
 car was spawned new (not respawned), which this build does not watch for.
 
