@@ -17,11 +17,13 @@ trap 'rm -rf "$tmp"' EXIT
 lua5.3 tests/server_test.lua "$tmp"
 lua5.3 tests/business_test.lua "$(mktemp -d -p "$tmp")"
 lua5.3 tests/traffic_labels_test.lua "$(mktemp -d -p "$tmp")"
+lua5.3 tests/claims_test.lua "$(mktemp -d -p "$tmp")"
 lua5.3 tests/traffic_test.lua
 lua5.3 tests/traffic_police_test.lua
 luajit tests/client_test.lua
 luajit tests/fleet_client_test.lua
 luajit tests/guard_test.lua
+luajit tests/claims_client_test.lua
 luajit tests/traffic_labels_client_test.lua
 luajit tests/unstuck_test.lua
 luajit tests/join_protect_test.lua

@@ -57,6 +57,13 @@ All of this is **client-side per game**, seeded and scheduled by the server so p
 
 Risk: more AI per game = more CPU. Needs the quota system above and a global on/off switch.
 
+## Decisions made (by the owner)
+
+- Dashcam = $100 per-car upgrade. **Built** (`/dashcam`).
+- A crash without a dashcam is still judged, but "caught" is a gamble that depends on the cars around. **Built** (35% base, +15% per car nearby up to 3, +40% if either car has a dashcam, 100% if both).
+- Penalty follows the damaged parts (RLS's own per-part repair price), paid by the at-fault player and recorded as an RLS insurance claim. **Built, dry run first** (`claims.dryRun`).
+- Traffic scales with the players online, a little more than before. **Built**: budget = 30 + 10 per player, up to 18 cars per game (was a fixed 40 / 15).
+
 ## Suggested order
 
 1. Test the current build (join, garage, business, fleet, /unstuck, payout split, name tags).

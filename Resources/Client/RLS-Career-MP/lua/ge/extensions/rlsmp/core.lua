@@ -119,6 +119,7 @@ function M.onOverhaulActive(active)
     rlsmp_vehicleGuard.enable(true)
     rlsmp_unstuck.enable(true)
     rlsmp_trafficLabels.enable(true)
+    rlsmp_claims.enable(true)
     net.send("rlsmpLoaded", {ok = true})
     -- New careers get saved right away so the server has a copy from minute one.
     if isNewCareer then firstSaveTimer = 10 end
@@ -129,6 +130,7 @@ function M.onOverhaulActive(active)
     rlsmp_vehicleGuard.enable(false)
     rlsmp_unstuck.enable(false)
     rlsmp_trafficLabels.enable(false)
+    rlsmp_claims.enable(false)
     removeGuard.enable(false)
     setState("idle")
   end
@@ -173,6 +175,7 @@ function M.onServerLeave()
   rlsmp_vehicleGuard.enable(false)
   rlsmp_unstuck.enable(false)
     rlsmp_trafficLabels.enable(false)
+    rlsmp_claims.enable(false)
   net.reset()
   pending, firstSaveTimer = nil, nil
   setState("idle")
@@ -184,8 +187,8 @@ function M.onExtensionLoaded()
   net.init()
   net.onBig("profile", onProfile)
   net.on("rlsmpError", function(e) toast("error", tostring(e.msg or e.code)) end)
-  extensions.load("rlsmp_saveBridge", "rlsmp_wallet", "rlsmp_fleet", "rlsmp_vehicleGuard", "rlsmp_unstuck", "rlsmp_trafficLabels")
-  for _, name in ipairs({"rlsmp_saveBridge", "rlsmp_wallet", "rlsmp_fleet", "rlsmp_vehicleGuard", "rlsmp_unstuck", "rlsmp_trafficLabels"}) do setExtensionUnloadMode(name, "manual") end
+  extensions.load("rlsmp_saveBridge", "rlsmp_wallet", "rlsmp_fleet", "rlsmp_vehicleGuard", "rlsmp_unstuck", "rlsmp_trafficLabels", "rlsmp_claims")
+  for _, name in ipairs({"rlsmp_saveBridge", "rlsmp_wallet", "rlsmp_fleet", "rlsmp_vehicleGuard", "rlsmp_unstuck", "rlsmp_trafficLabels", "rlsmp_claims"}) do setExtensionUnloadMode(name, "manual") end
   log("I", "RLS-Career-MP", "client loaded, build " .. transfer.BUILD)
 end
 

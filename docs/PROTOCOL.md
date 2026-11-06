@@ -52,7 +52,7 @@ or no `rlsmpHello` within `handshake.helloTimeoutSeconds`.
 |---|---|---|
 | S→C | `rlsmpTrafficQuota` | `{active, players, rev}` ceiling for active traffic cars on this client; sent on join and whenever the number of career players changes |
 
-`quota = clamp(floor(traffic.totalBudget / players), minPerPlayer, maxPerPlayer)`. The client only ever *lowers*
+`quota = clamp(floor(budget / players), minPerPlayer, maxPerPlayer)` where `budget` = `traffic.totalBudget` if above 0, else `baseBudget + perPlayerBudget x players` (grows with players online). The client only ever *lowers*
 `gameplay_traffic` active amount to the quota (re-checked every 3 s); RLS events that lower traffic are left alone.
 
 ## Police pursuits (Phase 3)
@@ -100,6 +100,22 @@ the client teleports the car or walking character to the nearest road (not durin
 `rlsmpTrafficIds {ids = {"<pid>-<n>", ...}}` (C→S): this game's AI traffic and parked cars. The server keeps only ids that start with the
 sender's player id and relays them as `rlsmpTrafficIdsRx {from, ids}` (S→C) to every other loaded player, who hide those name tags.
 New players receive everyone's current lists within 2 s.
+
+## Dashcams and crash claims
+
+`/dashcam` installs a dashcam on the car you sit in (`claims.dashcamPrice`, default $100). Flow: server `rlsmpWhatCar {}` -> client
+`rlsmpMyCar {inv, model, name}` -> server charges, stores `profile.dashcams[inv] = model` (checked against the car in later reports).
+
+A game watches the car its player drives. On contact with another player's car (not traffic, not a walking player) it sends, after the
+contact ends, `rlsmpHit {me, with, inv, model, mine = {p, v, d}, other = {p, v, d}, damage?, nearby}`: server vehicle ids, snapshots
+of both cars from just before impact, the repair price of the damage taken (RLS's per-part price) and how many cars were within 40 m.
+The server accepts only reports where `me` belongs to the sender. One report is enough; it waits `reportWindowSeconds` for the other.
+
+Verdict: fault share = whose velocity pointed into the other car (closing speed), 50/50 if both did. Chance of being caught =
+`baseConfidence + witnesses x perWitness (+ dashcamBonus if either car has one)`, 100% if both do; otherwise "nobody could prove it".
+Payout = damage of the other car x fault share x repeat multiplier (x1.5 per extra at-fault accident within 60 s, max x3), capped.
+S->C `rlsmpClaimPenalty {damage}` makes the at-fault game file an RLS insurance claim (driver score drops).
+`claims.dryRun = true` (default) only tells players what would happen.
 
 ## Reserved prefixes for later phases
 

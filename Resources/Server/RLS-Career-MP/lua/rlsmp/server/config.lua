@@ -67,11 +67,15 @@ M.defaults = {
   -- Phase 3: traffic director. The budget is shared between everyone who is in career.
   traffic = {
     enabled = true,
-    -- Traffic cars that may be active across the whole server.
-    totalBudget = 40,
+    -- Traffic cars that may be active across the whole server. 0 = automatic: it grows with the players online
+    -- (baseBudget + perPlayerBudget x players), so more players means more traffic overall but fewer cars per game.
+    -- Any number above 0 fixes the budget instead.
+    totalBudget = 0,
+    baseBudget = 30,
+    perPlayerBudget = 10,
     -- Every player gets at least / at most this many (a lone player gets maxPerPlayer).
     minPerPlayer = 3,
-    maxPerPlayer = 15,
+    maxPerPlayer = 18,
     -- How often the director looks for players joining or leaving.
     checkSeconds = 1,
   },
@@ -97,6 +101,31 @@ M.defaults = {
 
   unstuck = {
     cooldownSeconds = 30,
+  },
+
+  claims = {
+    enabled = true,
+    -- Judge crashes and TELL players what would happen, but take no money and change no insurance score. Turn off to go live.
+    dryRun = true,
+    dashcamPrice = 100,
+    -- How long to wait for the second player's report before judging with one.
+    reportWindowSeconds = 4,
+    pairCooldownSeconds = 20,
+    -- Closing speed (m/s) below which a touch is a scrape, not an accident.
+    minImpactSpeed = 3,
+    -- Fault share from which a player counts as "at fault" for repeat-accident multipliers.
+    faultThreshold = 0.6,
+    chainWindowSeconds = 60,
+    chainStep = 0.5,
+    chainMax = 3,
+    maxPayout = 25000,
+    -- Chance of being caught: base + witnesses nearby + a dashcam on either car. Both cars with dashcams = certain.
+    baseConfidence = 0.35,
+    perWitness = 0.15,
+    witnessCap = 3,
+    dashcamBonus = 0.4,
+    -- Used when a game could not measure its damage: dollars per (m/s)^2 of closing speed.
+    fallbackDamagePerSpeedSq = 15,
   },
 
   security = {

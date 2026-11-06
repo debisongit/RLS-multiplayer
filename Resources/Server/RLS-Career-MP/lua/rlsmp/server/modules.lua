@@ -14,6 +14,7 @@ return {
   "rlsmp.server.business",
   "rlsmp.server.qol",
   "rlsmp.server.trafficLabels",
+  "rlsmp.server.claims",
   "rlsmp.server.traffic",
   "rlsmp.server.trafficPolice",
 }

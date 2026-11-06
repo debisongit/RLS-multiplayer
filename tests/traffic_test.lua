@@ -40,6 +40,14 @@ check(traffic.quotaFor(4, c) == 10, "40 / 4 = 10")
 check(traffic.quotaFor(10, c) == 4, "40 / 10 = 4")
 check(traffic.quotaFor(30, c) == 3, "never below min")
 check(traffic.quotaFor(0, c) == 15, "empty server")
+-- automatic budget: grows with the players online, each game gets a bit less as the server fills up
+local auto = {totalBudget = 0, baseBudget = 30, perPlayerBudget = 10, minPerPlayer = 3, maxPerPlayer = 18}
+check(traffic.quotaFor(1, auto) == 18, "auto budget: a lone player gets the max")
+check(traffic.quotaFor(2, auto) == 18, "auto budget: two players still get the max (25 each available)")
+check(traffic.quotaFor(4, auto) == 17, "auto budget: 70 / 4 = 17")
+check(traffic.quotaFor(8, auto) == 13, "auto budget: 110 / 8 = 13")
+local function total(n) return traffic.quotaFor(n, auto) * n end
+check(total(8) > total(4) and total(4) > total(2) and total(2) > total(1), "more players means more traffic overall")
 check(timers["rlsmpTrafficTick"] == 1000, "timer registered")
 
 -- 2. Players who have not finished loading get nothing
@@ -51,7 +59,7 @@ check(#take() == 0, "not loaded -> no quota")
 stages[0] = "loaded"
 tick()
 local m = take()
-check(#m == 1 and m[1].pid == 0 and m[1].name == "rlsmpTrafficQuota" and m[1].data.active == 15, "solo quota 15")
+check(#m == 1 and m[1].pid == 0 and m[1].name == "rlsmpTrafficQuota" and m[1].data.active == 18, "solo quota 18")
 tick()
 check(#take() == 0, "no change -> silence")
 
@@ -59,8 +67,8 @@ check(#take() == 0, "no change -> silence")
 stages[1] = "loaded"
 tick()
 m = take()
--- 40/2 = 20 but capped at 15, so player 0 keeps 15 and only player 1 hears about it
-check(#m == 1 and m[1].pid == 1 and m[1].data.active == 15, "second player gets 15 (cap)")
+-- (30 + 10x2)/2 = 25 but capped at 18, so player 0 keeps 18 and only player 1 hears about it
+check(#m == 1 and m[1].pid == 1 and m[1].data.active == 18, "second player gets 18 (cap)")
 
 -- 5. Crowd: everyone shrinks
 for pid = 2, 9 do stages[pid] = "loaded" end
@@ -68,14 +76,14 @@ tick()
 m = take()
 check(#m == 10, "all ten players told")
 local rev = m[1].data.rev
-for _, x in ipairs(m) do check(x.data.active == 4 and x.data.players == 10 and x.data.rev == rev, "ten players -> 4 each") end
+for _, x in ipairs(m) do check(x.data.active == 13 and x.data.players == 10 and x.data.rev == rev, "ten players -> 13 each") end
 
 -- 6. Leaving players free budget for the rest
 for pid = 4, 9 do stages[pid] = nil end
 tick()
 m = take()
-check(#m == 4 and m[1].data.active == 10 and m[1].data.rev > rev, "four left -> 10 each, newer revision")
-check(traffic.current(0) == 10 and traffic.current(9) == nil, "bookkeeping follows the players")
+check(#m == 4 and m[1].data.active == 17 and m[1].data.rev > rev, "four left -> 17 each, newer revision")
+check(traffic.current(0) == 17 and traffic.current(9) == nil, "bookkeeping follows the players")
 
 -- 7. Disabled director stays quiet
 cfg.traffic.enabled = false

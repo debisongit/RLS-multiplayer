@@ -5,7 +5,8 @@
 -- area is flooded, so the director hands out a shared budget: each career player gets a
 -- ceiling for how many traffic cars their game may keep active (`rlsmpTrafficQuota`).
 --
---   quota = clamp(floor(totalBudget / playersInCareer), minPerPlayer, maxPerPlayer)
+--   quota = clamp(floor(budget / playersInCareer), minPerPlayer, maxPerPlayer)
+--   budget = totalBudget if set, else baseBudget + perPlayerBudget x players (grows with the players online)
 --
 -- It owns its own timer and only watches `sessions`; it never registers the join/leave events
 -- that sessions.lua already uses (the net layer allows one handler per event name).
@@ -24,7 +25,8 @@ local revision = 0
 function M.quotaFor(count, c)
   c = c or cfg
   if count < 1 then return c.maxPerPlayer end
-  local share = math.floor(c.totalBudget / count)
+  local total = (c.totalBudget or 0) > 0 and c.totalBudget or ((c.baseBudget or 0) + (c.perPlayerBudget or 0) * count)
+  local share = math.floor(total / count)
   return math.max(c.minPerPlayer, math.min(c.maxPerPlayer, share))
 end
 
@@ -68,7 +70,7 @@ function M.init(config)
   known, revision = {}, 0
   net.on("rlsmpTrafficTick", tick)
   MP.CreateEventTimer("rlsmpTrafficTick", math.max(250, math.floor((cfg.checkSeconds or 1) * 1000)))
-  util.info("Traffic director on: budget " .. cfg.totalBudget .. ", " .. cfg.minPerPlayer .. "-" .. cfg.maxPerPlayer .. " per player")
+  util.info("Traffic director on: budget " .. (cfg.totalBudget > 0 and cfg.totalBudget or (cfg.baseBudget .. " + " .. cfg.perPlayerBudget .. " per player")) .. ", " .. cfg.minPerPlayer .. "-" .. cfg.maxPerPlayer .. " per player")
 end
 
 return M

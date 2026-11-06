@@ -17,6 +17,15 @@ function M.isRemote(id)
   return M.remoteSet()[id] == true
 end
 
+-- BeamMP's server id ("0-7") of one of MY cars, or nil. (getServerVehicleID logs errors for cars it does not know.)
+function M.serverIdOf(gameVehicleId)
+  if not (MPVehicleGE and MPVehicleGE.getVehicles) then return nil end
+  for serverId, v in pairs(MPVehicleGE.getVehicles()) do
+    if v.gameVehicleID == gameVehicleId then return serverId, v end
+  end
+  return nil
+end
+
 function M.isMPSession()
   return MPCoreNetwork ~= nil and ((MPCoreNetwork.isMPSession and MPCoreNetwork.isMPSession())
     or (MPCoreNetwork.isGoingMPSession and MPCoreNetwork.isGoingMPSession())) or false
