@@ -48,7 +48,7 @@ Player chat commands: `/unstuck` (or `/road`) moves you to the nearest road, in 
 3. Distributed traffic director + anti-teleport police pursuits
 4. Dealerships, garages, freeroam events, pink-slip races
 
-Docs: [how RLS works](docs/RLS_MAP.md) · [architecture](docs/ARCHITECTURE.md) · [protocol](docs/PROTOCOL.md) · [teamwork rules](docs/COLLAB.md)
+Docs: [next features and plans](docs/NEXT_FEATURES.md) · [how RLS works](docs/RLS_MAP.md) · [architecture](docs/ARCHITECTURE.md) · [protocol](docs/PROTOCOL.md) · [teamwork rules](docs/COLLAB.md)
 
 ## Dev
 

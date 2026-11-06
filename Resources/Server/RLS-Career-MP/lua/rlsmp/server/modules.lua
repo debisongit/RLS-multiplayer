@@ -13,6 +13,7 @@ return {
   "rlsmp.server.sessions",
   "rlsmp.server.business",
   "rlsmp.server.qol",
+  "rlsmp.server.trafficLabels",
   "rlsmp.server.traffic",
   "rlsmp.server.trafficPolice",
 }

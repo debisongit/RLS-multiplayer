@@ -95,6 +95,12 @@ A fleet car exists in exactly one place: stored in the business, or in one membe
 Chat `/unstuck` or `/road`. Server checks career loaded and `unstuck.cooldownSeconds`, then sends `rlsmpUnstuck {}`;
 the client teleports the car or walking character to the nearest road (not during pursuits or above 6 m/s).
 
+## Traffic name tags
+
+`rlsmpTrafficIds {ids = {"<pid>-<n>", ...}}` (C→S): this game's AI traffic and parked cars. The server keeps only ids that start with the
+sender's player id and relays them as `rlsmpTrafficIdsRx {from, ids}` (S→C) to every other loaded player, who hide those name tags.
+New players receive everyone's current lists within 2 s.
+
 ## Reserved prefixes for later phases
 
 - `rlsmpBiz*` – Phase 2 business / syndicate (Claude A)
