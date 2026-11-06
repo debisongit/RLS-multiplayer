@@ -28,6 +28,14 @@ Console: `rlsmp status`, `rlsmp save`.
 
 Player chat commands: `/unstuck` (or `/road`) moves you to the nearest road, in a car or on foot; `/biz help` for the business.
 
+## Troubleshooting
+
+- **Slow join / "Preparing the RLS map..."**: RLS builds `rls_west_coast` on your PC the first time (about a minute) and reuses it afterwards,
+  but it deletes that map whenever RLS unloads. A second RLS zip in your own `mods` folder makes BeamMP unload/reload RLS on every join.
+  Keep only the server's copy.
+- **Send logs with** the lines containing `[rlsmp-timing]` (join phases) from `beamng.log`.
+- Other players' cars are kept when your career starts; if they still look black, send the log.
+
 ## Roadmap
 
 1. ✅ Server-side saves + join handshake + server wallet

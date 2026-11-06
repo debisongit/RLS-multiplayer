@@ -79,7 +79,8 @@ tests/            lua5.3 server e2e test, luajit client test (`tests/run.sh`)
 1. **Map**: RLS features (auction, facilities, businesses) live in `levels/rls_west_coast/`, a map RLS generates on the player's PC
    after RLS loads (`overhaul_world_levelProxy`, cache in `/temp/rls_career/levelCache`, rebuilt every time RLS loads).
    BeamMP announces the map ~3 s after it activates the server mods, long before the proxy exists (the log shows it finished ~50 s later).
-   Plan: a client "map gate" waits for the proxy before the level loads. Unverified in-game.
+   Implemented: client `lib/mapGate.lua` (reports the map as present while it builds, holds `startFreeroam`, leaves with a message on timeout).
+   RLS wipes the cache whenever it unloads (`removeGenerated`), so a duplicate local RLS zip forces a rebuild on every join. Unverified in-game.
 2. Needs a live test on BeamNG 0.38/0.39 + BeamMP: event payload size (we use 16 KB chunks),
    `FS:findFiles` path format, and whether RLS's proxy level `rls_west_coast` can be the server map.
    Fallback: server `Map = "/levels/west_coast_usa/info.json"`.
