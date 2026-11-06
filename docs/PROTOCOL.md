@@ -46,6 +46,15 @@ or no `rlsmpHello` within `handshake.helloTimeoutSeconds`.
 | C→S | `rlsmpWalletDelta` | `{d = moneyChange, r = reasonLabel}` |
 | S→C | `rlsmpWalletSet` | `{money, why}` server-approved balance; client applies it |
 
+## Traffic director (Phase 3)
+
+| Direction | Event | Body |
+|---|---|---|
+| S→C | `rlsmpTrafficQuota` | `{active, players, rev}` ceiling for active traffic cars on this client; sent on join and whenever the number of career players changes |
+
+`quota = clamp(floor(traffic.totalBudget / players), minPerPlayer, maxPerPlayer)`. The client only ever *lowers*
+`gameplay_traffic` active amount to the quota (re-checked every 3 s); RLS events that lower traffic are left alone.
+
 ## Reserved prefixes for later phases
 
 - `rlsmpBiz*` – Phase 2 business / syndicate (Claude A)
