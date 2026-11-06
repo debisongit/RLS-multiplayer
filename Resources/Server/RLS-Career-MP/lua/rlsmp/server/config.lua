@@ -45,6 +45,10 @@ M.defaults = {
   wallet = {
     -- The biggest single payout we trust from a client.
     maxSingleGain = 750000,
+    -- Money that only MOVES (bank to wallet, loan payout, selling your own car) is not "earning", so it skips
+    -- the single/window limits. It still has its own cap per change. "cheat" gains are always refused.
+    exemptCategories = {"transfer", "loan", "sale", "property", "refund"},
+    maxExemptGain = 5000000,
     -- The most money a client may earn inside one window.
     maxGainPerWindow = 2000000,
     windowSeconds = 300,

@@ -31,8 +31,16 @@ local function windowTotal(ledger, now)
   return total
 end
 
+local function isExempt(category)
+  for _, c in ipairs(cfg.wallet.exemptCategories) do
+    if c == category then return true end
+  end
+  return false
+end
+
 -- Apply one reported change. Returns true if accepted, false + reason if refused.
-function M.applyDelta(ledger, amount, reason)
+-- `category` is RLS's money category for the change (see overhaul/lib/ledger/categories.lua).
+function M.applyDelta(ledger, amount, reason, category)
   amount = tonumber(amount)
   if not amount or amount ~= amount or amount == math.huge or amount == -math.huge then
     return false, "not_a_number"
@@ -43,7 +51,17 @@ function M.applyDelta(ledger, amount, reason)
     return true
   end
   local now = util.now()
-  if amount > 0 then
+  if amount > 0 and category == "cheat" then
+    ledger.rejected = ledger.rejected + 1
+    return false, "cheat_category"
+  end
+  if amount > 0 and isExempt(category) then
+    if amount > cfg.wallet.maxExemptGain then
+      ledger.rejected = ledger.rejected + 1
+      return false, "gain_too_large"
+    end
+    -- moving money around: accepted, but not counted as earnings
+  elseif amount > 0 then
     if amount > cfg.wallet.maxSingleGain then
       ledger.rejected = ledger.rejected + 1
       return false, "gain_too_large"

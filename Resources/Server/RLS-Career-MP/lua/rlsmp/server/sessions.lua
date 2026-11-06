@@ -175,7 +175,7 @@ end
 local function onWalletDelta(pid, data)
   local s = sessions[pid]
   if not s or not s.profile then return end
-  local ok, why = wallet.applyDelta(s.profile.ledger, data.d, data.r)
+  local ok, why = wallet.applyDelta(s.profile.ledger, data.d, data.r, data.c)
   s.ledgerDirty = true
   if not ok then
     util.warn(string.format("Refused money change %s for %s (%s, reason: %s)",
