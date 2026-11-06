@@ -16,7 +16,7 @@ local M = {}
 M.GATED = {rls_west_coast = true}
 M.TIMEOUT = 240
 
-local installed = false
+local wrapped = setmetatable({}, {__mode = "k"})  -- module tables we already wrapped (a reloaded module is a new table)
 local clock = os.clock
 function M.setClock(fn) clock = fn end
 
@@ -40,26 +40,52 @@ local function waiting(level)
 end
 
 local function say(text)
-  if UI and UI.updateLoading then pcall(UI.updateLoading, text) end
+  -- BeamMP's loading text starts with a type code; "l" = show as loading message
+  if UI and UI.updateLoading then pcall(UI.updateLoading, "l" .. text) end
+end
+
+-- RLS builds the map when it loads. If that build is gone (RLS was unloaded and reloaded while joining), start it again.
+-- Returns true when it asked for a build.
+local function kickBuild(state)
+  local lp = overhaul_world_levelProxy
+  if not lp then
+    if state.loadAsked or not extensions then return false end
+    state.loadAsked = true
+    log("W", "RLS-Career-MP", "map gate: RLS map builder not loaded, loading it")
+    pcall(extensions.load, "overhaul_world_levelProxy")
+    return true
+  end
+  local status = lp.getStatus and lp.getStatus()
+  if status and status.state == "idle" and not state.regenAsked and lp.regenerate then
+    state.regenAsked = true
+    log("W", "RLS-Career-MP", "map gate: no map build running, starting one")
+    pcall(lp.regenerate)
+    return true
+  end
+  return false
 end
 
 local function timing(msg)
   log("I", "RLS-Career-MP", "[rlsmp-timing] " .. msg .. " t=" .. string.format("%.1f", clock()))
 end
 
+-- Safe to call every frame: wraps each module once, and again if the game reloads it.
 function M.install()
-  if installed then return true end
   if not (core_levels and core_levels.expandMissionFileName and freeroam_freeroam and freeroam_freeroam.startFreeroam) then
-    log("W", "RLS-Career-MP", "map gate not installed: core_levels or freeroam_freeroam missing")
     return false
   end
-  local expand = core_levels.expandMissionFileName
-  core_levels.expandMissionFileName = function(path, ...)
-    local result = expand(path, ...)
-    if result then return result end
-    if mp.isMPSession() and waiting(levelOf(path)) then return path end
-    return result
+  if not wrapped[core_levels] then
+    wrapped[core_levels] = true
+    local expand = core_levels.expandMissionFileName
+    core_levels.expandMissionFileName = function(path, ...)
+      local result = expand(path, ...)
+      if result then return result end
+      if mp.isMPSession() and waiting(levelOf(path)) then return path end
+      return result
+    end
   end
+  if wrapped[freeroam_freeroam] then return true end
+  wrapped[freeroam_freeroam] = true
 
   local start = freeroam_freeroam.startFreeroam
   freeroam_freeroam.startFreeroam = function(path, ...)
@@ -70,11 +96,13 @@ function M.install()
     core_jobsystem.create(function(job)
       local started = clock()
       local lastNote = -10
+      local kick = {}
       while waiting(level) and clock() - started < M.TIMEOUT do
         if clock() - lastNote >= 2 then
           lastNote = clock()
           say(string.format("Preparing the RLS map... %ds", math.floor(clock() - started)))
         end
+        if clock() - started > 4 then kickBuild(kick) end
         job.sleep(0.5)
       end
       if ready(level) then
@@ -88,7 +116,6 @@ function M.install()
       end
     end)
   end
-  installed = true
   return true
 end
 

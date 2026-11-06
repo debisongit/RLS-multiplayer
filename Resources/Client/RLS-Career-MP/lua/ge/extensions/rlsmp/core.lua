@@ -138,6 +138,9 @@ function M.onWorldReadyState(worldState)
 end
 
 function M.onUpdate(dtReal)
+  -- The game may reload core_levels / freeroam / core_vehicles while mods change; wrap the fresh copies.
+  mapGate.install()
+  removeGuard.install()
   stateTime = stateTime + (dtReal or 0)
   if state == "waiting_rls" then
     if rlsReady() then

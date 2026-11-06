@@ -10,7 +10,7 @@ local mp = require("rlsmp/lib/mp")
 local M = {}
 
 local enabled = false
-local installed = false
+local wrapped = setmetatable({}, {__mode = "k"})  -- core_vehicles tables we already wrapped
 local original
 
 function M.enable(on) enabled = on == true end
@@ -25,11 +25,13 @@ local function removeAllExceptRemote(...)
   end
 end
 
+-- Safe to call every frame: wraps once, and again if the game reloads core_vehicles.
 function M.install()
-  if installed or not (core_vehicles and core_vehicles.removeAll) then return installed end
+  if not (core_vehicles and core_vehicles.removeAll) then return false end
+  if wrapped[core_vehicles] then return true end
+  wrapped[core_vehicles] = true
   original = core_vehicles.removeAll
   core_vehicles.removeAll = removeAllExceptRemote
-  installed = true
   return true
 end
 

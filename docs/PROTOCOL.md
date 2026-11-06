@@ -43,7 +43,7 @@ or no `rlsmpHello` within `handshake.helloTimeoutSeconds`.
 
 | Direction | Event | Body |
 |---|---|---|
-| C→S | `rlsmpWalletDelta` | `{d = moneyChange, r = reasonLabel}` |
+| C→S | `rlsmpWalletDelta` | `{d = moneyChange, r = reasonLabel, c = rlsMoneyCategory}` |
 | S→C | `rlsmpWalletSet` | `{money, why}` server-approved balance; client applies it |
 
 ## Business (chat commands, server-side)

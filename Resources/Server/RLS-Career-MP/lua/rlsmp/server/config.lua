@@ -49,6 +49,7 @@ M.defaults = {
     -- the single/window limits. It still has its own cap per change. "cheat" gains are always refused.
     exemptCategories = {"transfer", "loan", "sale", "property", "refund"},
     maxExemptGain = 5000000,
+    maxExemptPerWindow = 10000000,
     -- The most money a client may earn inside one window.
     maxGainPerWindow = 2000000,
     windowSeconds = 300,

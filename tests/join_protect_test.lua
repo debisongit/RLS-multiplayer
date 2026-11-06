@@ -81,4 +81,42 @@ check(_G.left == nil, "still waiting while RLS is busy")
 overhaul_world_levelProxy = {getStatus = function() return {state = "error"} end}
 tick()
 check(_G.left == true, "proxy error mid-wait: give up without waiting for the timeout")
+-- build kick: nothing is building the map (RLS was unloaded and reloaded) -> start one, once
+_G.left = nil
+files[map] = nil
+local regen, loaded, loadingText = 0, 0, nil
+overhaul_world_levelProxy = {getStatus = function() return {state = "idle"} end, regenerate = function() regen = regen + 1 end}
+UI = {updateLoading = function(t) loadingText = t end}
+freeroam_freeroam.startFreeroam(map)
+for _ = 1, 30 do tick() end
+check(regen == 1, "idle map builder is restarted exactly once")
+check(loadingText and loadingText:sub(1, 1) == "l" and loadingText:find("RLS map"), "loading text uses BeamMP's 'l' code")
+files[map] = true
+tick()
+check(started[#started] == map, "map loads after the restarted build finishes")
+files[map] = nil
+
+-- builder module missing entirely -> ask the game to load it once
+overhaul_world_levelProxy = nil
+extensions = {load = function(name) loaded = loaded + 1 end}
+freeroam_freeroam.startFreeroam(map)
+for _ = 1, 30 do tick() end
+check(loaded == 1, "missing map builder is loaded once")
+overhaul_world_levelProxy = {getStatus = function() return {state = "error"} end}
+for _ = 1, 600 do tick() end   -- let the old job end
+
+-- wrappers survive the game reloading its modules
+local before = core_levels.expandMissionFileName
+mg.install()
+check(core_levels.expandMissionFileName == before, "install twice does not stack wrappers")
+local freshExpand = function() return nil end
+core_levels = {expandMissionFileName = freshExpand}
+freeroam_freeroam = {startFreeroam = function() end}
+check(mg.install() == true and core_levels.expandMissionFileName ~= freshExpand, "reloaded core_levels is wrapped again")
+overhaul_world_levelProxy = nil
+core_vehicles = {removeAll = function() end}
+local oldRemoveAll = core_vehicles.removeAll
+rg.install()
+check(core_vehicles.removeAll ~= oldRemoveAll, "reloaded core_vehicles is wrapped again")
+
 print(string.format("join_protect_test: %d checks passed", passed))

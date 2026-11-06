@@ -212,5 +212,10 @@ check(ok == false, "earnings category still limited")
 ok = wallet.applyDelta(led, 800000, "x", nil)
 check(ok == false, "no category counts as earning")
 check(wallet.applyDelta(led, -5000, "Fuel", "fuel") == true, "spending always fine")
+local led2 = wallet.newLedger()
+led2.seeded, led2.money = true, 0
+check(wallet.applyDelta(led2, 5000000, "a", "transfer") and wallet.applyDelta(led2, 5000000, "b", "transfer"), "two big transfers fit the window")
+ok, why = wallet.applyDelta(led2, 1000000, "c", "transfer")
+check(ok == false and why == "gain_rate_limited", "endless transfers are rate limited")
 
 print(string.format("server_test: %d checks passed", passed))
