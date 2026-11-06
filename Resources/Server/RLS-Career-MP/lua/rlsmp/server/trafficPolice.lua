@@ -30,6 +30,8 @@ function M.push()
       if not told[pid] then
         told[pid] = true
         net.send(pid, "rlsmpPoliceConfig", M.payload())
+        util.info(string.format("RLSMP-P3 police config sent to pid=%s antiTeleport=%s blockRoadblocks=%s",
+          tostring(pid), tostring(cfg.antiTeleport), tostring(cfg.blockRoadblocks)))
       end
     end
   end

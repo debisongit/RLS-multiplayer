@@ -3,7 +3,9 @@ package.path = "tests/support/?.lua;Resources/Client/RLS-Career-MP/lua/ge/extens
 local json = require("json")
 
 jsonEncode, jsonDecode = json.encode, json.decode
-function log() end
+local logged = {}
+function log(level, tag, msg) logged[#logged + 1] = tag .. "|" .. tostring(msg) end
+local function saw(fragment) for _, l in ipairs(logged) do if l:find(fragment, 1, true) then return true end end return false end
 function setExtensionUnloadMode() end
 local handlers = {}
 TriggerServerEvent = function() end
@@ -32,8 +34,10 @@ local function server(tbl) handlers["rlsmpTrafficQuota"](json.encode(tbl)) end
 check(traffic.getQuota() == nil, "no quota yet")
 check(traffic._enforce() == false and calls == 0, "nothing to enforce before the server speaks")
 
-server({active = 12})
+server({active = 12, players = 2, rev = 3})
 check(traffic.getQuota() == 12 and active == 12, "quota lowers traffic above it")
+check(saw("RLSMP-P3|quota received active=12 players=2 rev=3"), "quota received line")
+check(saw("RLSMP-P3|TRAFFIC ceiling lowered 30 -> 12"), "ceiling line")
 
 active = 5 -- an RLS event cut traffic
 traffic.onUpdate(10)

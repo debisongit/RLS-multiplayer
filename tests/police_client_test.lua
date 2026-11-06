@@ -3,7 +3,9 @@ package.path = "tests/support/?.lua;Resources/Client/RLS-Career-MP/lua/ge/extens
 local json = require("json")
 
 jsonEncode, jsonDecode = json.encode, json.decode
-function log() end
+local logged = {}
+function log(level, tag, msg) logged[#logged + 1] = tag .. "|" .. tostring(msg) end
+local function saw(fragment) for _, l in ipairs(logged) do if l:find(fragment, 1, true) then return true end end return false end
 function setExtensionUnloadMode() end
 local handlers = {}
 TriggerServerEvent = function() end
@@ -38,6 +40,9 @@ local function check(cond, msg)
 end
 local function tick() police.onUpdate(1) end
 
+check(saw("RLSMP-P3|probe: RLS police service present = true"), "boot probes use the RLSMP-P3 tag")
+check(saw("RLSMP-P3|rlsmp_police loaded"), "loaded line")
+
 -- 1. No pursuit: nothing touched
 tick()
 check(traffic[10].enableRespawn == true and not police.isPursuit(), "no pursuit -> respawn untouched")
@@ -49,8 +54,14 @@ check(police.isPursuit(), "pursuit detected from traffic data")
 check(traffic[10].enableRespawn == false and traffic[11].enableRespawn == false, "every police unit frozen, near or far")
 check(traffic[12].enableRespawn == true, "civilians untouched")
 
+check(saw("RLSMP-P3|probe: player vehicle in traffic data = true"), "probe: player in traffic data")
+check(saw("RLSMP-P3|pursuit START mode=2 antiTeleport=true blockRoadblocks=true"), "pursuit START line")
+check(saw("RLSMP-P3|patched setupRoadblock = true") and saw("RLSMP-P3|patched forceTeleport = true"), "patched lines")
+check(saw("RLSMP-P3|FROZE police id=10 respawnCount=0 was enableRespawn=true"), "FROZE line")
+
 -- 3. Roadblocks and police teleports refused, others pass
 check(overhaul_integration_services_police.setupRoadblock() == nil and roadblocks == 0, "roadblock refused")
+check(saw("RLSMP-P3|BLOCKED setupRoadblock from tests/police_client_test.lua:"), "BLOCKED line names the caller")
 check(gameplay_traffic.forceTeleport(10) == false and teleports == 0, "cop teleport refused")
 check(gameplay_traffic.forceTeleport(12) == true and teleports == 1, "civilian teleport allowed")
 
@@ -63,6 +74,7 @@ check(traffic[13].enableRespawn == false, "late police unit frozen")
 traffic[10].respawnCount = 1
 tick()
 check(police.getLeaks() == 1, "re-placed unit counted")
+check(saw("RLSMP-P3|LEAK police id=10"), "LEAK line")
 tick()
 check(police.getLeaks() == 1, "counted once")
 
@@ -70,6 +82,8 @@ check(police.getLeaks() == 1, "counted once")
 traffic[1].pursuit.mode = 0
 tick()
 check(not police.isPursuit(), "pursuit end seen through traffic data")
+check(saw("RLSMP-P3|pursuit END after"), "pursuit END line")
+check(saw("RLSMP-P3|RELEASED police id=10"), "RELEASED line")
 check(traffic[10].enableRespawn == true and traffic[11].enableRespawn == true and traffic[13].enableRespawn == true, "respawn restored")
 check(overhaul_integration_services_police.setupRoadblock() ~= nil and roadblocks == 1, "roadblocks work again")
 check(gameplay_traffic.forceTeleport(10) == true, "cop teleport allowed again")
@@ -120,5 +134,23 @@ career = false
 police.onOverhaulActive(false)
 tick()
 check(not police.isPursuit(), "career inactive -> ignored")
+
+-- 11. Census
+local report = police.report()
+check(report:find("census begin", 1, true) and report:find("setupRoadblock BLOCKED", 1, true), "census lists blocked roadblocks")
+check(report:find("setupRoadblock BLOCKED callers", 1, true) and report:find("police_client_test.lua:", 1, true), "census lists callers")
+check(report:find("pursuits started", 1, true) and report:find("units frozen", 1, true), "census lists pursuits and freezes")
+
+-- 12. Player car missing from traffic data: the RLS hook is the fallback
+mp, career = true, true
+traffic[1] = nil
+logged = {}
+police.onPursuitModeUpdate(1, {mode = 2})
+check(police.isPursuit() and traffic[10].enableRespawn == false, "hook fallback starts the pursuit")
+check(saw("RLSMP-P3|probe: player vehicle in traffic data = false"), "probe says the player is not in traffic data")
+tick()
+check(police.isPursuit(), "fallback keeps the pursuit on")
+police.onPursuitModeUpdate(1, {mode = 0})
+check(not police.isPursuit() and traffic[10].enableRespawn == true, "hook ends it")
 
 print(string.format("police_client_test: %d checks passed", passed))
