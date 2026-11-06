@@ -227,4 +227,26 @@ check(wallet.applyDelta(led2, 5000000, "a", "transfer") and wallet.applyDelta(le
 ok, why = wallet.applyDelta(led2, 1000000, "c", "transfer")
 check(ok == false and why == "gain_rate_limited", "endless transfers are rate limited")
 
+-- 18. Career reset and wrong-map careers -------------------------------------------------------------------
+local profilesMod = require("rlsmp.server.profiles")
+check(profilesMod.mapOf({save = {files = {["career/general.json"] = json.encode({level = "west_coast_usa"})}}}) == "west_coast_usa", "map of a career is read from its save")
+check(profilesMod.mapOf({save = {files = {}}}) == nil, "no save, no map")
+RLSMP.serverMap = "rls_west_coast"
+local profilePath = tmp .. "/profiles/1001.json"
+check(io.open(profilePath) ~= nil, "bob has a profile on disk")
+local out = fire("onConsoleInput", "rlsmp reset bob")
+check(out:find("career reset") and out:find("archive"), "reset reports the archive: " .. tostring(out))
+check(io.open(profilePath) == nil, "profile file removed")
+check(dropped[0] and dropped[0]:find("reset"), "online player is dropped with a message")
+local archived = io.popen("ls " .. tmp .. "/profiles/archive/ 2>/dev/null"):read("*a")
+check(archived:find("^1001%-%d+%.json"), "old save archived, not deleted")
+fire("onPlayerDisconnect", 0)
+check(io.open(profilePath) == nil, "leaving does not write the old profile back")
+players[0] = {name = "bob", ids = {beammp = "1001"}}
+fire("onPlayerJoin", 0)
+fromClient(0, "rlsmpHello", {v = 1, build = require("rlsmp.shared.transfer").BUILD})
+prof = find(drain(0), "big:profile")
+check(prof.extra.isNew == true, "next join is a brand-new career")
+check(fire("onConsoleInput", "rlsmp reset nobody-here!"):find("could not reset"), "unknown player is reported, nothing breaks")
+
 print(string.format("server_test: %d checks passed", passed))

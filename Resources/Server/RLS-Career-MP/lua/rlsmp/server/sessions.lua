@@ -21,6 +21,21 @@ local cfg
 local sessions = {}   -- pid -> session
 local bigHandlers = {}  -- kind -> fn(pid, session, data); lets other modules receive big client uploads
 
+-- Console: archive and clear one career (by online player name or BeamMP account id). Online players are dropped.
+function M.resetCareer(who)
+  who = tostring(who or "")
+  local accountId, pid
+  for p, s in pairs(sessions) do
+    if s.accountId == who or tostring(s.name):lower() == who:lower() then pid, accountId = p, s.accountId end
+  end
+  accountId = accountId or identity.cleanId(who)
+  if not accountId then return false, "tell me a player name (online) or a BeamMP account id" end
+  if pid then sessions[pid].profile = nil end   -- so leaving does not write it back
+  local ok, result = profiles.reset(accountId)
+  if ok and pid then MP.DropPlayer(pid, "Your career was reset by the server owner. Rejoin to start a new one.") end
+  return ok, result
+end
+
 -- Public: other modules (business, traffic) can look up who is online and in which stage.
 function M.get(pid) return sessions[pid] end
 function M.all() return sessions end
@@ -99,6 +114,13 @@ local function onHello(pid, data)
   end
 
   local profile, isNew = profiles.loadOrCreate(accountId, s.name)
+  -- A career made on another map has no starter garage here (RLS only grants one to brand-new careers).
+  local careerMap = profiles.mapOf(profile)
+  if RLSMP and RLSMP.serverMap and careerMap and careerMap ~= RLSMP.serverMap then
+    util.warn(string.format("%s's career was made on map '%s' but the server runs '%s'. Run: rlsmp reset %s",
+      tostring(s.name), careerMap, RLSMP.serverMap, tostring(s.name)))
+    MP.SendChatMessage(pid, "[RLS] Your career was created on another map (" .. careerMap .. "), so you may have no garage. Ask the server owner to run: rlsmp reset " .. tostring(s.name))
+  end
   s.accountId = accountId
   s.profile = profile
   s.stage = "downloading"

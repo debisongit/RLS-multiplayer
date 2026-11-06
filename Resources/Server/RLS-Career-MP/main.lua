@@ -21,6 +21,10 @@ local function onConsoleInput(line)
   if cmd == "save" then
     sessions.saveAll()
     return "RLS-Career-MP: all online profiles saved"
+  elseif cmd == "reset" then
+    local ok, result = sessions.resetCareer(arg)
+    if ok then return "RLS-Career-MP: career reset. Old save archived to " .. tostring(result) end
+    return "RLS-Career-MP: could not reset: " .. tostring(result)
   elseif cmd == "status" then
     local lines = {"RLS-Career-MP " .. RLSMP.version}
     for pid, s in pairs(sessions.all()) do
@@ -29,7 +33,7 @@ local function onConsoleInput(line)
     end
     return table.concat(lines, "\n")
   end
-  return "RLS-Career-MP commands: rlsmp status | rlsmp save"
+  return "RLS-Career-MP commands: rlsmp status | rlsmp save | rlsmp reset <player or account id>"
 end
 
 -- RLS only has its garages, spawn point and jobs on its own map; warn loudly when the server is set to something else.
@@ -40,6 +44,7 @@ local function checkServerMap(cfg)
   local text = f:read("*a")
   f:close()
   local map = text:match('[\n^]%s*Map%s*=%s*"([^"]*)"')
+  RLSMP.serverMap = map and map:match("/levels/([^/]+)/") or nil
   if map and not map:find("/" .. cfg.expectedMap .. "/", 1, true) then
     return string.format("This server's map is %s, but RLS needs /levels/%s/info.json (no starter garage, garage slots or jobs otherwise).",
       map, cfg.expectedMap)

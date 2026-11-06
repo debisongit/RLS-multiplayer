@@ -25,7 +25,7 @@ Play **RLS Career Overhaul** together on **BeamMP**, with saves stored on the se
    The server logs a warning and tells joining players when the map is wrong.
 5. Start the server once. Edit `Resources/Server/RLS-Career-MP/config/config.json`, then restart.
 
-Console: `rlsmp status`, `rlsmp save`.
+Console: `rlsmp status`, `rlsmp save`, `rlsmp reset <player name or account id>` (archives that career to `profiles/archive/` and drops the player; the next join starts a new one).
 
 Player chat commands: `/unstuck` (or `/road`) moves you to the nearest road, in a car or on foot; `/biz help` for the business.
 
@@ -34,6 +34,8 @@ Player chat commands: `/unstuck` (or `/road`) moves you to the nearest road, in 
 - **Slow join / "Preparing the RLS map..."**: RLS builds `rls_west_coast` on your PC the first time (about a minute) and reuses it afterwards,
   but it deletes that map whenever RLS unloads. A second RLS zip in your own `mods` folder makes BeamMP unload/reload RLS on every join.
   Keep only the server's copy.
+- **No garage / can't buy cars**: RLS gives the free starter garage only to brand-new careers. A career first created on the wrong map never gets one.
+  Run `rlsmp reset <player>` on the server (the old save is archived), then rejoin. The server warns about such careers when they join.
 - **Check the build**: the client logs `client loaded, build X` and the server logs each player's build on join. They must match.
 - **Black character**: `unicycle/beamling.dae` failing to load means a broken game file; use Steam "Verify integrity of game files".
 - **Send logs with** the lines containing `[rlsmp-timing]` (join phases) from `beamng.log`.

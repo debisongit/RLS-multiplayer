@@ -66,6 +66,25 @@ function M.persist(profile)
   return storage.writeJson(pathFor(profile.accountId), profile, false)
 end
 
+-- The map (level id) this career was last saved on, read from the stored RLS save.
+function M.mapOf(profile)
+  local text = profile and profile.save and profile.save.files and profile.save.files["career/general.json"]
+  local general = text and util.jsonDecode(text)
+  return type(general) == "table" and type(general.level) == "string" and general.level or nil
+end
+
+-- Start over: the old profile is archived (never deleted), the next join creates a brand-new career.
+function M.reset(accountId)
+  local profile = cache[accountId] or storage.readJson(pathFor(accountId))
+  if not profile then return false, "no profile for " .. tostring(accountId) end
+  local archive = string.format("%sprofiles/archive/%s-%d.json", root, accountId, util.now())
+  if not storage.writeJson(archive, profile) then return false, "could not archive the old profile, nothing was deleted" end
+  os.remove(pathFor(accountId))
+  os.remove(pathFor(accountId) .. ".bak")
+  cache[accountId] = nil
+  return true, archive
+end
+
 function M.unload(accountId)
   cache[accountId] = nil
 end
