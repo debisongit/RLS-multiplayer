@@ -19,6 +19,15 @@ local M = {}
 
 M.SCHEMA = 1
 M.ATTRIBUTES_FILE = "career/playerAttributes.json"
+M.CHEATS_FILE = "career/rls_career/cheats.json"
+-- Chosen when the career is created; after the server has stored them, a client's later edits are ignored.
+M.LOCKED_FILES = {
+  "career/rls_career/careerStartMode.json",
+  "career/rls_career/difficultyMode.json",
+  "career/rls_career/hardcore.json",
+  "career/rls_career/sandboxEconomyProfile.json",
+  "career/rls_career/sandboxXpProfile.json",
+}
 
 local cfg, root
 local cache = {}  -- accountId -> profile table (only while the player is online)
@@ -122,8 +131,27 @@ function M.applyUpload(profile, upload)
   if total > cfg.transfer.maxSaveBytes then return nil, "too_big" end
   if nextFiles["info.json"] == nil then return nil, "missing_info" end
 
+  -- Start settings are fixed once stored, and cheats mode is never accepted (unless the owner allows it).
+  local result = {corrected = false, sums = {}}
+  for _, rel in ipairs(M.LOCKED_FILES) do
+    local kept = old[rel]
+    if kept and nextFiles[rel] ~= nil and nextFiles[rel] ~= kept then
+      nextFiles[rel] = kept
+      result.sums[rel] = transfer.checksum(kept)
+      util.warn(string.format("Ignored a change to %s from %s", rel, tostring(profile.lastName)))
+    end
+  end
+  local cheatsText = nextFiles[M.CHEATS_FILE]
+  if cheatsText and not cfg.security.allowCheats then
+    local cheats = util.jsonDecode(cheatsText)
+    if type(cheats) == "table" and cheats.cheatsMode == true then
+      nextFiles[M.CHEATS_FILE] = util.jsonEncode({cheatsMode = false})
+      result.sums[M.CHEATS_FILE] = transfer.checksum(nextFiles[M.CHEATS_FILE])
+      util.warn(tostring(profile.lastName) .. "'s save had cheats mode on; turned off")
+    end
+  end
+
   -- Money check against the server wallet.
-  local result = {corrected = false}
   local attrsText = nextFiles[M.ATTRIBUTES_FILE]
   if attrsText then
     local clientMoney, attrs = readMoney(attrsText)
@@ -141,7 +169,6 @@ function M.applyUpload(profile, upload)
 
   profile.save.files = nextFiles
   -- Tell the client the checksum of any file we changed, so its next delta is right.
-  result.sums = {}
   if result.corrected then
     result.sums[M.ATTRIBUTES_FILE] = transfer.checksum(nextFiles[M.ATTRIBUTES_FILE])
   end

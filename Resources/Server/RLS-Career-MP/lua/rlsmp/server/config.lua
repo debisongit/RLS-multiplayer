@@ -97,6 +97,11 @@ M.defaults = {
     cooldownSeconds = 30,
   },
 
+  security = {
+    -- RLS "cheats mode" (and Freeroam+) gives free money and vehicles. Never accepted from a client save unless you turn this on.
+    allowCheats = false,
+  },
+
   -- How often the server asks clients to save, in minutes (0 = rely on RLS autosave only).
   forceSaveMinutes = 5,
 }

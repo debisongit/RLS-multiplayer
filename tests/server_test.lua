@@ -249,4 +249,33 @@ prof = find(drain(0), "big:profile")
 check(prof.extra.isNew == true, "next join is a brand-new career")
 check(fire("onConsoleInput", "rlsmp reset nobody-here!"):find("could not reset"), "unknown player is reported, nothing breaks")
 
+-- 19. Save lock: start settings are fixed, cheats are refused ----------------------------------------------
+local lockPlayer = 1
+local lp = {name = "locker", ids = {beammp = "7007"}}
+players[7] = lp
+fire("onPlayerJoin", 7)
+fromClient(7, "rlsmpHello", {v = 1, build = require("rlsmp.shared.transfer").BUILD})
+drain(7)
+local l_info = json.encode({version = 64, date = "x"})
+local l_attrs = json.encode({money = {value = 100}})
+local diff1, diff2 = json.encode({mode = "normal"}), json.encode({mode = "easy-money"})
+local function lockedUpload(id, difficulty, cheats)
+  local all = {["info.json"] = transfer.checksum(l_info), ["career/playerAttributes.json"] = transfer.checksum(l_attrs),
+    ["career/rls_career/difficultyMode.json"] = transfer.checksum(difficulty), ["career/rls_career/cheats.json"] = transfer.checksum(cheats)}
+  return find(upload(7, id, all, {["info.json"] = l_info, ["career/playerAttributes.json"] = l_attrs,
+    ["career/rls_career/difficultyMode.json"] = difficulty, ["career/rls_career/cheats.json"] = cheats}), "rlsmpUpAck")
+end
+local ack1 = lockedUpload("L1", diff1, json.encode({cheatsMode = true}))
+local function stored() return require("rlsmp.server.profiles").get("7007").save.files end
+check(ack1.data.ok and stored()["career/rls_career/difficultyMode.json"] == diff1, "first difficulty setting is accepted")
+check(json.decode(stored()["career/rls_career/cheats.json"]).cheatsMode == false, "cheats mode in a save is turned off")
+check(ack1.data.sums["career/rls_career/cheats.json"] ~= nil, "client is told about the fixed file")
+local ack2 = lockedUpload("L2", diff2, json.encode({cheatsMode = false}))
+check(ack2.data.ok and stored()["career/rls_career/difficultyMode.json"] == diff1, "a later difficulty edit is ignored")
+RLSMP.config.security.allowCheats = true
+lockedUpload("L3", diff1, json.encode({cheatsMode = true}))
+check(json.decode(stored()["career/rls_career/cheats.json"]).cheatsMode == true, "owner can allow cheats")
+RLSMP.config.security.allowCheats = false
+fire("onPlayerDisconnect", 7)
+
 print(string.format("server_test: %d checks passed", passed))
