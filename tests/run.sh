@@ -16,6 +16,8 @@ tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 lua5.3 tests/server_test.lua "$tmp"
 lua5.3 tests/traffic_test.lua
+lua5.3 tests/police_test.lua
 luajit tests/client_test.lua
 luajit tests/traffic_client_test.lua
+luajit tests/police_client_test.lua
 echo "All tests passed."

@@ -13,4 +13,5 @@ return {
   "rlsmp.server.sessions",
   -- Phase 2: "rlsmp.server.business",
   "rlsmp.server.traffic",
+  "rlsmp.server.police",
 }

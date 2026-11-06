@@ -5,3 +5,5 @@ setExtensionUnloadMode('rlsmp_core', 'manual')
 -- Phase 3 (traffic / police): loaded separately so core.lua stays untouched.
 load('rlsmp_traffic')
 setExtensionUnloadMode('rlsmp_traffic', 'manual')
+load('rlsmp_police')
+setExtensionUnloadMode('rlsmp_police', 'manual')

@@ -55,6 +55,16 @@ or no `rlsmpHello` within `handshake.helloTimeoutSeconds`.
 `quota = clamp(floor(traffic.totalBudget / players), minPerPlayer, maxPerPlayer)`. The client only ever *lowers*
 `gameplay_traffic` active amount to the quota (re-checked every 3 s); RLS events that lower traffic are left alone.
 
+## Police pursuits (Phase 3)
+
+| Direction | Event | Body |
+|---|---|---|
+| S→C | `rlsmpPoliceConfig` | `{antiTeleport, blockRoadblocks, leashMeters}` sent once when a player finishes loading |
+
+While the player is chased (pursuit mode >= 1) and `antiTeleport` is on, the client keeps police units within
+`leashMeters` from respawning (`enableRespawn = false`), refuses RLS roadblocks (if `blockRoadblocks`) and
+refuses `gameplay_traffic.forceTeleport` on police units. Everything is restored when the pursuit ends.
+
 ## Reserved prefixes for later phases
 
 - `rlsmpBiz*` – Phase 2 business / syndicate (Claude A)
