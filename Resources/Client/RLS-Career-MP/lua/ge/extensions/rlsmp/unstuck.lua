@@ -1,6 +1,7 @@
 -- RLS-Career-MP client extension "rlsmp_unstuck": "/unstuck" teleports you to the nearest road.
 -- SPDX-License-Identifier: AGPL-3.0-only
 --
+-- The car keeps its damage (a plain teleport would repair it).
 -- Works for whatever you are controlling: a car, or the walking character (a "unicycle" vehicle).
 -- Cars land on the road node; walkers land next to the road (up to 3 m toward where they were),
 -- so nobody is dropped into a traffic lane on foot.
@@ -55,7 +56,9 @@ local function onUnstuck()
   -- Police must not see this jump as speeding or a crash.
   local police = overhaul_integration_services_police
   if police and police.ignoreSpeedingAfterTeleport then pcall(police.ignoreSpeedingAfterTeleport, 5) end
-  local ok, result = pcall(spawn.safeTeleport, veh, target, rot, nil, nil, nil, true)
+  -- Arguments: vehicle, position, rotation, checkOnlyStatics, visibilityPoint, removeTraffic, centeredPosition, resetVehicle.
+  -- resetVehicle must be an explicit false: when left out the game resets (repairs) the car, which would make /unstuck a free repair.
+  local ok, result = pcall(spawn.safeTeleport, veh, target, rot, nil, nil, nil, true, false)
   if not ok or result == false then return toast("error", "Teleport failed.") end
   toast("info", "Moved to the nearest road.")
 end

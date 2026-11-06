@@ -29,7 +29,7 @@ map = {
   findClosestRoad = function() return "road1", 5 end,
   getMap = function() return {nodes = {[5] = {pos = {x = 0, y = 0, z = 0}}}} end,
 }
-spawn = {safeTeleport = function(veh, pos, rot) teleports[#teleports + 1] = {pos = pos, rot = rot} return true end}
+spawn = {safeTeleport = function(veh, pos, rot, a4, a5, a6, a7, reset) teleports[#teleports + 1] = {pos = pos, rot = rot, reset = reset} return true end}
 
 local u = require("rlsmp/unstuck")
 local passed = 0
@@ -41,6 +41,7 @@ u.enable(true)
 
 u._onUnstuck()
 check(teleports[1].pos.x == 0 and teleports[1].pos.y == 0, "car goes onto the road node")
+check(teleports[1].reset == false, "the car is NOT reset, so damage stays")
 
 player.jbeam, player.pos = "unicycle", vec3(10, 0, 0)
 u._onUnstuck()
