@@ -21,6 +21,7 @@ lua5.3 tests/claims_test.lua "$(mktemp -d -p "$tmp")"
 lua5.3 tests/traffic_test.lua
 lua5.3 tests/traffic_police_test.lua
 luajit tests/client_test.lua
+luajit tests/download_watch_test.lua
 luajit tests/fleet_client_test.lua
 luajit tests/guard_test.lua
 luajit tests/claims_client_test.lua

@@ -36,6 +36,8 @@ Player chat commands: `/dashcam` ($100 per car, makes crash verdicts reliable); 
   Keep only the server's copy.
 - **No garage / can't buy cars**: RLS gives the free starter garage only to brand-new careers. A career first created on the wrong map never gets one.
   Run `rlsmp reset <player>` on the server (the old save is archived), then rejoin. The server warns about such careers when they join.
+- **"Your save stopped downloading" / "The server did not send your save"**: the join gave up instead of leaving you in plain BeamNG. Leave and rejoin.
+  Your server save is not touched. Send the lines with `[rlsmp-timing]` (the `download N/M chunks` lines show where it stopped) and the server's `[rlsmp-timing] sent profile #N to player N: ... chunks in ...s` line (it is printed only when the whole save has gone out).
 - **Check the build**: the client logs `client loaded, build X` and the server logs each player's build on join. They must match.
 - **Black character**: `unicycle/beamling.dae` failing to load means a broken game file; use Steam "Verify integrity of game files".
 - **Send logs with** the lines containing `[rlsmp-timing]` (join phases) from `beamng.log`.
