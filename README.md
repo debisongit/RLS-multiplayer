@@ -48,7 +48,7 @@ Player chat commands: `/dashcam` ($100 per car, makes crash verdicts reliable); 
 3. Distributed traffic director + anti-teleport police pursuits
 4. Dealerships, garages, freeroam events, pink-slip races
 
-Docs: [next features and plans](docs/NEXT_FEATURES.md) · [how RLS works](docs/RLS_MAP.md) · [architecture](docs/ARCHITECTURE.md) · [protocol](docs/PROTOCOL.md) · [teamwork rules](docs/COLLAB.md)
+Docs: [handoff for Claude B](docs/HANDOFF_CLAUDE_B.md) · [next features and plans](docs/NEXT_FEATURES.md) · [how RLS works](docs/RLS_MAP.md) · [architecture](docs/ARCHITECTURE.md) · [protocol](docs/PROTOCOL.md) · [teamwork rules](docs/COLLAB.md)
 
 ## Dev
 
