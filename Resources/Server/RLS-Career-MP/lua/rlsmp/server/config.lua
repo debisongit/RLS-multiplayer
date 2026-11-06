@@ -71,12 +71,10 @@ M.defaults = {
   -- Phase 3: police pursuits.
   police = {
     enabled = true,
-    -- Police cars may not be re-placed (respawned / teleported) near a player who is being chased.
+    -- Police cars may not be re-placed (respawned / teleported) while the player is being chased.
     antiTeleport = true,
     -- Refuse RLS roadblocks (they put police cars on the road ahead of you).
     blockRoadblocks = true,
-    -- Police units further behind than this many metres may despawn again.
-    leashMeters = 350,
   },
 
   -- How often the server asks clients to save, in minutes (0 = rely on RLS autosave only).

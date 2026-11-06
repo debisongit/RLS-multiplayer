@@ -9,17 +9,18 @@ local handlers = {}
 TriggerServerEvent = function() end
 AddEventHandler = function(name, fn) handlers[name] = fn end
 
-local mp, career = true, true
+local mp, career, playerId = true, true, 1
 MPCoreNetwork = {isMPSession = function() return mp end}
 overhaul_career_career = {isActive = function() return career end}
+be = {getPlayerVehicleID = function() return playerId end}
 
-local positions = {[1] = {0, 0, 0}, [10] = {100, 0, 0}, [11] = {900, 0, 0}, [12] = {50, 0, 0}}
-be = {
-  getPlayerVehicleID = function() return 1 end,
-  getObjectPositionXYZ = function(_, id) local p = positions[id] return p[1], p[2], p[3] end,
+local function cop(id) return {id = id, role = {name = "police"}, enableRespawn = true, respawnCount = 0} end
+local traffic = {
+  [1] = {role = {name = "none"}, pursuit = {mode = 0}},
+  [2] = {role = {name = "none"}, pursuit = {mode = 0}}, -- a second car the player may switch to
+  [10] = cop(10), [11] = cop(11), -- 11 will be far away: still frozen
+  [12] = {role = {name = "civilian"}, enableRespawn = true, pursuit = {mode = 0}},
 }
-local function cop(id) return {id = id, role = {name = "police"}, enableRespawn = true} end
-local traffic = {[1] = {role = {name = "none"}}, [10] = cop(10), [11] = cop(11), [12] = {role = {name = "civilian"}, enableRespawn = true}}
 local teleports, roadblocks = 0, 0
 gameplay_traffic = {
   getTrafficData = function() return traffic end,
@@ -27,7 +28,6 @@ gameplay_traffic = {
 }
 overhaul_integration_services_police = {setupRoadblock = function() roadblocks = roadblocks + 1 return {vehIds = {}} end}
 
--- Fake net so we can reach the config handler
 local police = require("rlsmp/police")
 police.onExtensionLoaded()
 
@@ -36,70 +36,89 @@ local function check(cond, msg)
   if not cond then error("FAIL: " .. msg, 2) end
   passed = passed + 1
 end
+local function tick() police.onUpdate(1) end
 
--- 1. Outside a pursuit nothing is touched
-police.onUpdate(5)
-check(traffic[10].enableRespawn == true, "no pursuit -> respawn untouched")
+-- 1. No pursuit: nothing touched
+tick()
+check(traffic[10].enableRespawn == true and not police.isPursuit(), "no pursuit -> respawn untouched")
 
--- 2. Pursuit for another vehicle is ignored
-police.onPursuitModeUpdate(99, {mode = 2})
-check(not police.isPursuit(), "other vehicle's pursuit ignored")
-
--- 3. Player chased: near cop frozen, far cop and civilian untouched
-police.onPursuitModeUpdate(1, {mode = 2})
-check(police.isPursuit(), "pursuit on")
-check(traffic[10].enableRespawn == false, "nearby cop cannot respawn")
-check(traffic[11].enableRespawn == true, "far cop may despawn")
+-- 2. Player chased (found by polling, the hook is only a fast start)
+traffic[1].pursuit.mode = 2
+tick()
+check(police.isPursuit(), "pursuit detected from traffic data")
+check(traffic[10].enableRespawn == false and traffic[11].enableRespawn == false, "every police unit frozen, near or far")
 check(traffic[12].enableRespawn == true, "civilians untouched")
 
--- 4. Roadblocks and teleports of police are refused, others pass
+-- 3. Roadblocks and police teleports refused, others pass
 check(overhaul_integration_services_police.setupRoadblock() == nil and roadblocks == 0, "roadblock refused")
 check(gameplay_traffic.forceTeleport(10) == false and teleports == 0, "cop teleport refused")
 check(gameplay_traffic.forceTeleport(12) == true and teleports == 1, "civilian teleport allowed")
 
--- 5. A cop that falls behind the leash is released, one that catches up is frozen
-positions[10] = {500, 0, 0}
-positions[11] = {100, 0, 0}
-police.onUpdate(0.6)
-check(traffic[10].enableRespawn == true, "trailing cop released")
-check(traffic[11].enableRespawn == false, "cop that caught up is frozen")
+-- 4. A new police unit appearing mid-chase is frozen too
+traffic[13] = cop(13)
+tick()
+check(traffic[13].enableRespawn == false, "late police unit frozen")
 
--- 6. Pursuit ends: everything restored, wrappers pass through
-police.onPursuitModeUpdate(1, {mode = 0})
-check(traffic[11].enableRespawn == true and not police.isPursuit(), "respawn restored")
+-- 5. Respawn watch notices a unit that was re-placed anyway
+traffic[10].respawnCount = 1
+tick()
+check(police.getLeaks() == 1, "re-placed unit counted")
+tick()
+check(police.getLeaks() == 1, "counted once")
+
+-- 6. RLS resets pursuit.mode directly and never calls the hook with 0 -> still released
+traffic[1].pursuit.mode = 0
+tick()
+check(not police.isPursuit(), "pursuit end seen through traffic data")
+check(traffic[10].enableRespawn == true and traffic[11].enableRespawn == true and traffic[13].enableRespawn == true, "respawn restored")
 check(overhaul_integration_services_police.setupRoadblock() ~= nil and roadblocks == 1, "roadblocks work again")
 check(gameplay_traffic.forceTeleport(10) == true, "cop teleport allowed again")
 
--- 7. A cop that already had respawn off keeps it off afterwards
+-- 7. Player switches vehicle mid-chase: the new player vehicle is chased, state follows
+traffic[1].pursuit.mode = 1
+police.onPursuitModeUpdate(1, {mode = 1}) -- hook gives a fast start
+check(police.isPursuit() and traffic[10].enableRespawn == false, "hook starts at once")
+playerId = 2
+traffic[1].pursuit.mode = 0
+tick()
+check(not police.isPursuit() and traffic[10].enableRespawn == true, "switching away from the chased car ends it")
+traffic[2].pursuit.mode = 3
+tick()
+check(police.isPursuit() and traffic[10].enableRespawn == false, "new player vehicle chased -> frozen again")
+traffic[2].pursuit.mode = 0
+tick()
+playerId = 1
+
+-- 8. A unit that already had respawn off keeps it off afterwards
 traffic[10].enableRespawn = false
-positions[10] = {10, 0, 0}
-police.onPursuitModeUpdate(1, {mode = 1})
-police.onPursuitModeUpdate(1, {mode = 0})
+traffic[1].pursuit.mode = 1
+tick()
+traffic[1].pursuit.mode = 0
+tick()
 check(traffic[10].enableRespawn == false, "previous setting preserved")
 traffic[10].enableRespawn = true
 
--- 8. Server config switches things off
+-- 9. Server config
 handlers["rlsmpPoliceConfig"](json.encode({antiTeleport = false}))
-police.onPursuitModeUpdate(1, {mode = 2})
+traffic[1].pursuit.mode = 2
+tick()
 check(traffic[10].enableRespawn == true, "antiTeleport=false -> nothing frozen")
 check(overhaul_integration_services_police.setupRoadblock() ~= nil, "antiTeleport=false -> roadblocks allowed")
-police.onPursuitModeUpdate(1, {mode = 0})
-handlers["rlsmpPoliceConfig"](json.encode({antiTeleport = true, blockRoadblocks = false, leashMeters = 60}))
-check(police.getSettings().leashMeters == 60, "leash from server")
-positions[12] = {50, 0, 0}
-traffic[12].role.name = "police"
-police.onPursuitModeUpdate(1, {mode = 2})
+handlers["rlsmpPoliceConfig"](json.encode({antiTeleport = true, blockRoadblocks = false}))
+tick()
 check(overhaul_integration_services_police.setupRoadblock() ~= nil, "blockRoadblocks=false allows roadblocks")
-check(traffic[12].enableRespawn == false and traffic[10].enableRespawn == false, "units inside 60 m frozen")
-positions[10] = {70, 0, 0}
-police.onUpdate(1)
-check(traffic[10].enableRespawn == true, "unit outside new leash released")
+check(traffic[10].enableRespawn == false, "police frozen again")
 
--- 9. Leaving the server / career restores everything; MP off does nothing
+-- 10. Leaving the server restores everything; outside multiplayer nothing happens
 police.onServerLeave()
-check(traffic[12].enableRespawn == true and not police.isPursuit(), "leave restores")
+check(traffic[10].enableRespawn == true and not police.isPursuit(), "leave restores")
 mp = false
-police.onPursuitModeUpdate(1, {mode = 2})
-check(not police.isPursuit(), "not in multiplayer -> ignored")
+tick()
+check(not police.isPursuit() and traffic[10].enableRespawn == true, "not in multiplayer -> ignored")
+mp = true
+career = false
+police.onOverhaulActive(false)
+tick()
+check(not police.isPursuit(), "career inactive -> ignored")
 
 print(string.format("police_client_test: %d checks passed", passed))

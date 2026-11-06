@@ -1,4 +1,4 @@
--- Server police settings test (lua5.3). Run: lua5.3 tests/police_test.lua
+-- Server police settings test (lua5.3). Run: lua5.3 tests/traffic_police_test.lua
 package.path = "tests/support/?.lua;Resources/Server/RLS-Career-MP/lua/?.lua;" .. package.path
 local json = require("json")
 
@@ -17,7 +17,7 @@ package.loaded["rlsmp.server.sessions"] = {
 }
 local cfg = require("rlsmp.server.config").defaults
 require("rlsmp.server.net").init(cfg)
-require("rlsmp.server.police").init(cfg, "")
+require("rlsmp.server.trafficPolice").init(cfg, "")
 
 local passed = 0
 local function check(cond, msg) if not cond then error("FAIL: " .. msg, 2) end passed = passed + 1 end
@@ -31,7 +31,7 @@ stages[0] = "loaded"
 tick()
 local m = take()
 check(#m == 1 and m[1].name == "rlsmpPoliceConfig" and m[1].data.antiTeleport == true
-  and m[1].data.blockRoadblocks == true and m[1].data.leashMeters == 350, "settings sent on load")
+  and m[1].data.blockRoadblocks == true, "settings sent on load")
 tick()
 check(#take() == 0, "sent only once")
 stages[0] = nil
@@ -49,4 +49,4 @@ stages[2] = "loaded"
 tick()
 check(#take() == 0, "disabled -> silent")
 
-print(string.format("police_test: %d checks passed", passed))
+print(string.format("traffic_police_test: %d checks passed", passed))

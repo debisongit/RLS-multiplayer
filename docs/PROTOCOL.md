@@ -59,10 +59,10 @@ or no `rlsmpHello` within `handshake.helloTimeoutSeconds`.
 
 | Direction | Event | Body |
 |---|---|---|
-| S→C | `rlsmpPoliceConfig` | `{antiTeleport, blockRoadblocks, leashMeters}` sent once when a player finishes loading |
+| S→C | `rlsmpPoliceConfig` | `{antiTeleport, blockRoadblocks}` sent once when a player finishes loading |
 
-While the player is chased (pursuit mode >= 1) and `antiTeleport` is on, the client keeps police units within
-`leashMeters` from respawning (`enableRespawn = false`), refuses RLS roadblocks (if `blockRoadblocks`) and
+While the player is chased (their traffic-data `pursuit.mode` >= 1) and `antiTeleport` is on, the client keeps every police unit
+from respawning (`enableRespawn = false`), refuses RLS roadblocks (if `blockRoadblocks`) and
 refuses `gameplay_traffic.forceTeleport` on police units. Everything is restored when the pursuit ends.
 
 ## Reserved prefixes for later phases
