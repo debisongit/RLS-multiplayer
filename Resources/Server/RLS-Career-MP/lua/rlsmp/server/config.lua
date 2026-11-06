@@ -90,6 +90,8 @@ M.defaults = {
     membersCanWithdraw = true,
     inviteSeconds = 60,
     maxFleet = 10,
+    -- Highest share of a member's earnings they may send to the business bank (percent).
+    maxSplit = 50,
     maxRecordBytes = 400000,
   },
 

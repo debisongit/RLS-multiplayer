@@ -202,12 +202,25 @@ function cmds.withdraw(pid, s, b, arg)
   tell(b, string.format("%s withdrew $%d. Bank: $%d", s.name, n, b.bank))
 end
 
+-- /biz split <percent>: that share of everything YOU earn goes straight into the business bank.
+function cmds.split(pid, s, b, arg)
+  if not b then return say(pid, "You are not in a business.") end
+  local pct = tonumber(arg)
+  if not pct or pct < 0 or pct % 1 ~= 0 or pct > cfg.business.maxSplit then
+    return say(pid, string.format("Usage: /biz split <0-%d>  (your share of earnings that goes to the business bank)", cfg.business.maxSplit))
+  end
+  b.members[s.accountId].split = pct
+  save(b)
+  say(pid, pct == 0 and "Payout split turned off." or string.format("%d%% of your earnings now goes to the business bank.", pct))
+end
+
 function cmds.info(pid, s, b)
   if not b then return say(pid, "You are not in a business. Create one with /biz create <name>.") end
   local names = {}
   for _, m in pairs(b.members) do names[#names + 1] = m.name .. (m.role == "owner" and " (owner)" or "") end
   table.sort(names)
-  say(pid, string.format("%s | Bank $%d | Members: %s", b.name, b.bank, table.concat(names, ", ")))
+  local split = b.members[s.accountId].split or 0
+  say(pid, string.format("%s | Bank $%d | Members: %s | Your payout split: %d%%", b.name, b.bank, table.concat(names, ", "), split))
 end
 
 -- Fleet ---------------------------------------------------------------------------------------------
@@ -307,7 +320,7 @@ local function onFleetRelease(pid, data)
 end
 
 function cmds.help(pid)
-  say(pid, "/biz create <name> | invite <player> | accept | leave | deposit <n> | withdraw <n> | info | fleet")
+  say(pid, "/biz create <name> | invite <player> | accept | leave | deposit <n> | withdraw <n> | info | split | fleet")
 end
 
 -- /biz <command> <argument>
@@ -320,10 +333,25 @@ local function onChat(pid, text)
   else cmds[cmd](pid, s, myBusiness(s), arg) end
 end
 
+-- Called after an accepted payout: move the member's chosen share into the business bank (debit first).
+local function onEarned(pid, s, amount)
+  local b = myBusiness(s)
+  local pct = b and b.members[s.accountId].split or 0
+  local cut = math.floor(amount * pct / 100)
+  if cut <= 0 then return end
+  s.profile.ledger.money = s.profile.ledger.money - cut
+  walletChanged(pid, s)
+  b.bank = b.bank + cut
+  addLog(b, s.name, "payout split", cut)
+  save(b)
+  say(pid, string.format("$%d of your $%d payout went to %s.", cut, amount, b.name))
+end
+
 function M.init(config, pluginRoot)
   cfg, root = config, pluginRoot
   storage.ensureDir(root .. "businesses")
   net.onChat("biz", onChat)
+  sessions.onEarned(onEarned)
   sessions.onBig("fleetAdd", onFleetAdd)
   sessions.onBig("fleetReturn", onFleetReturn)
   net.onClient("rlsmpFleetRelease", onFleetRelease)

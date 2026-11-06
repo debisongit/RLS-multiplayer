@@ -19,6 +19,7 @@ local M = {}
 
 local cfg
 local sessions = {}   -- pid -> session
+local earnedHooks = {}  -- fn(pid, session, amount, category), called after the server accepted earned money
 local bigHandlers = {}  -- kind -> fn(pid, session, data); lets other modules receive big client uploads
 
 -- Console: archive and clear one career (by online player name or BeamMP account id). Online players are dropped.
@@ -35,6 +36,8 @@ function M.resetCareer(who)
   if ok and pid then MP.DropPlayer(pid, "Your career was reset by the server owner. Rejoin to start a new one.") end
   return ok, result
 end
+
+function M.onEarned(fn) earnedHooks[#earnedHooks + 1] = fn end
 
 -- Public: other modules (business, traffic) can look up who is online and in which stage.
 function M.get(pid) return sessions[pid] end
@@ -209,6 +212,8 @@ local function onWalletDelta(pid, data)
     util.warn(string.format("Refused money change %s for %s (%s, reason: %s)",
       tostring(data.d), s.name, why, tostring(data.r)))
     net.send(pid, "rlsmpWalletSet", {money = s.profile.ledger.money, why = why})
+  elseif (tonumber(data.d) or 0) > 0 and wallet.isEarning(data.c) then
+    for _, fn in ipairs(earnedHooks) do fn(pid, s, tonumber(data.d), data.c) end
   end
 end
 

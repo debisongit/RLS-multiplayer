@@ -76,9 +76,26 @@ check(last(2):find("Usage"), "negative amount refused")
 say(2, "/biz deposit 1.5")
 check(last(2):find("Usage"), "fraction refused")
 
+-- payout split
+say(1, "/biz split 20")
+check(last(1):find("20%%"), "split set")
+say(1, "/biz split 99")
+check(last(1):find("Usage"), "split above the limit refused")
+local moneyBefore, bankBefore = pa.ledger.money, biz.bank
+fire("rlsmpWalletDelta", 1, json.encode({d = 1000, r = "Delivery", c = "activity:delivery"}))
+check(pa.ledger.money == moneyBefore + 1000 - 200 and biz.bank == bankBefore + 200, "20% of earnings goes to the bank")
+check(sent[1][#sent[1]].name == "rlsmpWalletSet" and sent[1][#sent[1]].data.money == pa.ledger.money, "client is told the real balance")
+fire("rlsmpWalletDelta", 1, json.encode({d = 5000, r = "Sold car", c = "sale"}))
+check(biz.bank == bankBefore + 200, "selling a car is not earnings, nothing is split")
+fire("rlsmpWalletDelta", 2, json.encode({d = 1000, r = "Delivery", c = "reward"}))
+check(biz.bank == bankBefore + 200, "members with split 0 pay nothing")
+say(1, "/biz split 0")
+say(1, "/biz info")
+check(last(1):find("split: 0%%"), "info shows the split")
+
 -- persisted on disk
 local disk = json.decode(io.open(tmp .. "/businesses/" .. biz.id .. ".json"):read("*a"))
-check(disk.bank == 250 and disk.members["202"] ~= nil, "business saved to disk")
+check(disk.bank == 450 and disk.members["202"] ~= nil, "business saved to disk")
 
 
 -- fleet ------------------------------------------------------------------------------------------------
@@ -162,7 +179,7 @@ say(2, "/biz leave")
 check(last(2):find("Fleet cars would be lost"), "last member cannot abandon fleet cars")
 biz.fleet = {}
 say(2, "/biz leave")
-check(sessions.get(2).profile.ledger.money == before + 250, "bank paid out to last member")
+check(sessions.get(2).profile.ledger.money == before + 450, "bank paid out to last member")
 local f = io.open(tmp .. "/businesses/" .. biz.id .. ".json")
 check(f == nil, "business file removed")
 

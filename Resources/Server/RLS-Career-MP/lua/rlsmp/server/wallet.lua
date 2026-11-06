@@ -39,6 +39,11 @@ local function isExempt(category)
   return false
 end
 
+-- True for money that was EARNED (jobs, rewards, services), as opposed to moved (loans, sales, transfers) or cheated.
+function M.isEarning(category)
+  return category ~= "cheat" and not isExempt(category)
+end
+
 -- Apply one reported change. Returns true if accepted, false + reason if refused.
 -- `category` is RLS's money category for the change (see overhaul/lib/ledger/categories.lua).
 function M.applyDelta(ledger, amount, reason, category)
