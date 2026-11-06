@@ -29,7 +29,7 @@ Console: `rlsmp status`, `rlsmp save`.
 ## Roadmap
 
 1. ✅ Server-side saves + join handshake + server wallet
-2. Duo Business / Syndicate: ✅ shared bank + members (`/biz help`) · next: shared fleet via MPVehicleGE, payout split
+2. Duo Business / Syndicate: ✅ shared bank + members (`/biz help`) · ✅ shared fleet (`/biz fleet`, untested in-game) · next: payout split
 3. Distributed traffic director + anti-teleport police pursuits
 4. Dealerships, garages, freeroam events, pink-slip races
 

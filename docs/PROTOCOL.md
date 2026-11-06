@@ -56,6 +56,19 @@ the client gets a normal `rlsmpWalletSet`.
 Rules: max `business.maxMembers` (4); owner leaving hands ownership to the oldest member; the last member
 leaving closes the business and gets the bank. Saved in `businesses/<id>.json`.
 
+### Business fleet
+
+Chat: `/biz fleet` (list) · `fleet add` (car you sit in) · `fleet take <n>` · `fleet return`.
+A fleet car exists in exactly one place: stored in the business, or in one member's RLS inventory (tagged `fleetId`).
+
+| Direction | Event | Body |
+|---|---|---|
+| S→C | `rlsmpFleetDo` | `{act = "add" \| "return", fid?}` client uploads the car it sits in |
+| C→S | upload with `{kind = "fleetAdd"/"fleetReturn", data = {inv, fid?, rec}}` | `rec` = RLS inventory record (model, config, ...) |
+| S→C | `rlsmpFleetAck` | `{act, ok, inv, fid?}` client removes the car from its inventory only when `ok` |
+| S→C | big payload `kind = "fleetVehicle"` | `{fid, rec}` client spawns it and adds it to its inventory |
+| C→S | `rlsmpFleetRelease` | `{fid, why}` take failed (garage full, spawn error): free the car |
+
 ## Reserved prefixes for later phases
 
 - `rlsmpBiz*` – Phase 2 business / syndicate (Claude A)

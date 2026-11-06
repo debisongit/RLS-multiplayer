@@ -4,6 +4,11 @@
 -- businesses/<id>.json = { id, name, owner = accountId, bank, members = {accountId = {name, role, joinedAt}}, log = {...} }
 -- A player's profile only stores `businessId`. Everything is controlled with chat commands:
 --   /biz create <name> | invite <player> | accept | leave | deposit <n> | withdraw <n> | info
+--   /biz fleet list | add | take <n> | return
+--
+-- Shared fleet = "check-out" model. A fleet car lives in exactly one place: stored in the business,
+-- or in ONE member's RLS inventory. Members drive/tune it like their own car and `return` it when done.
+-- The car's saved record (`rec`: model, parts, paints...) travels through the client mod (client fleet.lua).
 --
 -- Money moves between the player's server wallet (wallet.lua) and the business bank.
 -- Each transfer is saved debit-first, so a crash can lose money but never duplicate it.
@@ -34,7 +39,11 @@ local function load(id)
   if type(id) ~= "string" or not id:match("^b[0-9]+$") then return nil end
   if cache[id] then return cache[id] end
   local b = storage.readJson(path(id))
-  if type(b) == "table" and type(b.members) == "table" then cache[id] = b return b end
+  if type(b) == "table" and type(b.members) == "table" then b.fleet = b.fleet or {}
+    b.nextFleet = b.nextFleet or 1
+    cache[id] = b
+    return b
+  end
 end
 
 local function addLog(b, who, what, amount)
@@ -91,7 +100,7 @@ function cmds.create(pid, s, b, arg)
   if #name < 3 or #name > 24 or name:find("%c") then return say(pid, "Name must be 3-24 characters.") end
   counter = counter + 1
   local id = string.format("b%d%03d", util.now(), counter % 1000)
-  b = {id = id, name = name, owner = s.accountId, bank = 0, createdAt = util.now(), log = {},
+  b = {id = id, name = name, owner = s.accountId, bank = 0, createdAt = util.now(), log = {}, fleet = {}, nextFleet = 1,
        members = {[s.accountId] = {name = s.name, role = "owner", joinedAt = util.now()}}}
   cache[id] = b
   save(b)
@@ -127,8 +136,14 @@ function cmds.accept(pid, s, b)
   tell(target, s.name .. " joined the business.")
 end
 
+local function heldBy(b, accountId)
+  for fid, v in pairs(b.fleet) do if v.heldBy == accountId then return fid end end
+end
+
 function cmds.leave(pid, s, b)
   if not b then return say(pid, "You are not in a business.") end
+  if heldBy(b, s.accountId) then return say(pid, "Return your fleet car first (/biz fleet return).") end
+  if memberCount(b) == 1 and next(b.fleet) then return say(pid, "Fleet cars would be lost. Take them out of the fleet first.") end
   b.members[s.accountId] = nil
   s.profile.businessId = nil
   if next(b.members) == nil then
@@ -195,8 +210,104 @@ function cmds.info(pid, s, b)
   say(pid, string.format("%s | Bank $%d | Members: %s", b.name, b.bank, table.concat(names, ", ")))
 end
 
+-- Fleet ---------------------------------------------------------------------------------------------
+
+local function holderName(b, v)
+  return v.heldBy and b.members[v.heldBy] and b.members[v.heldBy].name or nil
+end
+
+function cmds.fleet(pid, s, b, arg)
+  if not b then return say(pid, "You are not in a business.") end
+  local sub, rest = arg:match("^(%S*)%s*(.-)$")
+  if sub == "add" then
+    local count = 0
+    for _ in pairs(b.fleet) do count = count + 1 end
+    if count >= cfg.business.maxFleet then return say(pid, "Fleet is full (" .. cfg.business.maxFleet .. ").") end
+    net.send(pid, "rlsmpFleetDo", {act = "add"})
+  elseif sub == "take" then
+    local fid = tonumber(rest)
+    local v = fid and b.fleet[tostring(fid)]
+    if not v then return say(pid, "No fleet car with that number. See /biz fleet list.") end
+    if v.heldBy then return say(pid, "Already taken by " .. tostring(holderName(b, v)) .. ".") end
+    if heldBy(b, s.accountId) then return say(pid, "Return your current fleet car first.") end
+    v.heldBy = s.accountId
+    save(b)
+    net.sendBig(pid, "fleetVehicle", util.jsonEncode({fid = tostring(fid), rec = v.rec}), {fid = tostring(fid)})
+    say(pid, "Sending " .. v.name .. " to your garage...")
+  elseif sub == "return" then
+    if not heldBy(b, s.accountId) then return say(pid, "You don't have a fleet car.") end
+    net.send(pid, "rlsmpFleetDo", {act = "return", fid = heldBy(b, s.accountId)})
+  else
+    local ids = {}
+    for fid in pairs(b.fleet) do ids[#ids + 1] = tonumber(fid) end
+    table.sort(ids)
+    if #ids == 0 then return say(pid, "Fleet is empty. Sit in a car and use /biz fleet add.") end
+    for _, fid in ipairs(ids) do
+      local v = b.fleet[tostring(fid)]
+      say(pid, string.format("#%d %s - %s", fid, v.name, v.heldBy and ("held by " .. tostring(holderName(b, v))) or "available"))
+    end
+  end
+end
+
+-- Client uploads --------------------------------------------------------------------------------------
+
+local function validRecord(rec)
+  return type(rec) == "table" and type(rec.model) == "string" and type(rec.config) == "table"
+    and #util.jsonEncode(rec) <= cfg.business.maxRecordBytes
+end
+
+local function onFleetAdd(pid, s, data)
+  local b = myBusiness(s)
+  local ack = {act = "add", ok = false, inv = data.inv}
+  local count = 0
+  if b then for _ in pairs(b.fleet) do count = count + 1 end end
+  if b and validRecord(data.rec) and count < cfg.business.maxFleet then
+    local fid = tostring(b.nextFleet)
+    b.nextFleet = b.nextFleet + 1
+    data.rec.fleetId = fid
+    b.fleet[fid] = {name = tostring(data.rec.niceName or data.rec.model):sub(1, 40), model = data.rec.model,
+                    rec = data.rec, addedBy = s.accountId}
+    addLog(b, s.name, "fleet add", tonumber(fid))
+    save(b)
+    ack.ok, ack.fid = true, fid
+    tell(b, s.name .. " added " .. b.fleet[fid].name .. " to the fleet (#" .. fid .. ").")
+  else
+    say(pid, "Could not add that car to the fleet.")
+  end
+  net.send(pid, "rlsmpFleetAck", ack)
+end
+
+local function onFleetReturn(pid, s, data)
+  local b = myBusiness(s)
+  local v = b and b.fleet[tostring(data.fid)]
+  local ack = {act = "return", ok = false, inv = data.inv}
+  if v and v.heldBy == s.accountId and validRecord(data.rec) then
+    data.rec.fleetId = tostring(data.fid)
+    v.rec, v.heldBy = data.rec, nil
+    addLog(b, s.name, "fleet return", tonumber(data.fid))
+    save(b)
+    ack.ok = true
+    tell(b, s.name .. " returned " .. v.name .. " (#" .. data.fid .. ").")
+  else
+    say(pid, "Could not return that car.")
+  end
+  net.send(pid, "rlsmpFleetAck", ack)
+end
+
+-- The client could not take the car (garage full, spawn failed): free it again.
+local function onFleetRelease(pid, data)
+  local s = sessions.get(pid)
+  local b = s and s.profile and myBusiness(s)
+  local v = b and b.fleet[tostring(data.fid)]
+  if v and v.heldBy == s.accountId then
+    v.heldBy = nil
+    save(b)
+    say(pid, "Fleet car released: " .. tostring(data.why or "could not be taken"))
+  end
+end
+
 function cmds.help(pid)
-  say(pid, "/biz create <name> | invite <player> | accept | leave | deposit <n> | withdraw <n> | info")
+  say(pid, "/biz create <name> | invite <player> | accept | leave | deposit <n> | withdraw <n> | info | fleet")
 end
 
 -- BeamMP chat hook: returning 1 hides the message from other players.
@@ -215,6 +326,9 @@ function M.init(config, pluginRoot)
   cfg, root = config, pluginRoot
   storage.ensureDir(root .. "businesses")
   net.on("onChatMessage", onChat)
+  sessions.onBig("fleetAdd", onFleetAdd)
+  sessions.onBig("fleetReturn", onFleetReturn)
+  net.onClient("rlsmpFleetRelease", onFleetRelease)
 end
 
 -- For other modules (shared fleet, mission payouts): the player's business table, or nil.

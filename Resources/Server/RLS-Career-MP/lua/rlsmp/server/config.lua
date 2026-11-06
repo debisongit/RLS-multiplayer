@@ -60,6 +60,8 @@ M.defaults = {
     maxMembers = 4,
     membersCanWithdraw = true,
     inviteSeconds = 60,
+    maxFleet = 10,
+    maxRecordBytes = 400000,
   },
 
   -- How often the server asks clients to save, in minutes (0 = rely on RLS autosave only).

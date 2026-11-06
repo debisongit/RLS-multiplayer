@@ -80,6 +80,56 @@ check(last(2):find("Usage"), "fraction refused")
 local disk = json.decode(io.open(tmp .. "/businesses/" .. biz.id .. ".json"):read("*a"))
 check(disk.bank == 250 and disk.members["202"] ~= nil, "business saved to disk")
 
+
+-- fleet ------------------------------------------------------------------------------------------------
+local transfer = require("rlsmp/lib/transfer")
+local function clientUpload(pid, id, kind, data)
+  local header, chunks = transfer.describe(json.encode({kind = kind, data = data}), 40)
+  header.id = id
+  fire("rlsmpUpBegin", pid, json.encode(header))
+  for i, d in ipairs(chunks) do fire("rlsmpUpChunk", pid, json.encode({id = id, i = i, d = d})) end
+end
+local function lastSent(pid, name)
+  for i = #(sent[pid] or {}), 1, -1 do if sent[pid][i].name == name then return sent[pid][i].data end end
+end
+local car = {model = "etk800", niceName = "ETK 800", config = {parts = {engine = "v6"}}}
+
+say(1, "/biz fleet")
+check(last(1):find("empty"), "fleet starts empty")
+say(1, "/biz fleet add")
+check(lastSent(1, "rlsmpFleetDo").act == "add", "client asked to upload the car")
+clientUpload(1, "f1", "fleetAdd", {inv = 3, rec = {model = "x"}})
+check(lastSent(1, "rlsmpFleetAck").ok == false, "bad vehicle record refused")
+clientUpload(1, "f2", "fleetAdd", {inv = 3, rec = car})
+local ack = lastSent(1, "rlsmpFleetAck")
+check(ack.ok and ack.fid == "1" and ack.inv == 3, "car added to fleet")
+say(2, "/biz fleet")
+check(last(2):find("#1 ETK 800 %- available"), "fleet list shows the car")
+
+say(2, "/biz fleet take 1")
+for _ = 1, 20 do fire("rlsmpPump") end
+local begin = lastSent(2, "rlsmpChunkBegin")
+check(begin and begin.kind == "fleetVehicle" and begin.extra.fid == "1", "car sent to bob")
+say(1, "/biz fleet take 1")
+check(last(1):find("Already taken by bob"), "cannot take a held car")
+say(2, "/biz leave")
+check(last(2):find("Return your fleet car"), "cannot leave while holding a car")
+
+clientUpload(1, "f3", "fleetReturn", {fid = "1", inv = 9, rec = car})
+check(lastSent(1, "rlsmpFleetAck").ok == false, "non-holder cannot return it")
+say(2, "/biz fleet return")
+check(lastSent(2, "rlsmpFleetDo").fid == "1", "client asked to return")
+local tuned = {model = "etk800", niceName = "ETK 800", config = {parts = {engine = "v8"}}}
+clientUpload(2, "f4", "fleetReturn", {fid = "1", inv = 7, rec = tuned})
+check(lastSent(2, "rlsmpFleetAck").ok and biz.fleet["1"].heldBy == nil, "car returned")
+check(biz.fleet["1"].rec.config.parts.engine == "v8", "changes kept")
+
+say(2, "/biz fleet take 1")
+fire("rlsmpFleetRelease", 2, json.encode({fid = "1", why = "no free garage space"}))
+check(biz.fleet["1"].heldBy == nil, "failed take frees the car")
+disk = json.decode(io.open(tmp .. "/businesses/" .. biz.id .. ".json"):read("*a"))
+check(disk.fleet["1"] ~= nil and disk.nextFleet == 2, "fleet saved to disk")
+
 -- full business + invite expiry
 require("rlsmp.server.business") -- already loaded
 say(1, "/biz invite carol")
@@ -108,6 +158,9 @@ RLSMP.config.business.membersCanWithdraw = true
 -- last member leaving closes the business and pays out
 for _, p in ipairs({3, 4}) do say(p, "/biz leave") end
 local before = sessions.get(2).profile.ledger.money
+say(2, "/biz leave")
+check(last(2):find("Fleet cars would be lost"), "last member cannot abandon fleet cars")
+biz.fleet = {}
 say(2, "/biz leave")
 check(sessions.get(2).profile.ledger.money == before + 250, "bank paid out to last member")
 local f = io.open(tmp .. "/businesses/" .. biz.id .. ".json")
