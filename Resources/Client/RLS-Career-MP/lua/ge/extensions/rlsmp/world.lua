@@ -7,6 +7,8 @@
 
 local M = {}
 
+local net = require("rlsmp/lib/net")
+
 local enabled = false
 function M.enable(on) enabled = on == true end
 
@@ -39,7 +41,26 @@ function M.install()
   return true
 end
 
-function M.onUpdate() M.install() end
+-- Step 2: event results. RLS freeroam events (races, derby, burnout...) all end in
+-- overhaul_events_fre_race.onFreeroamRaceCompleted(payload). We only watch it and tell the server the time.
+-- Payload fields (raceName, finishTime, resultMetrics.placement, invalidLap) come from reading RLS, not from a played run.
+local wrappedRace = setmetatable({}, {__mode = "k"})
+local function installRace()
+  local race = overhaul_events_fre_race
+  if not race or wrappedRace[race] or not race.onFreeroamRaceCompleted then return end
+  wrappedRace[race] = true
+  local original = race.onFreeroamRaceCompleted
+  race.onFreeroamRaceCompleted = function(payload, ...)
+    if enabled and type(payload) == "table" and not payload.invalidLap
+      and type(payload.raceName) == "string" and tonumber(payload.finishTime) then
+      local metrics = type(payload.resultMetrics) == "table" and payload.resultMetrics or {}
+      net.send("rlsmpEventDone", {race = payload.raceName, t = tonumber(payload.finishTime), place = tonumber(metrics.placement)})
+    end
+    return original(payload, ...)
+  end
+end
+
+function M.onUpdate() M.install() installRace() end
 
 M.onInit = function() setExtensionUnloadMode(M, "manual") end
 

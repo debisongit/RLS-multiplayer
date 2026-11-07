@@ -18,6 +18,7 @@ lua5.3 tests/server_test.lua "$tmp"
 lua5.3 tests/business_test.lua "$(mktemp -d -p "$tmp")"
 lua5.3 tests/traffic_labels_test.lua "$(mktemp -d -p "$tmp")"
 lua5.3 tests/claims_test.lua "$(mktemp -d -p "$tmp")"
+lua5.3 tests/events_test.lua "$(mktemp -d -p "$tmp")"
 lua5.3 tests/traffic_test.lua
 lua5.3 tests/traffic_police_test.lua
 lua5.3 tests/vehicles_test.lua

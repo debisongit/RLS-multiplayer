@@ -128,6 +128,12 @@ The client vehicle guard refuses other players' cars, AI traffic and parked cars
 and, when `allowPassengers` is on, another player's car for a player who is on foot (a passenger; BeamMP gives the passenger camera).
 Log lines use the tag `RLSMP-GUARD`.
 
+## Phase 4: world
+
+- **Map travel** is refused online (client `world.lua` wraps `overhaul_career_garage_switchMap.switchMap` and `getTravelBlockers`). No messages.
+- `rlsmpEventDone` (client to server) `{race, t, place}`: a finished RLS freeroam event (from `overhaul_events_fre_race.onFreeroamRaceCompleted`).
+  Server `events.lua` keeps the top 5 per event in `records.json`, announces records in chat, `/records [event]` lists them. Times are client-reported, no money depends on them.
+
 ## Reserved prefixes for later phases
 
 - `rlsmpBiz*` – Phase 2 business / syndicate (Claude A)

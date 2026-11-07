@@ -18,4 +18,5 @@ return {
   "rlsmp.server.traffic",
   "rlsmp.server.trafficPolice",
   "rlsmp.server.vehicles",
+  "rlsmp.server.events",
 }
