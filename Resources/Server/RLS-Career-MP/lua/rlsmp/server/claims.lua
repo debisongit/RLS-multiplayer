@@ -106,6 +106,13 @@ end
 
 local function fmt(n) return string.format("$%d", math.floor(n + 0.5)) end
 
+-- A crash that ends without a verdict says so (chat + log) instead of staying silent.
+local function noClaim(aPid, bPid, why)
+  util.info("[claims] no claim: " .. why)
+  say(aPid, "Crash noticed, no claim: " .. why)
+  say(bPid, "Crash noticed, no claim: " .. why)
+end
+
 -- reports: {[pid] = report}. a/b are the two player ids involved.
 local function resolve(key, entry)
   pending[key] = nil
@@ -113,16 +120,23 @@ local function resolve(key, entry)
   local aPid, bPid = entry.a, entry.b
   local ra, rb = entry.reports[aPid], entry.reports[bPid]
   local sa, sb = sessions.get(aPid), sessions.get(bPid)
-  if not (sa and sb and sessions.isLoaded(aPid) and sessions.isLoaded(bPid)) then return end
-  if lastClaim[key] and now - lastClaim[key] < cfg.claims.pairCooldownSeconds then return end
+  if not (sa and sb and sessions.isLoaded(aPid) and sessions.isLoaded(bPid)) then
+    util.info("[claims] no claim: a player left or is not loaded")
+    return
+  end
+  if lastClaim[key] and now - lastClaim[key] < cfg.claims.pairCooldownSeconds then
+    return noClaim(aPid, bPid, "another claim between you two was judged less than " .. cfg.claims.pairCooldownSeconds .. " s ago.")
+  end
 
   -- Each side's own snapshot of its own car is the most accurate; fall back to the other side's view of it.
   local snapA = (ra and ra.mine) or (rb and rb.other)
   local snapB = (rb and rb.mine) or (ra and ra.other)
-  if not (snapA and snapB) then return end
+  if not (snapA and snapB) then return noClaim(aPid, bPid, "the games did not send enough data about the crash.") end
 
   local shareA, shareB, closing = M.judge(snapA, snapB)
-  if closing < cfg.claims.minImpactSpeed then return end   -- a scrape or a tap, not an accident
+  if closing < cfg.claims.minImpactSpeed then   -- a scrape or a tap, not an accident
+    return noClaim(aPid, bPid, string.format("impact speed %.1f m/s is under %s m/s, that counts as a scrape.", closing, tostring(cfg.claims.minImpactSpeed)))
+  end
   lastClaim[key] = now
 
   -- Damage: what each car reports for itself; if a game could not measure it, estimate from the impact speed.
@@ -175,7 +189,11 @@ local function onHit(pid, data)
   if not cfg.claims.enabled or not sessions.isLoaded(pid) then return end
   local me, other = tostring(data.me or ""), tostring(data.with or "")
   local mine, theirs = ownerOf(me), ownerOf(other)
-  if mine ~= pid or not theirs or theirs == pid then return end    -- only report your own car, against someone else's
+  util.info(string.format("[claims] report from pid %s: car %s hit car %s (damage %s, nearby %s)", tostring(pid), me, other, tostring(data.damage), tostring(data.nearby)))
+  if mine ~= pid or not theirs or theirs == pid then
+    util.warn(string.format("[claims] report ignored: car %s is not yours or %s is not another player's car", me, other))
+    return
+  end    -- only report your own car, against someone else's
   local key = pairKey(me, other)
   local entry = pending[key] or {a = pid, b = theirs, reports = {}, first = util.now()}
   if entry.a ~= pid and entry.b ~= pid then return end

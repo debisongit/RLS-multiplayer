@@ -3,6 +3,10 @@
 Plain list of what changed in each build. The build number shows in the game log (`client loaded, build X`) and the server log.
 "Untested" means it passed the automatic tests but nobody has played it yet.
 
+## 0.4.22
+- Crash claims: a crash that ends without a verdict now tells you why (chat and server log), instead of nothing happening: scrape under the impact speed limit, another claim too soon after, missing data. Both games log `RLSMP-CLAIMS` lines and the server logs every `[claims] report`. The client also notices contact when only your own car has the collision flag. NOTE: `claims.dryRun` is still true in `config.json` by default, which only SHOWS "TEST MODE ... pays $X" and moves no money; set `claims.dryRun` to false in the server's config.json to make it real. (untested)
+- Review fixes: the duplicate-car cleanup never deletes a car bound to a garage slot (two owned cars can share a plate); police units tied to your chase are held back from recycling without switching RLS's own chase logic off; the traffic bubble only checks cars RLS is about to recycle and ignores line of sight beyond 1 km; stuck-car recycling skips cars with respawn off; replace-vehicle guard no longer loops (freeze) and refuses other players' cars. (untested)
+
 ## 0.4.21
 - Shared weather: everybody now sees the same weather. Before, each game ran its own RLS forecast (made from the player's own save). Now the server picks one of RLS's six conditions (clear, partly cloudy, overcast, drizzle, rain, storm) from its own clock, like the shared time of day: it glides smoothly through the conditions in between, a new random target every 15 real minutes, with the mix set in the server config (`weather`). Every game tells RLS to show it with RLS's own `forceCondition`, so rain, wet roads and tire grip stay consistent with what you see. `weather.force` pins one condition for everybody (handy for testing). RLS's own "Rain approaching" phone notifications (from the local forecast) are switched off. Still local: RLS's morning fog, temperature, thunder timing and weather app; changes snap instead of fading. (untested)
 

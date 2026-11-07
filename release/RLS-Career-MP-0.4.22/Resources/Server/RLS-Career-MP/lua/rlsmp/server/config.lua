@@ -95,6 +95,34 @@ M.defaults = {
   -- racer = very aggressive, well over the limit; drunk = weaves now and then, uneven speed, sudden braking.
   -- policeReact: a nearby AI police car starts a chase on a racer or drunk (at most one per minute per game).
   -- Untested in-game: set enabled = false if traffic misbehaves.
+  -- Phase 3: traffic variety. Which cars the AI traffic and the parked cars use (decided in each game, settings from here).
+  trafficVariety = {
+    enabled = true,
+    -- Weight per car Type of the game's own model list ("Car", "Truck", ...; the game log lists the Types it saw).
+    -- Missing = 1, 0 = never. Example: typeWeights = {Truck = 0.5}
+    typeWeights = {},
+    -- Models from mods this server ships (zip in Resources/Client): model name -> weight. Games without the model skip it.
+    -- Example: mods = {mycar = 3}. Every player downloads every mod zip when joining, so keep big car mods to a few.
+    mods = {},
+    -- Extra multipliers per road class (city, main, highway; from the road's speed limit) and per day or night, per Type.
+    -- Example: zones = {highway = {Truck = 2}}, night = {Truck = 0.5}
+    zones = {},
+    day = {},
+    night = {},
+    -- A group is picked from oversample x its size candidates; no model fills more than maxShare of a group.
+    oversample = 2,
+    maxShare = 0.25,
+    maxCandidates = 80,
+    -- Moving traffic and/or parked cars.
+    applyToTraffic = true,
+    applyToParked = true,
+    -- Road class limits in m/s: slower than city = city, slower than main = main, else highway.
+    zoneSpeedLimits = {city = 17, main = 27},
+    -- Live swapping: a traffic car that nobody can see is replaced by a model that fits the road class and day or night better.
+    -- enabled = only watch and log what would happen (changes nothing). live = really replace the cars (EXPERIMENTAL, never tried in the game).
+    swap = {enabled = false, live = false, perMinute = 2, hiddenSeconds = 5, checkSeconds = 2, minRatio = 1.5, maxFailures = 3},
+  },
+
   smartTraffic = {
     enabled = true,
     mix = {normal = 80, slow = 10, aggressive = 6, racer = 3, drunk = 1},
@@ -120,6 +148,18 @@ M.defaults = {
     enabled = true,
     dayMinutes = 45,
     syncSeconds = 5,
+  },
+
+  -- Shared weather: the server picks one of RLS's six conditions per period and every game shows it (like the shared time of day).
+  weather = {
+    enabled = true,
+    -- Real minutes per weather period (a game day is time.dayMinutes real minutes).
+    periodMinutes = 15,
+    syncSeconds = 10,
+    -- How common each condition is (weights). A period never jumps more than two steps from the one before.
+    mix = {clear = 35, partlyCloudy = 25, overcast = 20, drizzle = 8, rain = 9, storm = 3},
+    -- Pin one condition for everybody (clear, partlyCloudy, overcast, drizzle, rain, storm), "" = use the mix. Handy for testing.
+    force = "",
   },
 
   -- Pink-slip duels (/duel <player>). OFF until you list at least one course and set enabled = true.

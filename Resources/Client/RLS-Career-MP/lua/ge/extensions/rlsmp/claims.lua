@@ -67,11 +67,15 @@ local function finish(id, c, veh)
   contacts[id] = nil
   local mineId = mp.serverIdOf(veh:getID())
   local otherId = mp.serverIdOf(id)
-  if not (mineId and otherId) then return end
+  if not (mineId and otherId) then
+    log("W", "RLSMP-CLAIMS", string.format("contact with car %s ended but BeamMP ids are unknown (mine %s, other %s): no report", tostring(id), tostring(mineId), tostring(otherId)))
+    return
+  end
   local inv = overhaul_career_garage_inventory and overhaul_career_garage_inventory.getInventoryIdFromVehicleId(veh:getID())
   lastHitInventory = inv
   repairPrice(veh, function(after)
     local damage = (after and c.baseline) and math.max(0, after - c.baseline) or nil
+    log("I", "RLSMP-CLAIMS", string.format("sending crash report: %s hit %s, damage %s, nearby %s", tostring(mineId), tostring(otherId), tostring(damage), tostring(c.nearby)))
     net.send("rlsmpHit", {me = mineId, with = otherId, inv = inv, model = veh.jbeam or veh.JBeam,
       mine = c.mine, other = c.other, damage = damage, nearby = c.nearby})
   end)
@@ -95,7 +99,10 @@ function M.onUpdate(dtReal)
   for id, o in pairs(map.objects) do
     if id ~= myId and o.pos and remote[id] and distance(o.pos, myPos) <= 60 then
       others[id] = snap(o.pos, o.vel or {x = 0, y = 0, z = 0}, o.dirVec or {x = 0, y = 1, z = 0})
-      local touching = o.objectCollisions and o.objectCollisions[myId] == 1
+      -- Contact is booked on each car's own map data; trust either side (a remote car may not carry its own collision flags).
+      local mineObj = map.objects[myId]
+      local touching = (o.objectCollisions and o.objectCollisions[myId] == 1)
+        or (mineObj and mineObj.objectCollisions and mineObj.objectCollisions[id] == 1)
       if touching and isPlayerCar(id, remote) then
         local c = contacts[id]
         if not c then
@@ -103,6 +110,7 @@ function M.onUpdate(dtReal)
           c = {mine = previous and previous.mine or mine, other = previous and previous.others[id] or others[id],
                nearby = nearbyCount(myPos, {[myId] = true, [id] = true})}
           contacts[id] = c
+          log("I", "RLSMP-CLAIMS", "contact started with player car " .. tostring(id))
           repairPrice(veh, function(price) c.baseline = price end)
         end
         c.last = clock
