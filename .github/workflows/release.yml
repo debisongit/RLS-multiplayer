@@ -11,6 +11,10 @@ on:
       version:
         description: "Version without the v, for example 0.4.13"
         required: true
+      notes:
+        description: "Also replace the text of an existing release with release/NOTES-<version>.md (true or false)"
+        required: false
+        default: "false"
 permissions:
   contents: write
 jobs:
@@ -35,6 +39,9 @@ jobs:
           if gh release view "v$BUILD" >/dev/null 2>&1; then
             # The release page already exists (made by hand): just attach the zip and leave the text alone.
             gh release upload "v$BUILD" "release/RLS-Career-MP-$BUILD.zip" --clobber
+            if [ "${{ github.event.inputs.notes }}" = "true" ]; then
+              gh release edit "v$BUILD" --notes-file "release/NOTES-$BUILD.md" --title "RLS-Career-MP $BUILD"
+            fi
           else
             gh release create "v$BUILD" "release/RLS-Career-MP-$BUILD.zip" --target "$GITHUB_SHA" \
               --title "RLS-Career-MP $BUILD" --notes-file "release/NOTES-$BUILD.md" --prerelease
