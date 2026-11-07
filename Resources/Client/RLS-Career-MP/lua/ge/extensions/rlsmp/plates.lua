@@ -221,6 +221,9 @@ local function step()
   local veh = traffic[playerId]
   if type(veh) ~= "table" then return cancelRead("car not in traffic data") end
   if veh.isAi == true then return cancelRead("passenger") end
+  local obj = getObjectByID and getObjectByID(playerId)
+  local jbeam = obj and (obj.jbeam or obj.JBeam)
+  if veh.isPerson == true or jbeam == "unicycle" then return cancelRead("on foot") end
   if pending or fallback then return end
   if playerIsCop() then return cancelRead("player is a cop") end
   if inPursuit(veh) then return cancelRead("pursuit") end
@@ -267,6 +270,11 @@ local function onResult(data)
   if not p or R.cleanPlate(data.plate) ~= p.plate or data.model ~= p.model then return end
   pending = nil
   if not active() then return end
+  if data.limited then   -- the server did not look it up: let that unit read again later
+    reader.copDone[p.copId] = nil
+    p3.log("I", "plates: lookup " .. p.plate .. " was rate limited by the server, unit may read again")
+    return
+  end
   local veh = trafficData()[p.playerId]
   if not veh or (be and be:getPlayerVehicleID(0) ~= p.playerId) or inPursuit(veh) then return end
   local go, why = R.decideChase(data.flagged == true, cooldowns, p.key, now, config, rnd)

@@ -189,6 +189,8 @@ traffic = {[1] = player}
 tick()
 readsStartWith(function() isCop = true end, function() isCop = false end, "playing as a cop: no reads")
 readsStartWith(function() player.isAi = true end, function() player.isAi = false end, "AI car (taxi passenger): no reads")
+readsStartWith(function() player.isPerson = true end, function() player.isPerson = nil end, "on foot (RLS person entry): no reads")
+readsStartWith(function() car.jbeam = "unicycle" end, function() car.jbeam = "etk800" end, "on foot (unicycle): no reads")
 readsStartWith(function() mp = false end, function() mp = true end, "single player: nothing")
 readsStartWith(function() for id in pairs(traffic) do inactive[id] = true end end, function() inactive = {} end, "inactive unit object: no read")
 readsStartWith(function() plates.enable(false) end, function() plates.enable(true) end, "career not active on the server: nothing")
@@ -201,5 +203,18 @@ traffic = {[1] = player, [50] = cop(5 * 5, true)}
 randoms = {0.6}
 tick(10)
 check(plates.getReader().cop == nil, "roll 0.6 >= 0.3: this unit ignores you")
+
+-- a rate-limited answer is not "clean": the unit may read again
+server("rlsmpPlateConfig", {enabled = true, readChance = 1})
+traffic = {[1] = player, [60] = cop(5 * 5, true)}
+randoms = {0, 0}
+tick(8)
+local nLook = #sentNamed("rlsmpPlateLookup")
+server("rlsmpPlateResult", {plate = "NEW 1", model = "etk800", flagged = false, limited = true})
+check(plates.getReader().copDone[60] == nil and plates._pending() == nil, "limited answer: unit cooldown cleared")
+randoms = {0, 0}
+tick(8)
+check(#sentNamed("rlsmpPlateLookup") == nLook + 1, "the unit reads again")
+server("rlsmpPlateResult", {plate = "NEW 1", model = "etk800", flagged = false})
 
 print("plates_client_test: " .. passed .. " checks passed")
