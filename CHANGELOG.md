@@ -1,5 +1,12 @@
 # Changelog
 
+## Summary of 0.4.14 to 0.4.26 (what was added, in one place)
+- 0.4.14: police freeze only the cops in your chase; players report positions (`/where`); shared shop stock (off).
+- 0.4.15: smart traffic personalities. 0.4.16: stuck traffic recycling. 0.4.17: duplicate-car cleanup.
+- 0.4.18: part shop fix. 0.4.19 and 0.4.20: traffic variety and live swapping (watch only).
+- 0.4.21: shared weather. 0.4.22: crash claims explain themselves and review fixes. 0.4.23: sturdier save download and safer duels.
+- 0.4.24: plate reading and police records. 0.4.25: arrest flags the plate. 0.4.26: black market and car theft core.
+
 Plain list of what changed in each build. The build number shows in the game log (`client loaded, build X`) and the server log.
 "Untested" means it passed the automatic tests but nobody has played it yet.
 
