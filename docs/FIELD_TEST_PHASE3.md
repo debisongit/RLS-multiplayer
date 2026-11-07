@@ -8,7 +8,7 @@ Plan for about 30 minutes, one player (a second player is optional, see the end)
 
 | Component | Version |
 |---|---|
-| RLS-Career-MP (this repo) | default branch `claude/amazing-sagan-kh6ecn`, code commit `aafeffa`, build `0.4.19` (everything on the default branch; later commits only change documents) |
+| RLS-Career-MP (this repo) | default branch `claude/amazing-sagan-kh6ecn`, code commit `b89caf2`, build `0.4.20` (everything on the default branch; later commits only change documents) |
 | RLS Career Overhaul source read | v2.8.0, commit `e701d9e2218ca12ff70ba4a09c0c91514e96e380` (29 Oct 2026) |
 | BeamNG.drive | **not pinned, write yours down** (docs target 0.38 / 0.39) |
 | BeamMP (server and client) | **not pinned, write yours down** |
@@ -25,7 +25,7 @@ Vanilla BeamNG's traffic code was never read; only RLS's code was.
    ```bash
    tools/install_to_server.sh /path/to/BeamMP-Server
    ```
-   It prints `Installed RLS-Career-MP build 0.4.19`. It is a bash script: on Windows run it from Git Bash or WSL.
+   It prints `Installed RLS-Career-MP build 0.4.20`. It is a bash script: on Windows run it from Git Bash or WSL.
 2. Put the RLS Career Overhaul zip in the server's `Resources/Client/` as well.
 3. On your own PC, delete any local `rls_career_overhaul_v2.8.0_hotfix.zip` (or any other copy of RLS) from your BeamNG
    mods folder, so RLS is not unloaded and rebuilt on every join.
@@ -39,8 +39,8 @@ Vanilla BeamNG's traffic code was never read; only RLS's code was.
    would never visibly act. Any `totalBudget` above 0 fixes the budget instead. Under `"police"`,
    leave `"antiTeleport": true` and `"blockRoadblocks": true`. Start the server again.
 7. Join with BeamNG. In BeamNG's own settings, set the **traffic amount to 15 or more** (the max is fine).
-8. **Check the build.** The server log must say `joined with client build 0.4.19 (server build 0.4.19)` and the game log must
-   say `client loaded, build 0.4.19`. If the two builds differ, you are running an old client zip (this has already wasted a test round): re-run the install
+8. **Check the build.** The server log must say `joined with client build 0.4.20 (server build 0.4.20)` and the game log must
+   say `client loaded, build 0.4.20`. If the two builds differ, you are running an old client zip (this has already wasted a test round): re-run the install
    command, restart the server and rejoin.
 
 Client-side settings are not stored in the server file, so nothing else needs changing. Do not rename the zip.
@@ -200,7 +200,7 @@ When the second player leaves, the first should get `active=6` again. Send both 
 4. Did traffic look thinner than usual with the settings above?
 5. Anything that looked broken outside a chase (police, traffic, money, saving)?
 
-## Taxis and riding along (build 0.4.19)
+## Taxis and riding along (build 0.4.20)
 
 Two things changed in the vehicle guard (it used to refuse every AI car and every other player's car):
 
@@ -247,7 +247,7 @@ Log tag for both is `RLSMP-GUARD` (already included in the capture commands abov
 - Another player's AI traffic is recognised by the name-tag flag that `trafficLabels` sets, which can take 2 to 4 seconds for a car
   that has only just appeared. In that short window a new traffic car of A's could be entered by B by mistake. Tell me if it happens.
 
-## Garage part shop (build 0.4.19)
+## Garage part shop (build 0.4.20)
 
 **The bug:** at the garage computer you shop for parts while standing on foot. RLS rebuilds the car with `replaceVehicle(model, options, theCar)`.
 BeamMP ignores `theCar` and replaces the car the PLAYER is in, which is the walking character. A new car appeared and took over,
@@ -284,13 +284,13 @@ RLSMP-REPLACE|replace etk800 target=123(etk800) but player is in 45(unicycle) (b
 - Not played in the game. The missing power steering could be a separate problem; this build only fixes which car is replaced.
 - Fixing it relies on the game's own `replaceVehicle` being captured before BeamMP swaps it (the warning line above says if it was not).
 
-## Traffic variety, step 1 (build 0.4.19)
+## Traffic variety, step 1 (build 0.4.20)
 
 More varied traffic and parked cars (see `docs/DESIGN_TRAFFIC_VARIETY.md`). **Live swapping while you drive is not in this build**:
 a car keeps its model once it exists, so road class and day or night only change cars built later (traffic start, refills, parked cars).
 
 ### Test steps
-1. Install `0.4.19` (check both logs say `0.4.19`), join, start your career and drive for a few minutes. Does the traffic look more varied (more different models,
+1. Install `0.4.20` (check both logs say `0.4.20`), join, start your career and drive for a few minutes. Does the traffic look more varied (more different models,
    no model repeated many times in a row)? Do the same on a second join.
 2. Look for these lines in the game log (tag `RLSMP-P3`):
    ```
@@ -322,4 +322,49 @@ a car keeps its model once it exists, so road class and day or night only change
 ### Known gaps
 - Not played. Everything about the car lists comes from reading RLS's code; the game's own spawner code is not visible to me.
 - Joins have stalled before during the save download; a big car mod makes joins heavier for everybody.
+
+## Live swapping (build 0.4.20)
+
+Traffic cars that nobody can see are swapped for a model that suits the road class and the time of day (see `docs/DESIGN_TRAFFIC_VARIETY.md`, step 2).
+Both switches are **off by default** and nothing is swapped with default weights, so first set some weights (see the traffic variety section).
+
+### Test steps
+1. Watch only first. In the server `config.json` set (use a Type name from the `probe:` line of the traffic variety test):
+   ```
+   "trafficVariety": {"night": {"Truck": 0}, "swap": {"enabled": true}}
+   ```
+   Restart and join **by day**, drive around, then wait for night (or change the time). Cars built during the day were allowed to be trucks; when night falls, a hidden
+   truck now weighs 0 and may be swapped. (Cars built from now on already follow the weights, so a swap only shows when the situation changes after a car was built.
+   Another way, if the traffic variety `probe:` said `road class source = speedLimit`: set `"zones": {"highway": {"Car": 0}}` and drive from a city road onto a highway.)
+   In the game log look for lines like:
+   ```
+   RLSMP-P3|swap would happen (watch only): car 123 pickup (Truck, weight 0.00) -> sunburst/c1 (Car, weight 1.00) zone=city night=true
+   ```
+   Send me the log. No car must change; if one does, tell me.
+2. Only after step 1 looks sensible: also set `"live": true`. Expected lines:
+   ```
+   RLSMP-P3|swap LIVE: car 123 pickup (...) -> sunburst/c1 (...)
+   RLSMP-P3|swap done (new id): car 123 is now car 456 (sunburst/c1); traffic: inserted into traffic
+   or
+   RLSMP-P3|swap done (replaced in place, same id): car 123 is now car 123 (sunburst/c1); traffic: already in traffic
+   ```
+   **Send me which of the two `swap done` lines you get.** It tells me how the game's replace really works.
+   Drive for 10 minutes. Does a car ever vanish or appear in front of you? Do swapped cars drive normally? Do other players see odd cars, black blobs, or lag spikes?
+3. If something looks wrong, set `"live": false` and restart the server. Live switches itself off after 3 failures.
+
+### Named failure modes
+| What you see | What it means |
+|---|---|
+| No `swap would happen` lines at night | Every car weighs the same, or no car has been hidden for 5 s, or the weights you set do not match the `Type` names. Send the log. |
+| `swap failed: the game's own replaceVehicle or the car is not available` | The fix for replacing a specific car is not active. Send the log. |
+| `swap failed: no new car appeared after the replace` | Neither a new car nor a changed model was found within 3 s. Send the log. |
+| The same car appears again and again in the watch-only lines | It should not: a car is looked at once per 10 minutes. Send the log. |
+| `live swapping switched itself off after too many failures` | Expected safety net. Send the `swap failed` lines. |
+| A swapped car stands still, has no driver, or never moves | It was not put back into traffic properly. Send the `swap done` line and the car id. |
+| A car vanishes or appears in view | It should never happen (only invisible cars). Send the time and the log. |
+| Spawn hitches for other players, black blobs | The swap rate is too high for BeamMP. Lower `perMinute`, or turn `live` off. |
+
+### Known gaps
+- Never run in the game. Live swapping is the riskiest part of the traffic variety feature; keep it to a test session first.
+- The new car is created at the old car's place by the game's own replace; whether RLS keeps its traffic role, pooling and saved state for it is unverified.
 

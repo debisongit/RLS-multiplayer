@@ -33,6 +33,20 @@ local function weights(src)
   return out
 end
 
+-- Live swapping switches and numbers; the client sanitizes them again.
+function M.swap()
+  local s = type(cfg.swap) == "table" and cfg.swap or {}
+  return {
+    enabled = s.enabled == true,
+    live = s.live == true,
+    perMinute = tonumber(s.perMinute),
+    hiddenSeconds = tonumber(s.hiddenSeconds),
+    checkSeconds = tonumber(s.checkSeconds),
+    minRatio = tonumber(s.minRatio),
+    maxFailures = tonumber(s.maxFailures),
+  }
+end
+
 function M.payload()
   local zones = {}
   if type(cfg.zones) == "table" then
@@ -54,6 +68,7 @@ function M.payload()
     applyToTraffic = cfg.applyToTraffic ~= false,
     applyToParked = cfg.applyToParked ~= false,
     zoneSpeedLimits = {city = tonumber(limits.city), main = tonumber(limits.main)},
+    swap = M.swap(),
   }
 end
 
@@ -68,8 +83,8 @@ function M.push()
         net.send(pid, "rlsmpTrafficVariety", p)
         local mods = 0
         for _ in pairs(p.mods) do mods = mods + 1 end
-        util.info(string.format("RLSMP-P3 traffic variety sent to pid=%s enabled=%s mods=%d maxShare=%s",
-          tostring(pid), tostring(p.enabled), mods, tostring(p.maxShare)))
+        util.info(string.format("RLSMP-P3 traffic variety sent to pid=%s enabled=%s mods=%d maxShare=%s swap=%s live=%s",
+          tostring(pid), tostring(p.enabled), mods, tostring(p.maxShare), tostring(p.swap.enabled), tostring(p.swap.live)))
       end
     end
   end

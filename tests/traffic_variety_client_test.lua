@@ -99,6 +99,12 @@ check(saw("probe: group filters = Config Type,Type"), "probe: filter keys")
 check(saw("first entry fields = config,model"), "probe: entry fields")
 check(saw("model Types in the pool = Car=") and saw("Truck="), "probe: Type census")
 check(saw("probe: road class source = speedLimit"), "probe: road class source")
+local seenBefore = #T.candidates()
+check(seenBefore > 0 and T.candidates()[1].model and T.candidates()[1].config, "live swapping: the entries the game offered are remembered")
+check(T.infoOf({model = "pickup"}).type == "Truck", "live swapping: model Type lookup is shared")
+check(T.contextNow().night == false, "live swapping: current day/night is shared")
+core_multiSpawn.createGroup(6, PARKED)
+check(#T.candidates() == seenBefore, "parked groups are not remembered (only traffic groups feed swapping)")
 
 -- 4. weights: Truck 0 means no trucks, in traffic and parked ------------------------------------------------------------
 server({enabled = true, typeWeights = {Truck = 0}})

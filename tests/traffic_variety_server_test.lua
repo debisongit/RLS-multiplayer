@@ -29,6 +29,7 @@ local function take() local t = sent sent = {} return t end
 check(cfg.trafficVariety.enabled == true and cfg.trafficVariety.maxShare == 0.25 and cfg.trafficVariety.oversample == 2, "defaults")
 check(next(cfg.trafficVariety.mods) == nil and next(cfg.trafficVariety.typeWeights) == nil, "no mods and no weights out of the box")
 check(cfg.trafficVariety.zoneSpeedLimits.city == 17 and cfg.trafficVariety.zoneSpeedLimits.main == 27, "road class limits")
+check(cfg.trafficVariety.swap.enabled == false and cfg.trafficVariety.swap.live == false, "live swapping: both switches off out of the box")
 
 -- sent once, when loaded
 stages[0] = "await_hello"
@@ -39,6 +40,7 @@ tick()
 local m = take()
 check(#m == 1 and m[1].name == "rlsmpTrafficVariety" and m[1].data.enabled == true and m[1].data.maxShare == 0.25, "settings sent on load")
 check(m[1].data.applyToTraffic == true and m[1].data.applyToParked == true, "traffic and parked on")
+check(m[1].data.swap.enabled == false and m[1].data.swap.live == false and m[1].data.swap.perMinute == 2, "swap settings are sent, switched off")
 tick()
 check(#take() == 0, "sent only once")
 stages[0] = nil
@@ -65,6 +67,18 @@ check(d.zones.highway.Truck == 2 and d.zones[7] == nil, "zones sanitized")
 local n = 0
 for _ in pairs(d.night) do n = n + 1 end
 check(n == 64, "at most 64 entries per table")
+
+-- swap switches follow the config (only a real true counts)
+cfg.trafficVariety.swap = {enabled = true, live = "yes", perMinute = 5}
+stages[3] = "loaded"
+tick()
+m = take()
+check(m[1].data.swap.enabled == true and m[1].data.swap.live == false and m[1].data.swap.perMinute == 5, "swap switches: enabled passes, a non-true live stays off")
+cfg.trafficVariety.swap = nil
+stages[4] = "loaded"
+tick()
+m = take()
+check(m[1].data.swap.enabled == false and m[1].data.swap.live == false, "no swap section: off")
 
 -- switched off: still sent (so a game never guesses), with enabled = false
 cfg.trafficVariety.enabled = false
