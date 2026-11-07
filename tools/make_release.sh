@@ -5,7 +5,7 @@ cd "$(dirname "$0")/.."
 build="$(grep -o 'BUILD = "[^"]*"' Resources/Server/RLS-Career-MP/lua/rlsmp/shared/transfer.lua | cut -d'"' -f2)"
 out="release/RLS-Career-MP-$build"
 tests/run.sh >/dev/null
-rm -rf release/RLS-Career-MP-*
+rm -rf release/RLS-Career-MP-* release/NOTES-*
 mkdir -p "$out/Resources/Server/RLS-Career-MP" "$out/Resources/Client"
 cp -r Resources/Server/RLS-Career-MP/lua Resources/Server/RLS-Career-MP/main.lua "$out/Resources/Server/RLS-Career-MP/"
 tools/build_client_zip.sh >/dev/null
@@ -21,4 +21,8 @@ RLS-Career-MP build $build
 4. Restart the server. Players restart BeamNG once after an update.
 See README.md for troubleshooting and CHANGELOG.md for what changed.
 TXT
-echo "Release built: $out"
+(cd release && rm -f RLS-Career-MP-*.zip && zip -qr "RLS-Career-MP-$build.zip" "RLS-Career-MP-$build")
+awk -v v="## $build" '$0==v{p=1;next} /^## /{p=0} p' CHANGELOG.md > "release/NOTES-$build.md"
+echo "" >> "release/NOTES-$build.md"
+echo "Install: unzip, copy the Resources folder into your BeamMP server folder (see INSTALL.txt inside). Full history: CHANGELOG.md." >> "release/NOTES-$build.md"
+echo "Release built: $out (+ release/RLS-Career-MP-$build.zip and release/NOTES-$build.md)"
