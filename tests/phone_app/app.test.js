@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import Comp from '../../Resources/Client/RLS-Career-MP/ui/ui-vue/mods/rls_career_mp/phone/PhoneBlackMarket.vue'
-import { fake, calls, loads } from './bridge-mock.js'
+import { fake, calls, luaCode, parseCall } from './bridge-mock.js'
 
 const member = (over = {}) => ({ ready: true, member: true, rep: 10, invitesLeft: 3, money: 5000, spot: "Joe's Junkyard",
   items: [
@@ -16,7 +16,7 @@ async function open(view) {
   await flushPromises()
   return w
 }
-beforeEach(() => { loads.length = 0; fake.loadFixes = false; fake.direct = true; fake.viaExtensions = true; calls.length = 0; vi.useFakeTimers({ toFake: ['setInterval', 'setTimeout', 'clearInterval', 'clearTimeout'] }) })
+beforeEach(() => { luaCode.length = 0; fake.raw = 'ok'; fake.direct = false; fake.viaExtensions = false; calls.length = 0; vi.useFakeTimers({ toFake: ['setInterval', 'setTimeout', 'clearInterval', 'clearTimeout'] }) })
 afterEach(() => { vi.useRealTimers() })
 
 describe('PhoneBlackMarket', () => {
@@ -98,11 +98,78 @@ describe('PhoneBlackMarket', () => {
     fake.get = () => { throw new Error('bridge down') }
     const w = mount(Comp)
     await flushPromises()
+    await vi.advanceTimersByTimeAsync(4100); await flushPromises()
     expect(w.text()).toContain('No connection')
     fake.get = () => ({ enabled: true, state: member() })
     await vi.advanceTimersByTimeAsync(1600); await flushPromises()
     expect(w.text()).toContain('Reputation 10')
     w.unmount()
+  })
+  it('copes with empty lists that arrive as {} from the game', async () => {
+    const w = await open({ enabled: true, state: member({ items: {}, orders: {} }) })
+    expect(w.text()).toContain('Reputation 10')
+    expect(w.text()).toContain('Nothing for you yet')
+  })
+  it('an ex-member with paid orders still sees and can collect them', async () => {
+    const w = await open({ enabled: true, state: { ready: true, member: false, money: 5,
+      orders: [{ id: 'o1', item: 'fake_plate', label: 'Fake plate', n: 1, spot: 'Joe', readyIn: 0, ready: true }] } })
+    expect(w.text()).toContain('You are not in')
+    expect(w.text()).toContain('Your orders')
+    await w.findAll('button').find(b => b.text() === 'Collect here').trigger('click'); await flushPromises()
+    expect(calls[0][0]).toBe('pickup')
+  })
+  it('talks to the game with the raw engineLua call RLS itself uses, not the lua proxy', async () => {
+    const w = await open({ enabled: true, state: member() })
+    expect(w.text()).toContain('Reputation 10')
+    expect(luaCode.length).toBeGreaterThan(0)
+    expect(luaCode[0]).toContain('rawget(_G, "rlsmp_market")')
+    expect(parseCall(luaCode[0]).fn).toBe('uiGet')
+    await w.findAll('button').find(b => b.text() === 'Buy $400').trigger('click'); await flushPromises()
+    const call = parseCall(luaCode[luaCode.length - 1])
+    expect(call.fn).toBe('uiAct')
+    expect(call.args).toEqual(['buy', 'screwdriver', 1])
+  })
+  it('the lua proxy is only a fallback (in the real game it is a stub without functions for our extension)', async () => {
+    fake.raw = 'absent'; fake.direct = true
+    const w = await open({ enabled: true, state: member() })
+    expect(w.text()).toContain('Reputation 10')
+    fake.direct = false; fake.viaExtensions = true
+    const w2 = await open({ enabled: true, state: member() })
+    expect(w2.text()).toContain('Reputation 10')
+  })
+  it('when the raw call never answers, it waits a few seconds and then uses the proxy', async () => {
+    fake.raw = 'timeout'; fake.viaExtensions = true
+    fake.get = () => ({ enabled: true, state: member() })
+    const w = mount(Comp)
+    await flushPromises()
+    expect(w.text()).not.toContain('Reputation 10')
+    await vi.advanceTimersByTimeAsync(4100); await flushPromises()
+    expect(w.text()).toContain('Reputation 10')
+    w.unmount()
+  })
+  it('says the extension is not loaded when the game answers that', async () => {
+    fake.raw = 'missing'
+    const w = await open({ enabled: true, state: null })
+    expect(w.text()).toContain('Not loaded')
+  })
+  it('shows every error when no way works', async () => {
+    fake.raw = 'throws'
+    const w = mount(Comp)
+    await flushPromises()
+    expect(w.text()).toContain('No connection')
+    expect(w.text()).toContain('engineLua exploded')
+    expect(w.text()).toContain('is not a function')
+    expect(w.text()).toContain('no such extension')
+  })
+  it('escapes names safely into the Lua it sends (quotes, backslashes, non-ASCII)', async () => {
+    const w = await open({ enabled: true, state: member() })
+    const nasty = 'fay"; os.exit() --\\ é漢'   // (a single-line text box cannot hold a newline)
+    await w.find('input').setValue(nasty)
+    await w.findAll('button').find(b => b.text() === 'Invite').trigger('click'); await flushPromises()
+    const call = parseCall(luaCode[luaCode.length - 1])
+    expect(call.fn).toBe('uiAct')
+    expect(call.args.slice(0, 2)).toEqual(['invite', nasty.trim()])
+    expect(luaCode[luaCode.length - 1]).not.toContain('os.exit()')
   })
   it('copes with empty lists that arrive as {} from the game', async () => {
     const w = await open({ enabled: true, state: member({ items: {}, orders: {} }) })
@@ -123,19 +190,6 @@ describe('PhoneBlackMarket', () => {
     expect(w.text()).toContain('Reputation 10')
     await w.findAll('button').find(b => b.text() === 'Buy $400').trigger('click'); await flushPromises()
     expect(calls[0].slice(0, 3)).toEqual(['buy', 'screwdriver', 1])
-  })
-  it('shows the real error text when no way into Lua works', async () => {
-    fake.direct = false; fake.viaExtensions = false
-    const w = mount(Comp)
-    await flushPromises()
-    expect(w.text()).toContain('No connection')
-    expect(w.text()).toContain('no such extension')
-  })
-  it('asks the game to load the extension when it is missing, then works', async () => {
-    fake.direct = false; fake.viaExtensions = false; fake.loadFixes = true
-    const w = await open({ enabled: true, state: member() })
-    expect(loads).toEqual(['rlsmp_market'])
-    expect(w.text()).toContain('Reputation 10')
   })
   it('stops polling when closed', async () => {
     let n = 0

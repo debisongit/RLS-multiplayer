@@ -95,7 +95,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
-import { lua } from '@/bridge'
+import { lua, useBridge } from '@/bridge'
 
 const POLL_MS = 1500
 const MESSAGE_MS = 9000
@@ -117,6 +117,7 @@ const state = computed(() => (view.value && view.value.state) || null)
 const member = computed(() => !!(state.value && state.value.ready && state.value.member))
 const problem = computed(() => {
   if (failed.value && !state.value) return { title: 'No connection', text: 'The phone could not reach the game. Try again in a moment.', detail: detail.value }
+  if (view.value && view.value.missing) return { title: 'Not loaded', text: 'The game has not loaded the Black Market extension (rlsmp_market). Update the mod and restart the game.' }
   if (view.value && view.value.enabled === false) return { title: 'Not available', text: 'The black market only works while you are on a server running RLS-Career-MP.' }
   if (state.value && state.value.ready === false) return { title: 'Wait a moment', text: 'Your career is still loading.' }
   return null
@@ -155,33 +156,63 @@ function show(text) {
   messageTimer = setTimeout(() => { message.value = '' }, MESSAGE_MS)
 }
 
-// RLS reaches Lua two ways: lua.<extension>.fn() and lua.extensions.<extension>.fn(). Try the first, then the second, and keep the one that works.
-const ROUTES = [() => lua.rlsmp_market, () => lua.extensions.rlsmp_market]
-let route = 0
-let triedLoading = false
+// How the screen talks to the game. First game test: `lua.rlsmp_market.uiGet` was "not a function": the `lua` proxy only knows the extensions it was
+// told about (RLS's own file installLuaBridgeFallbacks.js says stub namespaces exist before Lua loads an extension, and PhoneFacilityWork.vue says
+// "use raw engineLua to ensure it works even if proxy is stale"). So the first way is raw `api.engineLua(code, callback)`, exactly as RLS does it;
+// the two proxy ways stay as fallbacks.
+const bridge = useBridge()
+const GAME_TIMEOUT_MS = 4000
+
+// A Lua string literal: plain letters, digits and a few signs as they are, every other byte as a \ddd escape (valid in Lua 5.1 / LuaJIT).
+function luaString(value) {
+  const bytes = new TextEncoder().encode(String(value))
+  let out = '"'
+  for (const b of bytes) {
+    const plain = (b >= 48 && b <= 57) || (b >= 65 && b <= 90) || (b >= 97 && b <= 122) || b === 32 || b === 95 || b === 45 || b === 46
+    out += plain ? String.fromCharCode(b) : '\\' + String(b).padStart(3, '0')
+  }
+  return out + '"'
+}
+function luaValue(v) {
+  if (v === undefined || v === null) return 'nil'
+  if (typeof v === 'number') return Number.isFinite(v) ? String(v) : 'nil'
+  if (typeof v === 'boolean') return v ? 'true' : 'false'
+  return luaString(v)
+}
+
+function rawCall(fn, args) {
+  return new Promise((resolve, reject) => {
+    const api = bridge && bridge.api
+    if (!api || typeof api.engineLua !== 'function') return reject(new Error('the bridge has no engineLua'))
+    const timer = setTimeout(() => reject(new Error('the game did not answer')), GAME_TIMEOUT_MS)
+    // rawget: indexing a missing global is a fatal engine error; a missing extension or function answers {missing = true} instead
+    const code = '(function() local m = rawget(_G, "rlsmp_market") if type(m) ~= "table" then return {missing = true} end '
+      + 'local f = m[' + luaString(fn) + '] if type(f) ~= "function" then return {missing = true} end return f(' + args.map(luaValue).join(', ') + ') end)()'
+    try {
+      api.engineLua(code, result => { clearTimeout(timer); resolve(result) })
+    } catch (e) {
+      clearTimeout(timer)
+      reject(e)
+    }
+  })
+}
+
+const PROXY_ROUTES = [() => lua.rlsmp_market, () => lua.extensions.rlsmp_market]
 async function callGame(fn, ...args) {
-  let lastError
-  for (let i = 0; i < ROUTES.length; i++) {
-    const r = (route + i) % ROUTES.length
+  const errors = []
+  try {
+    return await rawCall(fn, args)
+  } catch (e) {
+    errors.push(String((e && e.message) || e))
+  }
+  for (const route of PROXY_ROUTES) {
     try {
-      const result = await ROUTES[r]()[fn](...args)
-      route = r
-      return result
+      return await route()[fn](...args)
     } catch (e) {
-      lastError = e
+      errors.push(String((e && e.message) || e))
     }
   }
-  // Maybe the extension was never loaded (RLS itself loads some of its own on demand): ask the game to load it once, then try again.
-  if (!triedLoading) {
-    triedLoading = true
-    try {
-      await lua.extensions.load('rlsmp_market')
-      return await callGame(fn, ...args)
-    } catch (e) {
-      lastError = e
-    }
-  }
-  throw lastError
+  throw new Error(errors.join(' | '))
 }
 
 async function poll() {
