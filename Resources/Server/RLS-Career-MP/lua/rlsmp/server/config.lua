@@ -103,6 +103,13 @@ M.defaults = {
     cooldownSeconds = 30,
   },
 
+  vehicles = {
+    enabled = true,
+    -- A player on foot may get into another player's car and ride along as a passenger (they cannot drive it).
+    -- Off by default until it has been tested in the game: turn it on to try it.
+    allowPassengers = false,
+  },
+
   claims = {
     enabled = true,
     -- Judge crashes and TELL players what would happen, but take no money and change no insurance score. Turn off to go live.
