@@ -16,6 +16,15 @@ local removeGuard = require("rlsmp/lib/removeGuard")
 local mapGate = require("rlsmp/lib/mapGate")
 local downloadWatch = require("rlsmp/lib/downloadWatch")
 
+-- Extensions that only run while the career is active on the server.
+local MODULES = {"saveBridge", "wallet", "fleet", "vehicleGuard", "unstuck", "trafficLabels", "claims", "world"}
+local function setModules(on)
+  for _, name in ipairs(MODULES) do
+    local ext = _G["rlsmp_" .. name]
+    if ext then ext.enable(on) end
+  end
+end
+
 local START_TIMEOUT = 180     -- seconds to wait for RLS to report the career as active
 local RLS_WAIT_TIMEOUT = 60   -- seconds to wait for RLS itself to finish loading
 
@@ -116,26 +125,12 @@ function M.onOverhaulActive(active)
   if not isMP() then return end
   if active and state == "starting" then
     setState("active")
-    rlsmp_saveBridge.enable(true)
-    rlsmp_wallet.enable(true)
-    rlsmp_fleet.enable(true)
-    rlsmp_vehicleGuard.enable(true)
-    rlsmp_unstuck.enable(true)
-    rlsmp_trafficLabels.enable(true)
-    rlsmp_claims.enable(true)
-    rlsmp_world.enable(true)
+    setModules(true)
     net.send("rlsmpLoaded", {ok = true})
     -- New careers get saved right away so the server has a copy from minute one.
     if isNewCareer then firstSaveTimer = 10 end
   elseif not active and state == "active" then
-    rlsmp_saveBridge.enable(false)
-    rlsmp_wallet.enable(false)
-    rlsmp_fleet.enable(false)
-    rlsmp_vehicleGuard.enable(false)
-    rlsmp_unstuck.enable(false)
-    rlsmp_trafficLabels.enable(false)
-    rlsmp_claims.enable(false)
-    rlsmp_world.enable(false)
+    setModules(false)
     removeGuard.enable(false)
     setState("idle")
   end
@@ -182,14 +177,7 @@ end
 
 function M.onServerLeave()
   removeGuard.enable(false)
-  rlsmp_saveBridge.enable(false)
-  rlsmp_wallet.enable(false)
-  rlsmp_fleet.enable(false)
-  rlsmp_vehicleGuard.enable(false)
-  rlsmp_unstuck.enable(false)
-    rlsmp_trafficLabels.enable(false)
-    rlsmp_claims.enable(false)
-    rlsmp_world.enable(false)
+  setModules(false)
   net.reset()
   pending, firstSaveTimer = nil, nil
   setState("idle")
@@ -201,8 +189,10 @@ function M.onExtensionLoaded()
   net.init()
   net.onBig("profile", onProfile)
   net.on("rlsmpError", function(e) toast("error", tostring(e.msg or e.code)) end)
-  extensions.load("rlsmp_saveBridge", "rlsmp_wallet", "rlsmp_fleet", "rlsmp_vehicleGuard", "rlsmp_unstuck", "rlsmp_trafficLabels", "rlsmp_claims", "rlsmp_world")
-  for _, name in ipairs({"rlsmp_saveBridge", "rlsmp_wallet", "rlsmp_fleet", "rlsmp_vehicleGuard", "rlsmp_unstuck", "rlsmp_trafficLabels", "rlsmp_claims", "rlsmp_world"}) do setExtensionUnloadMode(name, "manual") end
+  for _, name in ipairs(MODULES) do
+    extensions.load("rlsmp_" .. name)
+    setExtensionUnloadMode("rlsmp_" .. name, "manual")
+  end
   log("I", "RLS-Career-MP", "client loaded, build " .. transfer.BUILD)
 end
 
