@@ -20,4 +20,5 @@ return {
   "rlsmp.server.vehicles",
   "rlsmp.server.events",
   "rlsmp.server.duel",
+  "rlsmp.server.clock",
 }

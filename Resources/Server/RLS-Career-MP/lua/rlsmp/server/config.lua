@@ -103,6 +103,13 @@ M.defaults = {
     cooldownSeconds = 30,
   },
 
+  -- Shared time of day. The server owns the clock: everyone sees the same time, one full day takes `dayMinutes` real minutes.
+  time = {
+    enabled = true,
+    dayMinutes = 20,
+    syncSeconds = 5,
+  },
+
   -- Pink-slip duels (/duel <player>). OFF until you list at least one course and set enabled = true.
   -- A course is {name = "airport", start = {x, y, z}, finish = {x, y, z}} in map coordinates; both players must
   -- be near the start. The loser's car moves to the winner. Untested in-game: try with spare cars first.

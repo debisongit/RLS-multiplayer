@@ -27,6 +27,8 @@ Play **RLS Career Overhaul** together on **BeamMP**, with saves stored on the se
 
 Console: `rlsmp status`, `rlsmp save`, `rlsmp reset <player name or account id>` (archives that career to `profiles/archive/` and drops the player; the next join starts a new one).
 
+Time of day is shared and follows the server (`time.dayMinutes`, default 20 real minutes per day; sleeping does not change it).
+
 Player chat commands: `/records` (event best times); `/dashcam` ($100 per car, makes crash verdicts reliable); `/unstuck` (or `/road`) moves you to the nearest road, in a car or on foot; `/biz help` for the business.
 
 ## Troubleshooting

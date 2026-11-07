@@ -17,7 +17,7 @@ local mapGate = require("rlsmp/lib/mapGate")
 local downloadWatch = require("rlsmp/lib/downloadWatch")
 
 -- Extensions that only run while the career is active on the server.
-local MODULES = {"saveBridge", "wallet", "fleet", "vehicleGuard", "unstuck", "trafficLabels", "claims", "world", "duel"}
+local MODULES = {"saveBridge", "wallet", "fleet", "vehicleGuard", "unstuck", "trafficLabels", "claims", "world", "duel", "clock"}
 local function setModules(on)
   for _, name in ipairs(MODULES) do
     local ext = _G["rlsmp_" .. name]
@@ -139,9 +139,18 @@ function M.onOverhaulActive(active)
   end
 end
 
-function M.onWorldReadyState(worldState)
-  if worldState ~= 2 or not isMP() or state ~= "idle" then return end
+local started = false   -- a join attempt was made since we last left a server
+
+local function begin()
+  started = true
   if rlsReady() then sendHello() else setState("waiting_rls") end
+end
+
+-- Any state but "a join is running or done" restarts on a fresh world: a failed or stuck earlier attempt must not block the next join.
+function M.onWorldReadyState(worldState)
+  if worldState ~= 2 or not isMP() then return end
+  if state == "starting" or state == "active" or state == "hello_sent" or state == "downloading" then return end
+  begin()
 end
 
 function M.onUpdate(dtReal)
@@ -169,6 +178,11 @@ function M.onUpdate(dtReal)
   elseif state == "starting" and stateTime > START_TIMEOUT then
     fail("start_timeout")
   end
+  -- Safety net: if the world-ready signal never reached us (mod mounted late after an update), start anyway.
+  if state == "idle" and not started and stateTime > 10 and isMP() and getCurrentLevelIdentifier and getCurrentLevelIdentifier() then
+    log("I", "RLS-Career-MP", "world-ready signal missed, starting the join anyway")
+    begin()
+  end
   if staleTimer then
     staleTimer = staleTimer - (dtReal or 0)
     if staleTimer <= 0 then
@@ -191,6 +205,7 @@ function M.onServerLeave()
   setModules(false)
   net.reset()
   pending, firstSaveTimer, staleCars, staleTimer = nil, nil, nil, nil
+  started = false
   setState("idle")
 end
 

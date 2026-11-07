@@ -146,6 +146,12 @@ Chat: `/duel <player>`, `/duel accept`, `/duel cancel`, `/duel claim`. Needs at 
   upload kind `duelHand {slip, inv, rec}`, `rlsmpDuelReceived {slip}`, `rlsmpDuelRelease {slip, why}`.
 - Owed cars are kept in `duels.json` until the winner confirms. See the safety rules at the top of `server/duel.lua`.
 
+## Shared time of day
+
+- `rlsmpTime {m, dm}` (server to client, every `time.syncSeconds`, loaded players only): game minute of the day (0 = midnight) and real minutes per full day.
+  Computed from the server wall clock (`server/clock.lua`), so restarts keep it consistent. Client `clock.lua` draws the sky 4x per second and
+  moves RLS's weather forward every 10 s (`sleepTo`); RLS's own day cycle is paused while connected. Config `time = {enabled, dayMinutes = 20, syncSeconds = 5}`.
+
 ## Reserved prefixes for later phases
 
 - `rlsmpBiz*` – Phase 2 business / syndicate (Claude A)
