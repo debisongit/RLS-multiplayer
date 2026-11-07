@@ -302,6 +302,7 @@ M.defaults = {
   -- Rates are shares of the car's value. market.fenceCarRate is what "sell" pays.
   fence = {
     enabled = true,
+    minValue = 2000,          -- used when the game had no price for the car (value 0)
     maxValue = 300000,        -- the car value the fence works from is capped here (the value comes from the game)
     stripRate = 0.30,         -- parts for cash, no papers
     resellRate = 0.60,        -- fake plate + VIN plate + part number, all used up

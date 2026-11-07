@@ -209,6 +209,8 @@ local sentBefore = count("rlsmpFenceSell")
 walkerObj.pos = {x = spotA.x + 100, y = spotA.y, z = 0}
 server("rlsmpFenceAsk", {mode = "strip"})
 check(count("rlsmpFenceSell") == sentBefore and toasts[#toasts]:find("Stand next to the stolen car"), "fence: nobody near a stolen car, nothing sent")
+local reported = 0
+rlsmp_positions = {reportNow = function() reported = reported + 1 end}
 walkerObj.pos = {x = spotA.x + 3, y = spotA.y, z = 0}
 playerId = newId
 server("rlsmpFenceAsk", {mode = "strip"})
@@ -217,6 +219,7 @@ playerId = 1
 server("rlsmpFenceAsk", {mode = "gamble"})
 local fs = last("rlsmpFenceSell")
 check(count("rlsmpFenceSell") == sentBefore + 1 and fs.plate == "CVT 42" and fs.mode == "gamble", "fence: the plate and mode are sent")
+check(reported == 1, "fence: a fresh position report is asked for before the sale")
 server("rlsmpFenceResult", {ok = false, mode = "gamble", err = "The fence works at Joe's Junkyard right now. Bring the car there."})
 check(objects[newId] ~= nil and #theft.stolenCars() == 1 and toasts[#toasts]:find("Bring the car"), "fence refused: the car stays, the reason is shown")
 order = {}

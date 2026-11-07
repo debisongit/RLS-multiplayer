@@ -157,6 +157,11 @@ check(market.rep(1) == repBefore - cfg.market.bustRep, "trap costs reputation")
 check(items.count(1, "fake_plate") == 0, "trap: paper used up")
 fence.setRandom(nil)
 
+-- a car the game had no price for still sells, at the floor value
+rec("ZERO 000", accountOf(1), 0)
+r = sell(1, "ZERO 000", "strip")
+check(r.ok and r.pay == 600, "value 0: the floor (2000) is used, strip pays 600")
+
 -- theft off: the fence is closed -----------------------------------------------------------------------------------------
 cfg.fence.enabled = false
 rec("GGG 777", accountOf(1), 10000)

@@ -49,8 +49,12 @@ local function enabled() return cfg ~= nil and c().enabled == true and theft.isE
 
 local function itemLabel(name) return items.CATALOG[name] and items.CATALOG[name].label or name end
 
--- The value the fence works from: the record's value, capped.
-local function valueOf(rec) return clamp(math.floor(num(rec.value, 0)), 0, math.floor(num(c().maxValue, 300000))) end
+-- The value the fence works from: the record's value (the floor when the game had no price for the car), capped.
+local function valueOf(rec)
+  local v = math.floor(num(rec.value, 0))
+  if v <= 0 then v = math.floor(num(c().minValue, 2000)) end
+  return clamp(v, 0, math.floor(num(c().maxValue, 300000)))
+end
 
 -- How many papers (of the three) a player has.
 local function papersOwned(pid)

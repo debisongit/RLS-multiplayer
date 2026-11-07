@@ -353,6 +353,7 @@ local function onFenceAsk(d)
   local rec = M.nearestStolen(pos, FENCE_REACH)
   if not rec or not rec.plate then return toast("warning", "Stand next to the stolen car you want to sell.", 5000) end
   fenceCarId = rec.vehId
+  if rlsmp_positions and rlsmp_positions.reportNow then rlsmp_positions.reportNow() end   -- the server wants a fresh position for the drop spot check
   say("I", string.format("fence %s: car %s plate %s", tostring(d.mode), tostring(rec.vehId), tostring(rec.plate)))
   net.send("rlsmpFenceSell", {plate = rec.plate, mode = d.mode})
 end

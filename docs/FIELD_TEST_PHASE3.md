@@ -470,4 +470,4 @@ Needs `"theft": {"enabled": true}` in the server config, and a black market memb
 ### Known gaps
 - Never played. Stripping pays cash only: RLS has no way to take parts off a car, so nothing goes to your part inventory.
 - The car must be in the same game session that stole it: after a restart the server still has the record but the game forgot the car, so it can't be sold (the record expires after `keepHours`).
-- The value of a car comes from the game's price list (client-reported, capped at `fence.maxValue`).
+- The value of a car comes from the game's price list (client-reported, capped at `fence.maxValue`). A car with no price in the list is valued at `fence.minValue` (2000): if payouts look tiny, the game had no price for that model.
