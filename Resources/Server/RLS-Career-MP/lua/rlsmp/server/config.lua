@@ -89,6 +89,18 @@ M.defaults = {
     blockRoadblocks = true,
   },
 
+  -- Phase 3: "smart traffic" driver personalities. Each game gives its AI traffic cars a personality, picked by
+  -- these weights (any numbers, they don't have to add up to 100; 0 turns one off). Only the game's own AI
+  -- settings change: slow = careful, ~85% of the limit; aggressive = tailgates, a bit over the limit;
+  -- racer = very aggressive, well over the limit; drunk = weaves now and then, uneven speed, sudden braking.
+  -- policeReact: a nearby AI police car starts a chase on a racer or drunk (at most one per minute per game).
+  -- Untested in-game: set enabled = false if traffic misbehaves.
+  smartTraffic = {
+    enabled = true,
+    mix = {normal = 80, slow = 10, aggressive = 6, racer = 3, drunk = 1},
+    policeReact = true,
+  },
+
   business = {
     maxMembers = 4,
     membersCanWithdraw = true,
