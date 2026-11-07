@@ -1,4 +1,4 @@
-# Handoff: take over from Claude A (written at 0.4.14)
+# Handoff: take over from Claude A (written at 0.4.14, now 0.4.15)
 
 Read first: `docs/RESEARCH_PLATES_THEFT.md` (what RLS gives us for plates, police, parked cars, parts; read before building plate reading or theft), `docs/HANDOFF_CLAUDE_B.md` (architecture, lessons, rules), `docs/COLLAB.md`, `docs/PROTOCOL.md`, `docs/DESIGN_THEFT_PLATES_TRAFFIC.md` (owner's decisions for the next features), `CHANGELOG.md`.
 Branch: **`claude/amazing-sagan-kh6ecn`** (only push there; always `git fetch origin claude/amazing-sagan-kh6ecn && git rebase origin/claude/amazing-sagan-kh6ecn` before pushing; `tests/run.sh` must pass; no PR unless asked).
@@ -11,7 +11,7 @@ Repo on GitHub: `debisongit/rls-multiplayer` (default listing shows our branch).
 - Never edit RLS or BeamMP files. Never copy CareerMP code.
 
 ## State right now
-- **Latest build: 0.4.14** (all `tests/run.sh` suites pass). GitHub Release page `v0.4.13` exists (zip attached); the **v0.4.14 release workflow run succeeded** (check the Releases page for the zip).
+- **Latest build: 0.4.15** (all `tests/run.sh` suites pass). GitHub Release page `v0.4.13` exists (zip attached); the **v0.4.14 release workflow run succeeded** (check the Releases page for the zip).
 - Last confirmed in-game by the owner: joining on 0.4.10 for one player; the other player's download stalled (153/177 or 129/177 pieces). 0.4.11 added flow control (server sends in a window of 24 chunks and waits for `rlsmpChunkProgress`) and 0.4.10 added resend. **Nothing from 0.4.11 to 0.4.14 has been played.** First thing to ask the owner: did the save download finish with 0.4.11+? If not, get the server console lines (`[rlsmp-timing]`, "asked for N missing chunks").
 - Server log noise they sent (harmless): `zlib uncompress() failed, trying with a larger buffer` (BeamMP unpacking a big upload burst) and `Ignored a change to ...difficultyMode.json` (RLS rewrote a locked start-settings file; server keeps its copy). Could lower that log line to debug.
 
@@ -22,6 +22,8 @@ Repo on GitHub: `debisongit/rls-multiplayer` (default listing shows our branch).
 4. Commit, rebase, push.
 5. Publish: the sandbox cannot push tags or call a create-release API, but the GitHub MCP tool **`mcp__github__actions_run_trigger`** (method `run_workflow`, owner `debisongit`, repo `rls-multiplayer`, workflow `release.yml`, ref `claude/amazing-sagan-kh6ecn`, inputs `{"version":"0.4.15"}`) starts `.github/workflows/release.yml` on the owner's account. It builds the zip and creates a **pre-release** (or attaches the zip if the release page already exists). Check the run with `actions_list`.
    Note: tag `v0.4.13` already exists remotely at an older commit.
+
+## Update: 0.4.15 merged smart traffic; the research report is in `docs/RESEARCH_PLATES_THEFT.md`. The "Unmerged" section below is history.
 
 ## Unmerged work in progress (two background helpers were still running)
 Helpers work in git worktrees under `.claude/worktrees/agent-*` (git-ignored) and commit there; their commits are visible from the main repo, so merge with `git cherry-pick <hash>` (resolve `tests/run.sh` conflicts by keeping both lines). Check `git branch -a` for `worktree-agent-*` branches and `git log <branch>`.

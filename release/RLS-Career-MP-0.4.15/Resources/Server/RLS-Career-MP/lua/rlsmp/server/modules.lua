@@ -18,6 +18,7 @@ return {
   "rlsmp.server.positions",
   "rlsmp.server.traffic",
   "rlsmp.server.trafficPolice",
+  "rlsmp.server.smartTraffic",
   "rlsmp.server.vehicles",
   "rlsmp.server.events",
   "rlsmp.server.duel",
