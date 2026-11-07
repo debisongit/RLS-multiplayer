@@ -23,6 +23,7 @@ lua5.3 tests/duel_test.lua "$(mktemp -d -p "$tmp")"
 lua5.3 tests/clock_test.lua "$(mktemp -d -p "$tmp")"
 lua5.3 tests/resend_test.lua "$(mktemp -d -p "$tmp")"
 lua5.3 tests/positions_test.lua "$(mktemp -d -p "$tmp")"
+lua5.3 tests/shop_test.lua "$(mktemp -d -p "$tmp")"
 lua5.3 tests/traffic_test.lua
 lua5.3 tests/traffic_police_test.lua
 lua5.3 tests/vehicles_test.lua

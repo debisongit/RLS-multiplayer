@@ -175,6 +175,20 @@ Chat: `/duel <player>`, `/duel accept`, `/duel cancel`, `/duel claim`. Needs at 
   Computed from the server wall clock (`server/clock.lua`), so restarts keep it consistent. Client `clock.lua` draws the sky 4x per second and
   moves RLS's weather forward every 10 s (`sleepTo`); RLS's own day cycle is paused while connected. Config `time = {enabled, dayMinutes = 45, syncSeconds = 5}`.
 
+## Shared dealership stock (server `shop.lua`; off by default: `shop.shared`)
+
+No new network events: it rides on the save upload and the profile download.
+- The first logged-in player whose upload has a usable `career/vehicleShop.json` (and `career/general.json` `boughtStarterVehicle == true`) becomes the
+  source. Their `maps[<server map>]` entry (`vehiclesInShop`, `sellersInfos`, `dirtyDate`) is the master, kept in `shop.json` with the source account id,
+  the map and RLS's `version` / `valuationSchemaVersion` / `limitedMileageDealerSchemaVersion`. Later uploads from the source refresh it.
+- On join (`sessions.beforeDownload` hook, before `profiles.encodeForDownload`) the player's stored `maps[<server map>]` entry is replaced by the master.
+  The rest of the file (watchlist, discovered dealers, pending fleet purchases, reward grants, other maps) is theirs. The stored copy is changed too,
+  so client and server checksums agree. Skipped when the file is missing or broken, has no `maps`, has other version numbers, or the career has not
+  bought its starter car (RLS keeps starter-only stock until then).
+- `shop.markSold(shopId)` (server Lua, nothing calls it yet) removes a listing from the master; it stays out until the source's own save drops it.
+- Known gap: RLS does not save `nextShopUpdateTime`, so the first time the shop opens each game runs `updateVehicleList(false)`, expires old offers and
+  fills open dealer slots with its own `math.random`. Only listings that existed at join are shared; a sale is seen by others only after they rejoin.
+
 ## Reserved prefixes for later phases
 
 - `rlsmpBiz*` – Phase 2 business / syndicate (Claude A)
