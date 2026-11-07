@@ -19,6 +19,7 @@ lua5.3 tests/business_test.lua "$(mktemp -d -p "$tmp")"
 lua5.3 tests/traffic_labels_test.lua "$(mktemp -d -p "$tmp")"
 lua5.3 tests/claims_test.lua "$(mktemp -d -p "$tmp")"
 lua5.3 tests/events_test.lua "$(mktemp -d -p "$tmp")"
+lua5.3 tests/duel_test.lua "$(mktemp -d -p "$tmp")"
 lua5.3 tests/traffic_test.lua
 lua5.3 tests/traffic_police_test.lua
 lua5.3 tests/vehicles_test.lua
@@ -30,6 +31,7 @@ luajit tests/claims_client_test.lua
 luajit tests/traffic_labels_client_test.lua
 luajit tests/unstuck_test.lua
 luajit tests/world_client_test.lua
+luajit tests/duel_client_test.lua
 luajit tests/join_protect_test.lua
 luajit tests/traffic_client_test.lua
 luajit tests/police_client_test.lua

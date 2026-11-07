@@ -48,7 +48,7 @@ Player chat commands: `/records` (event best times); `/dashcam` ($100 per car, m
 1. ✅ Server-side saves + join handshake + server wallet
 2. Duo Business / Syndicate: ✅ shared bank + members (`/biz help`) · ✅ shared fleet (`/biz fleet`, untested in-game) · next: payout split
 3. Distributed traffic director + anti-teleport police pursuits
-4. Dealerships, garages, freeroam events, pink-slip races
+4. World: ✅ map travel blocked · ✅ event records (`/records`) · ✅ pink-slip duels (`/duel`, off by default, untested) · next: shared dealership stock
 
 Docs: [handoff for Claude B](docs/HANDOFF_CLAUDE_B.md) · [next features and plans](docs/NEXT_FEATURES.md) · [how RLS works](docs/RLS_MAP.md) · [architecture](docs/ARCHITECTURE.md) · [protocol](docs/PROTOCOL.md) · [teamwork rules](docs/COLLAB.md)
 

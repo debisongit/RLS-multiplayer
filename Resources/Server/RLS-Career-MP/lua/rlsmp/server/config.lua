@@ -103,6 +103,20 @@ M.defaults = {
     cooldownSeconds = 30,
   },
 
+  -- Pink-slip duels (/duel <player>). OFF until you list at least one course and set enabled = true.
+  -- A course is {name = "airport", start = {x, y, z}, finish = {x, y, z}} in map coordinates; both players must
+  -- be near the start. The loser's car moves to the winner. Untested in-game: try with spare cars first.
+  duel = {
+    enabled = false,
+    courses = {},
+    startRadius = 60,
+    finishRadius = 30,
+    countdownSeconds = 5,
+    raceTimeoutSeconds = 600,
+    minRaceSeconds = 8,
+    retrySeconds = 30,
+  },
+
   vehicles = {
     enabled = true,
     -- A player on foot may get into another player's car and ride along as a passenger (they cannot drive it).

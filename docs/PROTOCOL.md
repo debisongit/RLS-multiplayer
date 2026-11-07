@@ -137,6 +137,15 @@ Log lines use the tag `RLSMP-GUARD`.
 - `rlsmpEventDone` (client to server) `{race, t, place}`: a finished RLS freeroam event (from the RLS hook `onRlsFreeroamRaceResultFinalized`; only timed races, not derby/burnout/tractor pull).
   Server `events.lua` keeps the top 5 per event in `records.json`, announces records in chat, `/records [event]` lists them. Times are client-reported, no money depends on them.
 
+### Pink-slip duels (server `duel.lua`, client `duel.lua`; off by default: `duel.enabled`)
+
+Chat: `/duel <player>`, `/duel accept`, `/duel cancel`, `/duel claim`. Needs at least one course in `config.json` (`duel.courses`).
+- server to client: `rlsmpDuelWho {id}` (answer with your car), `rlsmpDuelGo {id, finish, radius}`, `rlsmpDuelEnd {id}`,
+  `rlsmpDuelHand {slip, inv}` (loser: upload this car), `rlsmpDuelAck {ok, inv, slip}` (remove it now), big transfer `duelVehicle {slip, rec}` (winner).
+- client to server: `rlsmpDuelCar {id, inv, model, pos}`, `rlsmpDuelPos {pos}` (1 per second during a duel), `rlsmpDuelFinish {id}`,
+  upload kind `duelHand {slip, inv, rec}`, `rlsmpDuelReceived {slip}`, `rlsmpDuelRelease {slip, why}`.
+- Owed cars are kept in `duels.json` until the winner confirms. See the safety rules at the top of `server/duel.lua`.
+
 ## Reserved prefixes for later phases
 
 - `rlsmpBiz*` – Phase 2 business / syndicate (Claude A)

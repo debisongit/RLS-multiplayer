@@ -74,33 +74,42 @@ local function onAck(ack)
   toast("info", ack.act == "add" and "Car added to the business fleet." or "Fleet car returned.")
 end
 
--- A fleet car arrived: spawn it in front of the player and register it in the inventory.
-local function onVehicle(text, extra, problem)
+-- Spawn a car from a saved record in front of the player and register it in the inventory.
+-- Returns the new inventory id and its record, or nil + reason (nothing is left behind on failure).
+function M.spawnIntoGarage(rec)
+  if type(rec) ~= "table" or type(rec.model) ~= "string" then return nil, "bad vehicle data" end
+  local i = inv()
+  if not i.hasFreeSlot() then return nil, "no free garage space" end
+  local player = getPlayerVehicle(0)
+  local pos = player and (player:getPosition() + player:getDirectionVector() * 6) or nil
+  local ok, veh = pcall(core_vehicles.spawnNewVehicle, rec.model, {config = rec.config, pos = pos, autoEnterVehicle = false})
+  if not ok or not veh then return nil, "spawn failed" end
+  local newId = i.addVehicle(veh:getID(), nil, {owned = true})
+  if not newId then
+    veh:delete()
+    return nil, "could not add to your garage"
+  end
+  local record = i.getVehicle(newId)
+  if record then
+    record.niceName = rec.niceName or record.niceName
+    i.setVehicleDirty(newId)
+  end
+  return newId, record
+end
+
+-- A fleet car arrived.
+local function onVehicle(text, extra)
   local fid = extra and extra.fid
   local function release(why)
     net.send("rlsmpFleetRelease", {fid = fid, why = why})
     toast("warning", why)
   end
   if not text then return release("download failed") end
-  local rec = (jsonDecode(text) or {}).rec
-  if type(rec) ~= "table" or type(rec.model) ~= "string" then return release("bad vehicle data") end
-  local i = inv()
-  if not i.hasFreeSlot() then return release("no free garage space") end
-
-  local player = getPlayerVehicle(0)
-  local pos = player and (player:getPosition() + player:getDirectionVector() * 6) or nil
-  local ok, veh = pcall(core_vehicles.spawnNewVehicle, rec.model, {config = rec.config, pos = pos, autoEnterVehicle = false})
-  if not ok or not veh then return release("spawn failed") end
-  local newId = i.addVehicle(veh:getID(), nil, {owned = true})
-  if not newId then
-    veh:delete()
-    return release("could not add to your garage")
-  end
-  local record = i.getVehicle(newId)
+  local newId, record = M.spawnIntoGarage((jsonDecode(text) or {}).rec)
+  if not newId then return release(record) end
   if record then
     record.fleetId = tostring(fid)
-    record.niceName = rec.niceName or record.niceName
-    i.setVehicleDirty(newId)
+    inv().setVehicleDirty(newId)
   end
   toast("info", "Fleet car ready. Return it with /biz fleet return.")
 end
@@ -141,6 +150,7 @@ function M.onExtensionLoaded()
   net.onBig("fleetVehicle", onVehicle)
 end
 
+M.cleanCopy, M.upload = cleanCopy, upload
 M._onDo, M._onAck, M._onVehicle, M._onRetire = onDo, onAck, onVehicle, onRetire
 M.onInit = function() setExtensionUnloadMode(M, "manual") end
 
