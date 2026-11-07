@@ -29,4 +29,11 @@ Everything below is a decision, not a promise: nothing is built or played yet un
   **resell with swapped papers** (must change plate + VIN + a part number such as engine or ECU, pays more),
   or **gamble** (swap only some, sell for more, risk getting caught on the sale).
 - Caught in a reported stolen car: chase and fine, the car is taken back (removed from your garage if you got it home).
+- **Methods by car age and tier (from real-world patterns, game version only; research: older cars without immobilizers are the classic target, newer keyless cars are hit with electronic attacks):**
+  - Old, no immobilizer (about before the mid 1990s): smash the window, then start it with a screwdriver on the ignition. Cheap, fast, loud (breaking glass).
+  - Immobilizer era (about mid 1990s to 2010): the car will not run without the right key signal. Needs a key programmer plugged in at the diagnostic port plus a blank key. Quiet, slow, must sit inside.
+  - Keyless / smart key (about 2010 on): relay box (needs the owner's key to be near the car, fails otherwise) or a signal cloner that captures the fob signal, or injecting commands through a car connector (pop a headlight/mirror connector, timer, then a programmed blank key). Each method has a failure chance and noise.
+  - Luxury and newest: may need two steps (injection plus programmed key), has an alarm and a GPS tracker (reported faster, police can ping it until you find and block it).
+  - No tow trucks or flatbeds (too expensive, owner said no).
+- **Black market** (custom, RLS has none): sells and buys what theft needs. See the open questions in the handoff; stock, prices and access rules are being decided.
 - Items needed (screwdriver, cloning device, fake plate, VIN plate, part numbers) have to be added by us; RLS may have no item system (research pending).
