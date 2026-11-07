@@ -39,6 +39,14 @@ function M.mustStay(carPos, players, canSee)
   return false
 end
 
+-- For other modules: should this traffic car stay where it is because another player is near or can see it?
+function M.stayFor(car)
+  if not enabled or not mp.isMPSession() or not car or not car.pos then return false end
+  local players = playerPositions()
+  if #players == 0 then return false end
+  return M.mustStay(car.pos, players, car.checkRayCast and function(a, b) return car:checkRayCast(a, b) end or nil)
+end
+
 local wrappers = setmetatable({}, {__mode = "k"})   -- class -> the wrapper we installed
 
 local function anyTrafficClass()

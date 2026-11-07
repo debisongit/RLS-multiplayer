@@ -26,6 +26,7 @@ lua5.3 tests/positions_test.lua "$(mktemp -d -p "$tmp")"
 lua5.3 tests/shop_test.lua "$(mktemp -d -p "$tmp")"
 lua5.3 tests/traffic_test.lua
 lua5.3 tests/traffic_police_test.lua
+lua5.3 tests/smart_traffic_test.lua
 lua5.3 tests/vehicles_test.lua
 luajit tests/client_test.lua
 luajit tests/download_watch_test.lua
@@ -36,6 +37,8 @@ luajit tests/claims_client_test.lua
 luajit tests/traffic_labels_client_test.lua
 luajit tests/unstuck_test.lua
 luajit tests/bubble_test.lua
+luajit tests/unjam_test.lua
+luajit tests/dedupe_test.lua
 luajit tests/clock_client_test.lua
 luajit tests/core_start_test.lua
 luajit tests/world_client_test.lua
@@ -44,4 +47,5 @@ luajit tests/join_protect_test.lua
 luajit tests/traffic_client_test.lua
 luajit tests/police_client_test.lua
 luajit tests/positions_client_test.lua
+luajit tests/personalities_client_test.lua
 echo "All tests passed."

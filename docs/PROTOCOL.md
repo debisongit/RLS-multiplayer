@@ -78,6 +78,29 @@ While the player is chased (their traffic-data `pursuit.mode` >= 1) and `antiTel
 from respawning (`enableRespawn = false`), refuses RLS roadblocks (if `blockRoadblocks`) and
 refuses `gameplay_traffic.forceTeleport` on police units. Everything is restored when the pursuit ends.
 
+## Smart traffic: driver personalities (Phase 3)
+
+| Direction | Event | Body |
+|---|---|---|
+| S→C | `rlsmpSmartTraffic` | `{enabled, mix = {normal, slow, aggressive, racer, drunk}, policeReact}` sent once when a player finishes loading (also when `enabled` is false) |
+
+Server `smartTraffic.lua` owns `config.smartTraffic` (defaults: on, mix 80/10/6/3/1, policeReact on) and sends weights as numbers >= 0
+(anything else becomes 0); they need not add up to 100. Client `personalities.lua` (`rlsmp_personalities`, pure logic in `lib/personality.lua`)
+does nothing until this arrives, and only in a multiplayer session while the career is active.
+
+Each game picks one personality per AI traffic car (by vehicle id) the first time the car is seen active, and changes only the game's own AI
+settings: `ai.setAggression`, `ai.setSpeedMode("limit")` + `ai.setSpeed` (cap worked out from the road limit) or `"legal"`, `ai.driveInLane`.
+`normal` is left to RLS. Settings are re-sent every ~20 s (+-4 s), at once after RLS respawns the car or gives it the standard role back,
+when the road limit changes, and on each drunk event (lane keeping off for 1-2.5 s every 8-20 s, a new speed every 4-8 s, 15% of those a
+hard brake). Skipped: anything but RLS's `standard` role, cars in or about to start a pursuit, the player's car, other players' cars,
+parked cars, the player's garage cars, crashed cars (until RLS respawns them), cars RLS's vehicle policy marks `roleLocked` / `pursuitImmune`, inactive cars. Cars handed back for any
+reason but a pursuit, role change or crash, and every car when the feature turns off or the career closes, get RLS's traffic values back
+(`baseAggression`, `"legal"`, lane keeping on). No horn, lights or markers.
+
+`policeReact`: a racer or drunk that is fast (over max(16.7 m/s, 1.2 x limit + 2 m/s)) or weaving, on two checks in a row, within 80 m of an
+AI police car that is free (no target, no pursuit mode, not on cooldown or disabled), gets `setPursuitMode(1, carId, policeId)` (RLS's police service). At most one per 60 s per game, never
+while the player is chased (`rlsmp_police.isPursuit()`) or another pursuit runs. Not a network event. Log lines: `RLSMP-P3 ... smart:`.
+
 ## Business (chat commands, server-side)
 
 Typed in BeamMP chat, hidden from other players. Money moves through the server wallet and

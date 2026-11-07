@@ -1,6 +1,6 @@
-# Handoff: take over from Claude A (written at 0.4.14)
+# Handoff: take over from Claude A (written at 0.4.14, kept up to date, now 0.4.17)
 
-Read first: `docs/HANDOFF_CLAUDE_B.md` (architecture, lessons, rules), `docs/COLLAB.md`, `docs/PROTOCOL.md`, `docs/DESIGN_THEFT_PLATES_TRAFFIC.md` (owner's decisions for the next features), `CHANGELOG.md`.
+Read first: `docs/RESEARCH_PLATES_THEFT.md` (what RLS gives us for plates, police, parked cars, parts; read before building plate reading or theft), `docs/HANDOFF_CLAUDE_B.md` (architecture, lessons, rules), `docs/COLLAB.md`, `docs/PROTOCOL.md`, `docs/DESIGN_THEFT_PLATES_TRAFFIC.md` (owner's decisions for the next features), `CHANGELOG.md`.
 Branch: **`claude/amazing-sagan-kh6ecn`** (only push there; always `git fetch origin claude/amazing-sagan-kh6ecn && git rebase origin/claude/amazing-sagan-kh6ecn` before pushing; `tests/run.sh` must pass; no PR unless asked).
 Repo on GitHub: `debisongit/rls-multiplayer` (default listing shows our branch).
 
@@ -11,7 +11,7 @@ Repo on GitHub: `debisongit/rls-multiplayer` (default listing shows our branch).
 - Never edit RLS or BeamMP files. Never copy CareerMP code.
 
 ## State right now
-- **Latest build: 0.4.14** (all `tests/run.sh` suites pass). GitHub Release page `v0.4.13` exists (zip attached); the **v0.4.14 release workflow run succeeded** (check the Releases page for the zip).
+- **Latest build: 0.4.15** (all `tests/run.sh` suites pass). GitHub Release page `v0.4.13` exists (zip attached); the **v0.4.14 release workflow run succeeded** (check the Releases page for the zip).
 - Last confirmed in-game by the owner: joining on 0.4.10 for one player; the other player's download stalled (153/177 or 129/177 pieces). 0.4.11 added flow control (server sends in a window of 24 chunks and waits for `rlsmpChunkProgress`) and 0.4.10 added resend. **Nothing from 0.4.11 to 0.4.14 has been played.** First thing to ask the owner: did the save download finish with 0.4.11+? If not, get the server console lines (`[rlsmp-timing]`, "asked for N missing chunks").
 - Server log noise they sent (harmless): `zlib uncompress() failed, trying with a larger buffer` (BeamMP unpacking a big upload burst) and `Ignored a change to ...difficultyMode.json` (RLS rewrote a locked start-settings file; server keeps its copy). Could lower that log line to debug.
 
@@ -23,6 +23,14 @@ Repo on GitHub: `debisongit/rls-multiplayer` (default listing shows our branch).
 5. Publish: the sandbox cannot push tags or call a create-release API, but the GitHub MCP tool **`mcp__github__actions_run_trigger`** (method `run_workflow`, owner `debisongit`, repo `rls-multiplayer`, workflow `release.yml`, ref `claude/amazing-sagan-kh6ecn`, inputs `{"version":"0.4.15"}`) starts `.github/workflows/release.yml` on the owner's account. It builds the zip and creates a **pre-release** (or attaches the zip if the release page already exists). Check the run with `actions_list`.
    Note: tag `v0.4.13` already exists remotely at an older commit.
 
+## Update log (newest first; update this on every build)
+- **0.4.17**: duplicate car after changing parts. Log `38de4064-beamng.log` (build 0.4.12 client): garage car 170592 (server id 1-0) was never deleted when RLS replaced it after a part change; RLS's `inventory/spawn.lua` `createSpawnedVehicle` uses `core_vehicles.replaceVehicle(model, data, oldVehObj)` and the log shows a NEW vehicle 182628 spawned while the old kept receiving part conditions, with BeamMP syncing the part-shop preview car (`partsTree` spawn, 182124) as a real vehicle (server id 1-9) and a spawn/delete id race on 1-9. Root cause NOT proven (probably BeamMP and `replaceVehicle` interacting). We added `rlsmp/dedupe.lua` (symptom fix: delete a local car with the same model and plate as an inventory slot but not bound to it, after 4 s, never the player's current car). Next step if it still happens: log inventory binding changes and `onVehicleDestroyed` ids around a part change, or wrap `core_vehicles.replaceVehicle` to delete the old object ourselves.
+- **0.4.16**: stuck traffic recycling (`rlsmp/unjam.lua` + `lib/unjam.lua`, 30 s still then fadeOut via RLS's own recycle, one car per 5 s, skips visible/near-player/police/job cars; thresholds are constants at the top of `lib/unjam.lua`, not in config yet). Owner reported traffic cars getting stuck and honking. Untested. `bubble.stayFor(car)` was added for it.
+- 0.4.15: smart traffic personalities merged (see below), research in `docs/RESEARCH_PLATES_THEFT.md`.
+- Owner's design answers for theft, plates, black market: `docs/DESIGN_THEFT_PLATES_TRAFFIC.md`.
+
+## Update: 0.4.15 merged smart traffic; the research report is in `docs/RESEARCH_PLATES_THEFT.md`. The "Unmerged" section below is history.
+
 ## Unmerged work in progress (two background helpers were still running)
 Helpers work in git worktrees under `.claude/worktrees/agent-*` (git-ignored) and commit there; their commits are visible from the main repo, so merge with `git cherry-pick <hash>` (resolve `tests/run.sh` conflicts by keeping both lines). Check `git branch -a` for `worktree-agent-*` branches and `git log <branch>`.
 1. **Smart traffic personalities** (agent id `a4eaee6d7a64f1b48`, branch `worktree-agent-a4eaee6d7a64f1b48`): server `smartTraffic.lua` + client `rlsmp/personalities.lua`. If its commit exists, review it, cherry-pick, run tests, bump to 0.4.15, changelog, release. If nothing was committed, rebuild from the spec in `docs/DESIGN_THEFT_PLATES_TRAFFIC.md` section 1 (mix 80/10/6/3/1, drunk weaves by toggling `ai.driveInLane`, racers high aggression, no hints, cops chase racers/drunk, rate limited, config `smartTraffic`).
@@ -31,7 +39,7 @@ Helpers work in git worktrees under `.claude/worktrees/agent-*` (git-ignored) an
 ## Next features (owner's order and decisions are in `docs/DESIGN_THEFT_PLATES_TRAFFIC.md`)
 1. **Smart traffic** (above).
 2. **Plate reading and police records**: cop reads plate within ~15 m, under ~50 km/h, 3 to 6 s, letter by letter, progress shown to the player; record belongs to the plate, shared server-wide (server module keeps `plateFlags`, flag ~2 real hours, plate change clears it; model+color memory ~20 min, repaint clears; flagged plate = instant chase, cop skips 1 in 5). Needs the research result for where plates/paint live and a hook to start a pursuit.
-3. **Car theft**: server picks a few parked cars per area per session (same for all players), they spawn non-simplified; short timed actions (hold key, progress bar, noise) with methods by car value/year (window + screwdriver, signal cloning device, harder ones TBD); witness check then report after 30-120 s (seen) or ~10 min (unseen); strip for parts / resell after changing plate + VIN + a part number / gamble; caught in a reported car = chase, fine, car taken back. **Open questions to ask the owner**: how items (screwdriver, cloner, fake plates, VIN plates) are obtained (shop, found, crafted) and what the "other ways" for the hardest cars are.
+3. **Car theft**: server picks a few parked cars per area per session (same for all players), they spawn non-simplified; short timed actions (hold key, progress bar, noise) with methods by car value/year (window + screwdriver, signal cloning device, harder ones TBD); witness check then report after 30-120 s (seen) or ~10 min (unseen); strip for parts / resell after changing plate + VIN + a part number / gamble; caught in a reported car = chase, fine, car taken back. **Answered**: items come from a custom black market (phone app + drop spot), tools last forever, invite + reputation access, theft methods by car age are in the design doc. **Still to ask**: how reputation is earned and lost, invites per player, drop spot rules, prices.
    `rlsmp/vehicleGuard.lua` currently blocks entering any non-owned car; theft needs an exception path (its comment says "A future steal feature would add its exception in isBlocked()").
 
 ## Other open items

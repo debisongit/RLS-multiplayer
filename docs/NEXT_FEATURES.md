@@ -57,6 +57,11 @@ All of this is **client-side per game**, seeded and scheduled by the server so p
 
 Risk: more AI per game = more CPU. Needs the quota system above and a global on/off switch.
 
+**Built (untested in-game): driver personalities** (`config.smartTraffic`, server `smartTraffic.lua`, client `personalities.lua` +
+`lib/personality.lua`, event `rlsmpSmartTraffic`). Built-in AI settings only: normal 80 / slow 10 / aggressive 6 / racer 3 / drunk 1,
+everyone keeps their lane except the drunk's short weaves; nearby AI police may chase racers and drunks (`policeReact`, one per minute per game).
+No plates, street-racer pairs and road events are still open.
+
 ## Decisions made (by the owner)
 
 - Dashcam = $100 per-car upgrade. **Built** (`/dashcam`).
