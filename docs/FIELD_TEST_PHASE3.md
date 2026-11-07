@@ -382,6 +382,7 @@ shows it through RLS's own weather system, so rain, wet roads and tire grip matc
    ```
    RLSMP-P3|rlsmp_weather loaded
    RLSMP-P3|weather from the server: rain (period 123, 600 s left)
+   RLSMP-P3|weather: RLS's own forecast notifications switched off (they describe the local forecast, not the server's)
    RLSMP-P3|weather: forced rain (RLS showed clear, now shows rain)
    ```
    Send me those lines. **Tell me if the sky or the rain flickers, or if the game stutters when the weather changes.**
@@ -394,6 +395,8 @@ shows it through RLS's own weather system, so rain, wet roads and tire grip matc
 | `W RLSMP-P3|RLS's weather module is not available` | RLS's weather is not loaded; nothing to sync. |
 | `weather: forceCondition(x) failed (refused)` | RLS refused (not ready, or an override). It retries every 30 s. |
 | Many `weather: forced` lines in a row for the same condition | RLS keeps changing it back (its own forecast). One line per RLS change is normal; a stream is not. Send the log. |
+| Phone pop-ups like "Rain approaching" that do not match the weather | They come from RLS's own local forecast. We switch them off (the log line above); if you still get them, tell me. |
+| RLS's weather app (phone) shows a different forecast | Expected: the app shows the player's local forecast, not the server's. |
 | The time of day jumps to noon when it turns clear | The clock restore did not work. Send the log. |
 | Rain but the roads are dry, or grip feels wrong | RLS applies wetness itself. Tell me what condition and for how long. |
 
@@ -401,6 +404,8 @@ shows it through RLS's own weather system, so rain, wet roads and tire grip matc
 - Never played. Based on reading RLS's weather code; the engine's own code is not visible to me.
 - Still local to each game: RLS's morning fog, the temperature, and the timing of thunder sounds.
 - Changes snap (RLS applies a forced condition immediately) instead of fading.
+- When a game's own forecast moves into its next segment it can show its own weather for up to about 2 seconds before it is forced back. Tell me if you notice it.
+- On by default (unlike live swapping). Kill switch: `"weather": {"enabled": false}` in the server config. RLS saves "dynamic weather on", "rainy days allowed" and "forecast notifications off" in each player's career save; switching the feature off later does not undo that.
 - RLS saves the forced condition in the player's career save (its dynamic weather setting becomes on, rainy days allowed). That is expected.
 - The mix is followed roughly: the in-between conditions are a little more common than their weights say.
 

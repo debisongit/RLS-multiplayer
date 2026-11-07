@@ -7,7 +7,9 @@
 -- condition again. We only force when the server's condition changed or RLS changed what it shows after our last force, never in a loop.
 --   * forceCondition("clear") moves RLS's clock to 12:00; we put it back to the server's game minute (rlsmp_clock) at once.
 --   * if RLS's "external override" is on (another weather mod), we do nothing.
--- Known gaps: RLS's morning fog, temperature and thunder timing stay local; changes snap instead of fading.
+-- RLS fires phone notifications ("Rain approaching", "Storm approaching", "Fog forming") from the player's OWN local forecast, which no longer
+-- matches what they see, so we switch RLS's forecastNotifications off once per session (it is saved in the career, which only exists on this server).
+-- Known gaps: RLS's morning fog, temperature and thunder timing stay local; RLS's weather app shows the local forecast; changes snap instead of fading.
 -- Active only in a multiplayer session while the RLS career is active, after the server's first message.
 
 local M = {}
@@ -27,6 +29,7 @@ local shownAfter              -- what RLS showed right after our last force
 local clock, timer = 0, 0
 local lastForceAt, nextTryAt = -math.huge, 0
 local failures = 0
+local silenced = false       -- RLS's own forecast notifications switched off this session
 
 local function careerActive() return overhaul_career_career ~= nil and overhaul_career_career.isActive() end
 local function active() return target ~= nil and mp.isMPSession() and careerActive() end
@@ -39,7 +42,7 @@ local function shown(W)
 end
 
 local function serverMinute()
-  local c = package.loaded["rlsmp/clock"]
+  local c = rawget(_G, "rlsmp_clock") or package.loaded["rlsmp/clock"]
   return c and c.minuteNow and c.minuteNow() or nil
 end
 
@@ -58,6 +61,11 @@ function M.check()
   if clock < nextTryAt or clock - lastForceAt < MIN_GAP then return false end
   local current = shown(W)
   if not current then return false end                                  -- RLS weather not ready yet
+  if not silenced and W.setSetting then
+    silenced = true
+    local ok = pcall(W.setSetting, "forecastNotifications", false)
+    p3.log("I", "weather: RLS's own forecast notifications switched off (they describe the local forecast, not the server's)" .. (ok and "" or " - failed"))
+  end
   if forcedFor == target and current == shownAfter then return false end  -- RLS still shows what we set
   local ok, result = pcall(W.forceCondition, target)
   if not ok or result == false then
@@ -98,7 +106,7 @@ function M.onUpdate(dtReal)
 end
 
 function M.onServerLeave()
-  target, forcedFor, shownAfter, failures = nil, nil, nil, 0
+  target, forcedFor, shownAfter, failures, silenced = nil, nil, nil, 0, false
   lastForceAt, nextTryAt = -math.huge, 0
 end
 

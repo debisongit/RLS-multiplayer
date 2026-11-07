@@ -205,7 +205,8 @@ Chat: `/duel <player>`, `/duel accept`, `/duel cancel`, `/duel claim`. Needs at 
   smoothly to the next one's, split into conditions by the weights of `weather.mix` (so it passes through the conditions in between, one step at a time). Config `weather = {enabled, periodMinutes = 15,
   syncSeconds = 10, mix = {clear, partlyCloudy, overcast, drizzle, rain, storm}, force = ""}`.
   Client `weather.lua` makes RLS show it with `overhaul_world_weather.forceCondition` (RLS's `forceCondition("clear")` moves its clock to noon, so the clock is put back to the server minute at once) and forces again
-  only when RLS changed what it shows after our last force. Nothing is done while RLS's external override (another weather mod) is active.
+  only when RLS changed what it shows after our last force. Nothing is done while RLS's external override (another weather mod) is active. RLS's own forecast phone notifications
+  (`forecastNotifications`) are switched off once per session, because they describe the player's local forecast.
 
 ## Shared dealership stock (server `shop.lua`; off by default: `shop.shared`)
 

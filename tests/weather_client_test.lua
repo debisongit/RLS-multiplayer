@@ -13,7 +13,7 @@ AddEventHandler = function(name, fn) handlers[name] = fn end
 function setExtensionUnloadMode() end
 
 local VALID = {clear = true, partlyCloudy = true, overcast = true, drizzle = true, rain = true, storm = true}
-local rls = {condition = "clear", minute = 300, ready = true, override = false, refuse = false, effective = {}, forced = {}, minuteSets = {}}
+local rls = {condition = "clear", minute = 300, ready = true, override = false, refuse = false, effective = {}, forced = {}, minuteSets = {}, settings = {}}
 overhaul_world_weather = {
   getUiState = function() if not rls.ready then return {ready = false} end return {ready = true, condition = rls.condition} end,
   forceCondition = function(c)
@@ -25,6 +25,7 @@ overhaul_world_weather = {
   end,
   setMinuteOfDay = function(m, freeze) rls.minuteSets[#rls.minuteSets + 1] = m rls.minute = m return true end,
   isExternalOverrideActive = function() return rls.override end,
+  setSetting = function(key, value) rls.settings[#rls.settings + 1] = {key, value} return true end,
 }
 package.loaded["rlsmp/clock"] = {minuteNow = function() return 1000 end}
 local mp, career = true, true
@@ -54,6 +55,10 @@ check(#rls.forced == 1, "RLS still shows rain: not forced again, however often w
 server({c = "rain", p = 12, n = 540})
 run(20)
 check(#rls.forced == 1, "the same message again changes nothing")
+
+-- RLS's own forecast notifications describe the LOCAL forecast: switched off, once, before the first force
+check(#rls.settings == 1 and rls.settings[1][1] == "forecastNotifications" and rls.settings[1][2] == false, "RLS's forecast notifications switched off once")
+check(saw("weather: RLS's own forecast notifications switched off"), "...and said so")
 
 -- 3. RLS moves on by itself (next forecast segment): corrected -------------------------------------------------------------------
 rls.condition = "overcast"
@@ -97,6 +102,14 @@ check(#rls.forced == 0, "RLS weather not ready: waiting")
 rls.ready = true
 run(3)
 check(#rls.forced == 1 and rls.condition == "rain", "ready: forced")
+check(#rls.settings == 2, "a new session switches the notifications off again (once)")
+local savedSet = overhaul_world_weather.setSetting
+T.onServerLeave() overhaul_world_weather.setSetting = nil rls.forced, rls.condition = {}, "clear"
+server({c = "rain"})
+run(6)
+check(rls.condition == "rain", "an RLS without setSetting: no error, the weather is still forced")
+overhaul_world_weather.setSetting = savedSet
+rls.condition = "clear"
 
 -- 8. another weather mod has priority ------------------------------------------------------------------------------------------------------------
 T.onServerLeave() rls.forced, rls.condition = {}, "clear"
