@@ -1,9 +1,16 @@
-# Publishes a GitHub Release when a version tag (v0.4.13) is pushed.
+# Publishes a GitHub Release.
+#  - push a tag like v0.4.13, or
+#  - run it by hand (Actions > Release > Run workflow) with the version number.
 # The release has a ready-to-copy zip (server plugin + client mod) and the changelog entry for that version.
 name: Release
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version without the v, for example 0.4.13"
+        required: true
 permissions:
   contents: write
 jobs:
@@ -11,22 +18,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Work out the version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then v="${{ github.event.inputs.version }}"; else v="${GITHUB_REF_NAME#v}"; fi
+          echo "BUILD=$v" >> "$GITHUB_ENV"
       - name: Build the release folder
         run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq lua5.3 luajit
+          sudo apt-get update -qq && sudo apt-get install -y -qq lua5.3 luajit luacheck || true
           tools/make_release.sh
-          build="${GITHUB_REF_NAME#v}"
-          (cd release && zip -qr "RLS-Career-MP-$build.zip" "RLS-Career-MP-$build")
-      - name: Notes for this version
-        run: |
-          build="${GITHUB_REF_NAME#v}"
-          awk -v v="## $build" '$0==v{p=1;next} /^## /{p=0} p' CHANGELOG.md > notes.md
-          echo "" >> notes.md
-          echo "Install: unzip, copy the Resources folder into your BeamMP server folder (see INSTALL.txt inside). Full history: CHANGELOG.md." >> notes.md
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          build="${GITHUB_REF_NAME#v}"
-          gh release create "$GITHUB_REF_NAME" "release/RLS-Career-MP-$build.zip" \
-            --title "RLS-Career-MP $build" --notes-file notes.md --prerelease
+          have="$(grep -o 'BUILD = "[^"]*"' Resources/Server/RLS-Career-MP/lua/rlsmp/shared/transfer.lua | cut -d'"' -f2)"
+          [ "$have" = "$BUILD" ] || { echo "Code is build $have but you asked for $BUILD"; exit 1; }
+          gh release create "v$BUILD" "release/RLS-Career-MP-$BUILD.zip" --target "$GITHUB_SHA" \
+            --title "RLS-Career-MP $BUILD" --notes-file "release/NOTES-$BUILD.md" --prerelease
