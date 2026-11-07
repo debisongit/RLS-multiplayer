@@ -28,6 +28,7 @@ luajit tests/guard_test.lua
 luajit tests/claims_client_test.lua
 luajit tests/traffic_labels_client_test.lua
 luajit tests/unstuck_test.lua
+luajit tests/world_client_test.lua
 luajit tests/join_protect_test.lua
 luajit tests/traffic_client_test.lua
 luajit tests/police_client_test.lua
