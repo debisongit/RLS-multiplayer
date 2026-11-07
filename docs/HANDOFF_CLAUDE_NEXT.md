@@ -1,6 +1,6 @@
 # Handoff: take over from Claude A (written at 0.4.14)
 
-Read first: `docs/HANDOFF_CLAUDE_B.md` (architecture, lessons, rules), `docs/COLLAB.md`, `docs/PROTOCOL.md`, `docs/DESIGN_THEFT_PLATES_TRAFFIC.md` (owner's decisions for the next features), `CHANGELOG.md`.
+Read first: `docs/RESEARCH_PLATES_THEFT.md` (what RLS gives us for plates, police, parked cars, parts; read before building plate reading or theft), `docs/HANDOFF_CLAUDE_B.md` (architecture, lessons, rules), `docs/COLLAB.md`, `docs/PROTOCOL.md`, `docs/DESIGN_THEFT_PLATES_TRAFFIC.md` (owner's decisions for the next features), `CHANGELOG.md`.
 Branch: **`claude/amazing-sagan-kh6ecn`** (only push there; always `git fetch origin claude/amazing-sagan-kh6ecn && git rebase origin/claude/amazing-sagan-kh6ecn` before pushing; `tests/run.sh` must pass; no PR unless asked).
 Repo on GitHub: `debisongit/rls-multiplayer` (default listing shows our branch).
 
