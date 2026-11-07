@@ -517,3 +517,10 @@ Known gaps: police cannot ping a tracker or be sent after a car you stole with o
 6. Send me: the `traffic menu`, `RLSMP-ADMIN` and `RLSMP-THEFT` lines.
 
 Known gaps: never played. Drop spot places and the admin names are only in `config.json`. Changes made to `config.json` by hand while the server runs are overwritten by the next Apply.
+
+
+## Plate reading fixes (build 0.4.29)
+
+1. Two players drive the same model in the same colour. Player A escapes a police chase (so the car's description is remembered for 20 minutes). Player B drives slowly past a cop: B should NOT get the "wanted" chase from the description. If A changes plates and drives slowly past a cop, A still should.
+2. Menu, Police page: untick "Police rules on" and Apply. Cops should stop reading plates (no "Police reading your plate" text) until you tick it again.
+3. Send the `[plates]` server log lines and the `plates` client log lines if anything looks wrong.

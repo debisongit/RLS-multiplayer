@@ -155,6 +155,11 @@ local function intInput(ui, label, path, minV, maxV)
   end
 end
 
+-- A plain number setting (always there, cannot be reset or removed): a slider.
+local function num(ui, label, path, minV, maxV, fmt)
+  weightSlider(ui, label, path, minV, maxV, minV, fmt, true)
+end
+
 -- The effective weight of one model: its own entry, else its Type's, else 1.
 local function effectiveModelWeight(modelKey, t)
   local own = L.get(st, {"trafficVariety", "models", modelKey}, nil)
@@ -284,13 +289,19 @@ local function sectionWeather(ui)
 end
 
 local function sectionPolice(ui)
+  checkbox(ui, "Police rules on (also switches plate reading off)", {"police", "enabled"})
   checkbox(ui, "Police cannot appear in front of a chased player", {"police", "antiTeleport"})
   checkbox(ui, "No roadblocks", {"police", "blockRoadblocks"})
-end
-
--- A plain number setting (always there, cannot be reset or removed): a slider.
-local function num(ui, label, path, minV, maxV, fmt)
-  weightSlider(ui, label, path, minV, maxV, minV, fmt, true)
+  ui.Separator()
+  ui.TextWrapped("Plate reading: a cop close to you and slow reads your plate. A flagged plate (after an escape, an arrest or a reported theft) gets a chase. The remembered car description (model and colour) only catches the player who made it.")
+  checkbox(ui, "Plate reading on", {"police", "plateReading", "enabled"})
+  num(ui, "A cop reads from (m)", {"police", "plateReading", "rangeMeters"}, 3, 50, "%.0f")
+  num(ui, "...and you slower than (km/h)", {"police", "plateReading", "maxSpeedKmh"}, 5, 120, "%.0f")
+  num(ui, "Chance a cop bothers to read", {"police", "plateReading", "readChance"}, 0, 1)
+  num(ui, "...the same, after you escaped", {"police", "plateReading", "afterEscapeChance"}, 0, 1)
+  num(ui, "Chance a cop lets a flagged plate go", {"police", "plateReading", "skipChance"}, 0, 1)
+  num(ui, "A flagged plate stays flagged (s)", {"police", "plateFlagSeconds"}, 60, 14400, "%.0f")
+  num(ui, "A car description stays (s)", {"police", "descriptionSeconds"}, 60, 7200, "%.0f")
 end
 
 local function sectionTheft(ui)

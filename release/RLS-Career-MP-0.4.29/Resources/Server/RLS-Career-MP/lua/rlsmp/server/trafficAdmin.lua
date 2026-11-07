@@ -54,6 +54,15 @@ local STATIC = {
   ["weather.force"] = {"enum", values = {[""] = true, clear = true, partlyCloudy = true, overcast = true, drizzle = true, rain = true, storm = true}},
   ["police.antiTeleport"] = {"bool"},
   ["police.blockRoadblocks"] = {"bool"},
+  ["police.enabled"] = {"bool"},
+  ["police.plateFlagSeconds"] = {"number", 60, 86400, true},
+  ["police.descriptionSeconds"] = {"number", 60, 86400, true},
+  ["police.plateReading.enabled"] = {"bool"},
+  ["police.plateReading.rangeMeters"] = {"number", 3, 100},
+  ["police.plateReading.maxSpeedKmh"] = {"number", 5, 200},
+  ["police.plateReading.readChance"] = {"number", 0, 1},
+  ["police.plateReading.afterEscapeChance"] = {"number", 0, 1},
+  ["police.plateReading.skipChance"] = {"number", 0, 1},
 }
 for _, name in ipairs(PERSONALITIES) do STATIC["smartTraffic.mix." .. name] = {"number", 0, 100} end
 for _, name in ipairs(CONDITIONS) do STATIC["weather.mix." .. name] = {"number", 0, 100} end
@@ -254,9 +263,15 @@ end
 
 function M.snapshot()
   local t, s, v, w, p = config.traffic or {}, config.smartTraffic or {}, config.trafficVariety or {}, config.weather or {}, config.police or {}
+  local pr = type(p.plateReading) == "table" and p.plateReading or {}
   local swap = type(v.swap) == "table" and v.swap or {}
   local limits = type(v.zoneSpeedLimits) == "table" and v.zoneSpeedLimits or {}
   local extra = copyRuled({theft = true, fence = true, market = true})
+  -- A method without an "enabled" key is ON (theft.lua: enabled ~= false); show it that way, or the menu would list every method as off.
+  for name, m in pairs(type(extra.theft) == "table" and type(extra.theft.methods) == "table" and extra.theft.methods or {}) do
+    local real = config.theft.methods[name]
+    if type(m) == "table" and type(real) == "table" then m.enabled = real.enabled ~= false end
+  end
   return {
     theft = extra.theft, fence = extra.fence, market = extra.market,
     traffic = {enabled = t.enabled, totalBudget = t.totalBudget, baseBudget = t.baseBudget, perPlayerBudget = t.perPlayerBudget,
@@ -270,7 +285,10 @@ function M.snapshot()
       swap = {enabled = swap.enabled, live = swap.live, perMinute = swap.perMinute, hiddenSeconds = swap.hiddenSeconds,
         minRatio = swap.minRatio, maxFailures = swap.maxFailures}},
     weather = {enabled = w.enabled, force = w.force, mix = copyMap(w.mix), periodMinutes = w.periodMinutes},
-    police = {antiTeleport = p.antiTeleport, blockRoadblocks = p.blockRoadblocks},
+    police = {enabled = p.enabled, antiTeleport = p.antiTeleport, blockRoadblocks = p.blockRoadblocks,
+      plateFlagSeconds = p.plateFlagSeconds, descriptionSeconds = p.descriptionSeconds,
+      plateReading = {enabled = pr.enabled, rangeMeters = pr.rangeMeters, maxSpeedKmh = pr.maxSpeedKmh, readChance = pr.readChance,
+        afterEscapeChance = pr.afterEscapeChance, skipChance = pr.skipChance}},
   }
 end
 
@@ -304,7 +322,7 @@ local function tooFast(pid)
 end
 
 local function modulesResend()
-  for _, name in ipairs({"smartTraffic", "trafficVariety", "trafficPolice", "theft"}) do
+  for _, name in ipairs({"smartTraffic", "trafficVariety", "trafficPolice", "theft", "plateRecords"}) do
     local ok, mod = pcall(require, "rlsmp.server." .. name)
     if ok and type(mod) == "table" and mod.resend then mod.resend() end
   end

@@ -57,6 +57,9 @@ local function descKey(model, color) return model .. "|" .. color end
 
 local function save() if file then storage.writeJson(file, data) end end
 
+-- Plate reading works when the police module is on AND plate reading itself is on (police.enabled = false switches both off).
+local function active() return cfg ~= nil and cfg.enabled ~= false and pcfg ~= nil and pcfg.enabled == true end
+
 local function flagSeconds() return tonumber(cfg.plateFlagSeconds) or 7200 end
 local function descSeconds() return tonumber(cfg.descriptionSeconds) or 1200 end
 
@@ -77,7 +80,10 @@ function M.flag(plate, model, color, reason, by)
 end
 
 -- {flagged, reason, matchedBy = "plate" | "description" | nil}. Pure read, expired entries count as absent.
-function M.lookup(plate, model, color)
+-- `by` = the account id of the player whose car is read. When given (the server always gives it), a remembered DESCRIPTION (model + colour)
+-- only counts for the player who made it: a stranger who happens to drive the same model in the same colour is not chased. A plate match
+-- still counts for anybody (a sold car keeps its flag). `false` (a player without an account id) never matches a description.
+function M.lookup(plate, model, color, by)
   plate, model, color = M.cleanPlate(plate), M.cleanModel(model), M.cleanColor(color)
   if not plate or not model then return {flagged = false} end
   local now = util.now()
@@ -86,7 +92,7 @@ function M.lookup(plate, model, color)
     return {flagged = true, reason = f.reason, matchedBy = "plate"}
   end
   local d = color and data.desc[descKey(model, color)]
-  if d and now - (d.t or 0) < descSeconds() then
+  if d and now - (d.t or 0) < descSeconds() and (by == nil or (by ~= false and d.by == by)) then
     return {flagged = true, reason = d.reason, matchedBy = "description"}
   end
   return {flagged = false}
@@ -131,7 +137,7 @@ local function n(v, default) v = tonumber(v) return (v and v == v and v < math.h
 
 function M.payload()
   return {
-    enabled = pcfg.enabled == true,
+    enabled = active(),
     rangeMeters = n(pcfg.rangeMeters, 15),
     maxSpeedKmh = n(pcfg.maxSpeedKmh, 50),
     minSeconds = n(pcfg.minSeconds, 3),
@@ -153,7 +159,7 @@ local function loaded(pid)
 end
 
 local function onEscaped(pid, d)
-  if not pcfg.enabled then return end
+  if not active() then return end
   local s = loaded(pid)
   if not s then return end
   local now = util.now()
@@ -182,13 +188,13 @@ local function onLookup(pid, d)
   local now = util.now()
   local result
   local gap = 60 / math.max(1, n(pcfg.lookupsPerMinute, 20))
-  if not pcfg.enabled then
+  if not active() then
     result = {flagged = false}
   elseif lastLookup[pid] and now - lastLookup[pid] < gap then
     result = {flagged = false, limited = true}   -- answered anyway, so the game never waits
   else
     lastLookup[pid] = now
-    result = M.lookup(plate, model, d.color)
+    result = M.lookup(plate, model, d.color, loaded(pid).accountId or false)
   end
   result.plate, result.model = plate, model
   net.send(pid, "rlsmpPlateResult", result)
@@ -199,7 +205,7 @@ local function onLookup(pid, d)
 end
 
 local function onChanged(pid, d)
-  if not pcfg.enabled or not loaded(pid) then return end
+  if not active() or not loaded(pid) then return end
   local now = util.now()
   if lastChange[pid] and now - lastChange[pid] < CHANGE_EVERY then return end
   lastChange[pid] = now
@@ -210,6 +216,9 @@ local function onChanged(pid, d)
   local oldColor, color = M.cleanColor(d.oldColor), M.cleanColor(d.color)
   if oldColor and oldColor ~= color then M.clearDescription(model, oldColor) end
 end
+
+-- Settings changed from the menu: every game gets the plate settings again.
+function M.resend() told = {} end
 
 function M.tick()
   local now = util.now()
@@ -248,7 +257,7 @@ function M.init(config, pluginRoot)
   net.onClient("rlsmpPlateChanged", onChanged)
   net.on("rlsmpPlateTick", M.tick)
   MP.CreateEventTimer("rlsmpPlateTick", 1000)
-  util.info("Plate reading: enabled=" .. tostring(pcfg.enabled) .. ", flag " .. flagSeconds() .. "s, description " .. descSeconds() .. "s")
+  util.info("Plate reading: enabled=" .. tostring(active()) .. ", flag " .. flagSeconds() .. "s, description " .. descSeconds() .. "s")
 end
 
 return M

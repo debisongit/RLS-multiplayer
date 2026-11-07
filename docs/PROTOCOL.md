@@ -90,10 +90,10 @@ refuses `gameplay_traffic.forceTeleport` on police units. Everything is restored
 
 Server `plateRecords.lua` owns `config.police.plateFlagSeconds` (7200), `config.police.descriptionSeconds` (1200) and `config.police.plateReading` (master switch `enabled`, default on).
 It keeps, shared by every player: **plate flags** keyed by plate text (trimmed, upper case, at most 16 characters) + model, valid `plateFlagSeconds`; **car descriptions** keyed by model + colour name, valid `descriptionSeconds`.
-A lookup matches a fresh flag first (`matchedBy = "plate"`), then a fresh description (`"description"`). Saved in `plates.json`, expired entries pruned every minute.
+A lookup matches a fresh flag first (`matchedBy = "plate"`, whoever drives that plate + model), then a fresh description (`"description"`) - and a description only for the player whose account made it (the `by` stored with it; a player without an account id never matches one). The client only reads its OWN player's car, so the asker is the driver. Saved in `plates.json`, expired entries pruned every minute.
 - `rlsmpPlateEscaped` is accepted only from a loaded player, at most once per `escapeCooldownSeconds` (60), and only if `positions` saw that player chased within `escapeNeedsChaseSeconds` (300, 0 = trust the client). It flags the plate (reason `escaped`) and remembers the description when a colour is given.
 - `rlsmpPlateChanged`: at most one per 3 s per player. A different plate text deletes the flag of `oldPlate` + model; a different colour deletes the description `model` + `oldColor`.
-- Lookups: at most `lookupsPerMinute` (20) per player are looked up; every lookup gets an answer. While `enabled` is false lookups answer clean and escapes / changes are ignored.
+- Lookups: at most `lookupsPerMinute` (20) per player are looked up; every lookup gets an answer. While plate reading is off (`plateReading.enabled` false, or `police.enabled` false) lookups answer clean and escapes / changes are ignored. The menu can change these settings live (`plateRecords.resend` sends them again).
 - Lua API for other server modules: `flag(plate, model, color, reason, by?)`, `lookup(plate, model, color)`, `clearPlate(plate, model)`, `clearDescription(model, color)`, `prune()`, `records()`.
 
 Client `plates.lua` (`rlsmp_plates`, pure rules in `lib/plateRead.lua`), only in a multiplayer session while the career is active, after the config arrived, every 0.5 s, for the local player's car only:

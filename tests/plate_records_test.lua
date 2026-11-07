@@ -100,6 +100,21 @@ local d = plates.lookup("ZZZ 9", "etk800", "blue")
 check(d.flagged and d.matchedBy == "description", "model + colour remembered")
 check(plates.lookup("ZZZ 9", "etk800", "red").flagged == false, "other colour: no match")
 
+-- the remembered description belongs to the player who made it: a stranger in the same model and colour is NOT chased
+clock = clock + 4
+client("rlsmpPlateLookup", 2, {plate = "ZZZ 9", model = "etk800", color = "blue"})
+res = take("rlsmpPlateResult")
+check(res[1].pid == 2 and res[1].data.flagged == false and res[1].data.limited == nil, "a lookalike car (same model and colour, other player) is not flagged")
+clock = clock + 5
+client("rlsmpPlateLookup", 1, {plate = "ZZZ 9", model = "etk800", color = "blue"})
+res = take("rlsmpPlateResult")
+check(res[1].pid == 1 and res[1].data.flagged == true and res[1].data.matchedBy == "description", "the same player with a new plate is still caught by the description")
+check(plates.lookup("ZZZ 9", "etk800", "blue", "no such account").flagged == false and plates.lookup("ZZZ 9", "etk800", "blue", false).flagged == false,
+  "lookup with an account: only that account's descriptions; false (no account) never matches")
+check(plates.lookup("ZZZ 9", "etk800", "blue", tostring(1000 + 1)).matchedBy == "description", "lookup with the right account matches")
+client("rlsmpPlateLookup", 2, {plate = "AB 123", model = "etk800"})   -- a lookup right before the rate limit check below
+take("rlsmpPlateResult")
+
 -- rate limits
 client("rlsmpPlateLookup", 2, {plate = "AB 123", model = "etk800"})
 res = take("rlsmpPlateResult")
@@ -153,5 +168,28 @@ join(3, "cid")
 fire("rlsmpPlateTick")
 local m = take("rlsmpPlateConfig")
 check(#m == 1 and m[1].pid == 3 and m[1].data.enabled == false, "off is sent too")
+
+-- police.enabled = false switches plate reading off too, and the games hear it
+cfg.police.plateReading.enabled = true
+cfg.police.enabled = false
+plates.flag("KILL 1", "etk800", nil, "x")
+client("rlsmpPlateLookup", 2, {plate = "KILL 1", model = "etk800"})
+res = take("rlsmpPlateResult")
+check(#res == 1 and res[1].data.flagged == false, "police off: lookups answer clean")
+check(plates.payload().enabled == false, "police off: the settings sent to the games say off")
+plates.resend()
+fire("rlsmpPlateTick")
+m = take("rlsmpPlateConfig")
+check(#m >= 1 and m[1].data.enabled == false, "resend: the games are told again")
+cfg.police.enabled = true
+plates.resend()
+fire("rlsmpPlateTick")
+m = take("rlsmpPlateConfig")
+check(#m >= 1 and m[1].data.enabled == true, "police on again: plate reading on again")
+client("rlsmpPlateLookup", 2, {plate = "KILL 1", model = "etk800"})
+clock = clock + 5
+client("rlsmpPlateLookup", 2, {plate = "KILL 1", model = "etk800"})
+res = take("rlsmpPlateResult")
+check(res[#res].data.flagged == true, "and a flagged plate is read again")
 
 print("plate_records_test: " .. passed .. " checks passed")

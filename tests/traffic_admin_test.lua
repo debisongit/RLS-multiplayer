@@ -263,6 +263,18 @@ local sn = admin.snapshot()
 check(sn.theft.perMille == 251 and sn.theft.methods.window_screwdriver.seconds == 12 and sn.theft.tiers.keylessYear == cfg.theft.tiers.keylessYear
   and sn.fence.rep.resell == 5 and sn.market.tiers.screwdriver.price == 999 and sn.market.fenceCarRate == 0.5, "the snapshot has theft, fence and market values")
 check(sn.market.dropSpots == nil and sn.theft.methods.window_screwdriver.items == nil and sn.theft.methods.window_screwdriver.tier == nil, "...and only the editable ones")
+local allOn = true
+for name, m in pairs(sn.theft.methods) do if m.enabled ~= true then allOn = false end end
+check(next(sn.theft.methods) ~= nil and allOn, "the default methods have no enabled key in the config but show as ON in the menu")
+cfg.theft.methods.relay_box.enabled = false
+check(admin.snapshot().theft.methods.relay_box.enabled == false and admin.snapshot().theft.methods.signal_cloner.enabled == true, "a method switched off shows as off")
+cfg.theft.methods.relay_box.enabled = nil
+set(0, {{p = {"police", "enabled"}, v = false}, {p = {"police", "plateReading", "readChance"}, v = 0.2}, {p = {"police", "plateReading", "rangeMeters"}, v = 500}})
+r = lastResult()
+check(r.applied == 2 and #r.rejected == 1 and cfg.police.enabled == false and cfg.police.plateReading.readChance == 0.2 and cfg.police.plateReading.rangeMeters ~= 500,
+  "police on/off and plate reading settings can be edited, out of range refused")
+check(admin.snapshot().police.enabled == false and admin.snapshot().police.plateReading.readChance == 0.2, "the snapshot has them")
+cfg.police.enabled = true
 set(0, {{p = {"theft", "enabled"}, v = false}})
 take()
 check(cfg.theft.enabled == false and admin.snapshot().theft.enabled == false, "theft can be switched off again")
