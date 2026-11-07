@@ -55,6 +55,19 @@ or no `rlsmpHello` within `handshake.helloTimeoutSeconds`.
 `quota = clamp(floor(budget / players), minPerPlayer, maxPerPlayer)` where `budget` = `traffic.totalBudget` if above 0, else `baseBudget + perPlayerBudget x players` (grows with players online). The client only ever *lowers*
 `gameplay_traffic` active amount to the quota (re-checked every 3 s); RLS events that lower traffic are left alone.
 
+### Player positions (groundwork for server-directed traffic)
+
+| Direction | Event | Body |
+|---|---|---|
+| C→S | `rlsmpPos` | `{x, y, z, speed, chased}` meters, m/s, `chased` = the client's `rlsmp_police.isPursuit()` |
+
+Client `positions.lua` checks every 2 s while the career runs, using whatever the player controls (car or walking character).
+It skips the report while the player moved less than 5 m, but sends at least every 10 s and at once (at most every 1.5 s) when `chased` changes.
+Server `positions.lua` accepts it only from loaded players, only finite numbers with |x|,|y| <= 100000, |z| <= 20000, 0 <= speed <= 1000,
+and at most one report per second per player. It keeps the latest one per player and forgets it when the player leaves (or the id is reused).
+Lua API for other server modules: `get(pid)`, `all()`, `distance(a, b)` (horizontal), `near(pid, radius)` (pids, closest first),
+`nearest(pid)` (pid, distance), `isChased(pid)`. Chat `/where` shows your own last stored position.
+
 ## Police pursuits (Phase 3)
 
 | Direction | Event | Body |
