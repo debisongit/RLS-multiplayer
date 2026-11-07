@@ -15,6 +15,8 @@ local M = {}
 
 local cfg
 local outbox = {}       -- pid -> list of pending outgoing transfers
+local recent = {}       -- pid -> transferId -> {chunks, expires}: finished transfers kept briefly so lost chunks can be sent again
+local KEEP_SECONDS = 120
 local nextTransferId = 0
 
 -- BeamMP wants a *global function name* per event. We generate one per event.
@@ -78,10 +80,35 @@ end
 
 function M.dropPlayer(pid)
   outbox[pid] = nil
+  recent[pid] = nil
+end
+
+-- The client says these chunks of transfer `id` never arrived: send them again (works while it is still being sent, too).
+local function onChunkMissing(pid, data)
+  local id, list = tonumber(data.id), data.list
+  if not id or type(list) ~= "table" then return end
+  local chunks
+  for _, job in ipairs(outbox[pid] or {}) do if job.header.id == id then chunks = job.chunks end end
+  if not chunks and recent[pid] and recent[pid][id] then chunks = recent[pid][id].chunks end
+  if not chunks then return end
+  local sent = 0
+  for _, i in ipairs(list) do
+    i = tonumber(i)
+    if i and chunks[i] and sent < 60 then
+      MP.TriggerClientEvent(pid, "rlsmpChunk", util.jsonEncode({id = id, i = i, d = chunks[i]}))
+      sent = sent + 1
+    end
+  end
+  util.info(string.format("[rlsmp-timing] player %s asked for %d missing chunks of #%d, sent %d", tostring(pid), #list, id, sent))
 end
 
 -- Called every pump tick: push a few chunks per player.
 local function pump()
+  local now = os.time()
+  for pid, kept in pairs(recent) do
+    for id, r in pairs(kept) do if r.expires < now then kept[id] = nil end end
+    if next(kept) == nil then recent[pid] = nil end
+  end
   for pid, queue in pairs(outbox) do
     local budget = cfg.transfer.chunksPerTick
     while budget > 0 and queue[1] do
@@ -99,6 +126,8 @@ local function pump()
           util.info(string.format("[rlsmp-timing] sent %s #%s to player %s: %d bytes, %d chunks, %.1fs",
             tostring(job.header.kind), tostring(job.header.id), tostring(pid), job.bytes, #job.chunks, os.clock() - job.t0))
           table.remove(queue, 1)
+          recent[pid] = recent[pid] or {}
+          recent[pid][job.header.id] = {chunks = job.chunks, expires = os.time() + KEEP_SECONDS}
         end
       end
     end
@@ -111,6 +140,7 @@ function M.init(config)
   cfg = config
   M.on("onChatMessage", chatRouter)
   M.on("rlsmpPump", pump)
+  M.onClient("rlsmpChunkMissing", onChunkMissing)
   MP.CreateEventTimer("rlsmpPump", 50)
 end
 

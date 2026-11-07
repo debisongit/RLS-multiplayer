@@ -93,6 +93,25 @@ function M.incomingProgress()
   return got, total
 end
 
+-- Ask the server to send again the chunks of unfinished downloads that have not shown up (at most 50 per transfer).
+function M.requestMissing()
+  local asked = 0
+  for id, job in pairs(incoming) do
+    local list = {}
+    for i = 1, job.assembler.n do
+      if job.assembler.parts[i] == nil then
+        list[#list + 1] = i
+        if #list >= 50 then break end
+      end
+    end
+    if #list > 0 then
+      M.send("rlsmpChunkMissing", {id = tonumber(id), list = list})
+      asked = asked + #list
+    end
+  end
+  return asked
+end
+
 -- Queue an upload: sends beginEvent with {id, n, len, sum} then chunkEvent with {id, i, d}.
 function M.sendBig(beginEvent, chunkEvent, id, text, chunkSize)
   local header, chunks = transfer.describe(text, chunkSize)
@@ -121,6 +140,7 @@ end
 function M.reset()
   incoming = {}
   outgoing = {}
+  registered = {}   -- BeamMP forgets our handlers when a session ends: register them again next time
 end
 
 function M.init()

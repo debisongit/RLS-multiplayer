@@ -150,4 +150,19 @@ check(money == 42 and #sent == 0, "correction applied without echoing back")
 wallet.onOverhaulPlayerAttributesChanged({beamXP = 10}, {})
 check(#sent == 0, "non-money change ignored")
 
+-- lost chunks are asked for again
+do
+  local netlib = require("rlsmp/lib/net")
+  netlib.reset()
+  netlib.init()
+  local tr = require("rlsmp/lib/transfer")
+  local header, chunks = tr.describe(string.rep("y", 50000), 16000)
+  header.id = 77
+  handlers["rlsmpChunkBegin"](json.encode(header))
+  handlers["rlsmpChunk"](json.encode({id = 77, i = 1, d = chunks[1]}))
+  handlers["rlsmpChunk"](json.encode({id = 77, i = 3, d = chunks[3]}))
+  sent = {}
+  check(netlib.requestMissing() == 2, "two chunks missing")
+  check(sent[#sent].name == "rlsmpChunkMissing", "asks the server")
+end
 print(string.format("client_test: %d checks passed", passed))

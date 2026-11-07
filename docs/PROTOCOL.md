@@ -146,6 +146,11 @@ Chat: `/duel <player>`, `/duel accept`, `/duel cancel`, `/duel claim`. Needs at 
   upload kind `duelHand {slip, inv, rec}`, `rlsmpDuelReceived {slip}`, `rlsmpDuelRelease {slip, why}`.
 - Owed cars are kept in `duels.json` until the winner confirms. See the safety rules at the top of `server/duel.lua`.
 
+## Lost chunks
+
+- `rlsmpChunkMissing {id, list}` (client to server): up to 50 chunk numbers of transfer `id` that never arrived. The client asks after 4 s without progress, repeating every 4 s.
+  The server resends them (up to 60 per request) from the running transfer or from a copy it keeps for 2 minutes after sending.
+
 ## Shared time of day
 
 - `rlsmpTime {m, r, dm}` (server to client, every `time.syncSeconds`, loaded players only): game minute of the day (0 = midnight) game minutes per real second right now, and real minutes per full day (RLS day shape).

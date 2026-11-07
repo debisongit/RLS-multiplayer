@@ -33,6 +33,7 @@ local stateTime = 0
 local pending                 -- {profile, isNew, slot, opts}
 local isNewCareer = false
 local firstSaveTimer
+local resendTimer = 0
 local staleCars, staleTimer   -- cars the server says already left (crash recovery), removed shortly after the career starts
 local watch = downloadWatch.new()   -- spots a download that stopped
 
@@ -168,6 +169,16 @@ function M.onUpdate(dtReal)
     local got, total = net.incomingProgress()
     if state == "hello_sent" and got > 0 then setState("downloading") end
     local verdict, logNow = downloadWatch.step(watch, dtReal, got, state)
+    -- Chunks that went missing: ask for them again every 4 s of silence.
+    if state == "downloading" and watch.idle >= 4 then
+      resendTimer = resendTimer + (dtReal or 0)
+      if resendTimer >= 4 then
+        resendTimer = 0
+        timing("asked the server to resend " .. net.requestMissing() .. " chunks")
+      end
+    else
+      resendTimer = 0
+    end
     if logNow then timing(string.format("download %d/%d chunks", got, total)) end
     if verdict == "stalled" then
       log("E", "RLS-Career-MP", string.format("Save download stalled at %d/%d chunks", got, total))
@@ -216,6 +227,10 @@ function M.onExtensionLoaded()
   net.onBig("profile", onProfile)
   net.on("rlsmpError", function(e) toast("error", tostring(e.msg or e.code)) end)
   for _, name in ipairs(MODULES) do
+    -- After leaving a server and joining again the game may still hold an old copy without handlers: start fresh.
+    if extensions.isExtensionLoaded and extensions.unload and extensions.isExtensionLoaded("rlsmp_" .. name) then
+      pcall(extensions.unload, "rlsmp_" .. name)
+    end
     extensions.load("rlsmp_" .. name)
     setExtensionUnloadMode("rlsmp_" .. name, "manual")
   end
