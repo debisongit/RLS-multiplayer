@@ -292,4 +292,34 @@ vanillaCalls = {}
 core_multiSpawn.createGroup(4, TRAFFIC)
 check(vanillaCalls[1] == 4, "after leaving: the game's own group")
 
+-- a model with no .jbeam files (a leftover of a deleted mod; a real log showed G30_Domestic crash the spawn) is never put in a group ------------------------
+server({enabled = true})
+FS = {findFiles = function(self, dir) if dir:find("brokencar", 1, true) then return {} end return {dir .. "body.jbeam"} end}
+models.brokencar = {Type = "Car"}
+for _ = 1, 6 do table.insert(catalogue, 1, {model = "brokencar", config = "c1"}) end
+vanillaCalls = {}
+g = core_multiSpawn.createGroup(10, TRAFFIC)
+check(#g == 10 and countModel(g, "brokencar") == 0, "a model without jbeam files is left out of the group, the group is still full")
+check(saw("variety: brokencar has no .jbeam files"), "...and it is logged once")
+local warnings = 0
+for _, l in ipairs(logged) do if l:find("brokencar has no .jbeam", 1, true) then warnings = warnings + 1 end end
+core_multiSpawn.createGroup(10, TRAFFIC)
+local warnings2 = 0
+for _, l in ipairs(logged) do if l:find("brokencar has no .jbeam", 1, true) then warnings2 = warnings2 + 1 end end
+check(warnings == 1 and warnings2 == 1, "the model is checked and logged only once")
+-- every offered model broken: the game keeps its own group (nil from the extension)
+local only = {}
+catalogue = only
+for _ = 1, 20 do only[#only + 1] = {model = "brokencar", config = "c1"} end
+FS = {findFiles = function() return {} end}
+g = core_multiSpawn.createGroup(5, TRAFFIC)
+check(#g == 5 and g[1].model == "brokencar", "all offered models broken: the game's own group is used instead of an empty one")
+-- if the file system cannot be asked, nothing is filtered (no regression): a model not asked about before passes
+FS = nil
+models.neverasked = {Type = "Car"}
+catalogue = {}
+for _ = 1, 20 do catalogue[#catalogue + 1] = {model = "neverasked", config = "c1"} end
+g = core_multiSpawn.createGroup(5, TRAFFIC)
+check(#g == 5 and g[1].model == "neverasked", "no file system to ask: models are not filtered")
+
 print(string.format("traffic_variety_client_test: %d checks passed", passed))

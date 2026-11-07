@@ -55,6 +55,25 @@ local function typeOfModel(model)
   return found or nil
 end
 
+-- Can this model be spawned at all? A model folder with no .jbeam files (a leftover of a deleted mod: seen in a real log as G30_Domestic) makes the
+-- game's spawn fail ("missing stage 1 data") and BeamMP then throws a FATAL LUA ERROR. Checked once per model; when the game's file system cannot be
+-- asked, every model counts as fine.
+local spawnableCache = {}
+local function spawnable(model)
+  if type(model) ~= "string" then return false end
+  local known = spawnableCache[model]
+  if known ~= nil then return known end
+  local fs = rawget(_G, "FS")
+  local ok = true
+  if fs and fs.findFiles then
+    local good, list = pcall(fs.findFiles, fs, "/vehicles/" .. model .. "/", "*.jbeam", -1, false, false)
+    if good and type(list) == "table" and #list == 0 then ok = false end
+  end
+  spawnableCache[model] = ok
+  if not ok then p3.log("W", "variety: " .. model .. " has no .jbeam files in /vehicles/" .. model .. "/ (a broken or removed mod car): never put in a group") end
+  return ok
+end
+
 -- Same readings as RLS's own filter (trafficConfigFilter.lua), so we treat the same groups as police / parked.
 local function isPoliceIntent(params)
   local f = type(params) == "table" and params.filters and params.filters["Config Type"]
@@ -177,7 +196,9 @@ local function build(original, amount, params)
   local pool = original(size, params)
   if type(pool) ~= "table" or #pool == 0 then return nil end
   local candidates = {}
-  for _, e in ipairs(pool) do candidates[#candidates + 1] = e end
+  for _, e in ipairs(pool) do
+    if spawnable(e.model) then candidates[#candidates + 1] = e end
+  end
   local mods = modCandidates(params)
   for _, e in ipairs(mods) do candidates[#candidates + 1] = e end
   local ctx = context()

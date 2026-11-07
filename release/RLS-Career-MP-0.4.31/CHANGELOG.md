@@ -1,6 +1,6 @@
 # Changelog
 
-## Summary of 0.4.14 to 0.4.30 (what was added, in one place)
+## Summary of 0.4.14 to 0.4.31 (what was added, in one place)
 Every line below, and every line of the list further down, ends with who made it: **Claude A** (saves, wallet, business, claims, plates, market, theft core) or **Claude B** (traffic, police, variety, weather, traffic menu, fence, phone app).
 - 0.4.14: police freeze only the cops in your chase, players report positions (`/where`), shared shop stock (off). (Claude A)
 - 0.4.15: smart traffic personalities. 0.4.16: stuck traffic recycling. 0.4.17: duplicate-car cleanup. (Claude A)
@@ -10,11 +10,14 @@ Every line below, and every line of the list further down, ends with who made it
 - 0.4.23: sturdier save download and safer duels. (Claude A)
 - 0.4.23: traffic settings menu on the `[` key, only for the admins the server lists. (Claude B)
 - 0.4.24: plate reading and police records. 0.4.25: arrest flags the plate. 0.4.26: black market and car theft core. (Claude A)
-- 0.4.27: the fence (sell or strip stolen cars). 0.4.28: Black Market phone app, lockout kit, signal jammer, tracker blocker feedback. 0.4.29: theft, fence and market settings in the in-game menu. 0.4.30: Black Market phone app connection fix. (Claude B)
+- 0.4.27: the fence (sell or strip stolen cars). 0.4.28: Black Market phone app, lockout kit, signal jammer, tracker blocker feedback. 0.4.29: theft, fence and market settings in the in-game menu. 0.4.30: Black Market phone app connection fix. 0.4.31: `[` key name fix, broken mod cars kept out of traffic groups. (Claude B)
 
 Plain list of what changed in each build. The build number shows in the game log (`client loaded, build X`) and the server log.
 "Untested" means it passed the automatic tests but nobody has played it yet.
 When you add a line, end it with `(Claude A)` or `(Claude B)`, whoever made the change. Both of us write in this one file.
+
+## 0.4.31
+- From the owner's first game log (build 0.4.29): (1) The `[` key never got bound: the game logged "Could not create a description for binding keyboard0::leftbracket", so `leftbracket` is not the game's name for that key. The key map now binds BOTH `lbracket` and `leftbracket` to the settings menu; whichever name the game does not know logs one harmless error at start. `/trafficmenu` in chat opens the menu either way. (2) A traffic group that included a car called G30_Domestic crashed the spawn ("missing stage 1 data", then BeamMP's FATAL LUA ERROR): the model's folder has no .jbeam files (a leftover of a removed mod). The traffic variety code now never puts a model without .jbeam files into a group (logged once per model as `variety: <model> has no .jbeam files`); if the game cannot be asked, nothing is filtered, and if every offered model is broken the game keeps its own group. Cars the game's own spawner picks outside our groups can still be that broken model: remove the leftover mod folder to be sure. (3) The log showed the Black Market app opening three times (route and view load fine); it was build 0.4.29, before the connection fix in 0.4.30, so the "No connection" cause is still unconfirmed. (untested in game) (Claude B)
 
 ## 0.4.30
 - Black Market phone app: first game test showed the app opens but said "No connection". The app now tries both ways RLS reaches the game (`lua.rlsmp_market` and `lua.extensions.rlsmp_market`), asks the game to load the market extension if it is missing, and shows the real error text under "No connection" so a screenshot tells what failed. The game log gets one line `RLSMP-MARKET the phone app reached the market extension` the first time the app calls in. Whether this fixes it is not known yet. (untested in game) (Claude B)
