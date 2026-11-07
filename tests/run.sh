@@ -56,6 +56,7 @@ luajit tests/traffic_client_test.lua
 luajit tests/traffic_variety_lib_test.lua
 luajit tests/traffic_menu_lib_test.lua
 luajit tests/traffic_menu_client_test.lua
+luajit tests/phone_app_manifest_test.lua
 luajit tests/traffic_variety_client_test.lua
 luajit tests/traffic_swap_lib_test.lua
 luajit tests/traffic_swap_client_test.lua
@@ -67,4 +68,10 @@ luajit tests/plate_read_lib_test.lua
 luajit tests/plates_client_test.lua
 luajit tests/market_client_test.lua
 luajit tests/theft_client_test.lua
+# Optional: the Black Market phone app view (needs `cd tests/phone_app && npm install` once; skipped without it).
+if [ -d tests/phone_app/node_modules ]; then
+  (cd tests/phone_app && npx vitest run)
+else
+  echo "phone app view test skipped (cd tests/phone_app && npm install to enable)"
+fi
 echo "All tests passed."

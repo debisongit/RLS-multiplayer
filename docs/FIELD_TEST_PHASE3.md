@@ -480,3 +480,28 @@ Needs `"theft": {"enabled": true}` in the server config, and a black market memb
 3. Send me the `RLSMP-THEFT` and `[theft]` lines.
 
 Known gaps: police cannot ping a tracker or be sent after a car you stole with one unblocked beyond the normal report; finding and removing a tracker is not built. Old `config.json` files that already list `key_programmer` under `theft.methods` need `lockout_kit` added by hand.
+
+
+## Black Market phone app (build 0.4.28)
+
+1. Join as a market member (`rlsmp market grant <name>` in the server console). Open the phone, App Store, find **Black Market**, press GET, open it from the home screen.
+2. You should see your reputation, invites left and money at the top, the shop list, and at the bottom an invite box and the Stolen cars hint.
+3. Buy a Screwdriver: the money drops, an "Your orders" card appears, and a green note says "Paid ...". The in-game toast about the drop spot still shows.
+4. Wait for the order to read "Ready", drive to the spot, press "Collect here". The package should arrive (`/items` shows it).
+5. As a player who is NOT a member: the app says "You are not in". Have a member invite you from the app: an "<name> invited you" card with Accept appears within a couple of seconds.
+6. Send me: a screenshot of the app, and the game log lines with `rlsmp_market` or `PhoneBlackMarket`/`[Overhaul]` warnings (the browser console is `F12`-less; the log shows UI warnings).
+
+### Named failure modes
+| What you see | What it means |
+|---|---|
+| No "Black Market" in the App Store | RLS did not accept the manifest, or did not read it from our mod. The game log has `Ignoring phone app manifest ...` with the reason. Send it. |
+| The app opens but is blank / "Could not load .../PhoneBlackMarket.vue" | The UI could not load our view file (a second UI mod folder may need an entry file). Send the log line. |
+| "No connection" | The view could not call `lua.rlsmp_market.uiGet()`. The client extension is not loaded or not named that. Send the log. |
+| "Not available" | The career is not active on the server yet (the market extension is switched off until it is). |
+| "Connecting..." forever | The server never answered `rlsmpMarketGet`: market disabled on the server, or you are not loaded. |
+| A tap does nothing | At most one action per second is accepted. Tap again. |
+
+### Known gaps
+- Never run in the game. The view itself is covered by an automatic test with a fake bridge (tests/phone_app, optional), and RLS's own manifest checks accept the manifest, but the real RLS phone UI has not loaded it.
+- The icon is a stock icon name (`shoppingCart`), not a picture.
+- Selling stolen cars is still chat only (`/fence`): it needs the car deleted in the game, so it stays a command.

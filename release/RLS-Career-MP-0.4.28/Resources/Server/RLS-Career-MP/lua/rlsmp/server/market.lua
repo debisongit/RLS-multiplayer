@@ -34,7 +34,11 @@ local cfg
 local invites = {}   -- target pid -> {s = target session, byPid, bySession, byName, expires}
 
 local function c() return cfg.market end
-local function say(pid, text) MP.SendChatMessage(pid, "[Market] " .. text) end
+local sink   -- {pid = n, lines...}: while the phone app runs a command, that player's replies are collected instead of sent to chat
+local function say(pid, text)
+  if sink and sink.pid == pid then sink[#sink + 1] = text return end
+  MP.SendChatMessage(pid, "[Market] " .. text)
+end
 local function dollars(n) return string.format("$%d", math.floor(n)) end
 
 local function finite(v) return type(v) == "number" and v == v and v ~= math.huge and v ~= -math.huge end
@@ -372,6 +376,76 @@ local function onChat(pid, rest)
   help(pid)
 end
 
+-- Phone app channel ---------------------------------------------------------------------------------
+-- The RLS phone app (ui/ui-vue/mods/rls_career_mp/phone/PhoneBlackMarket.vue) talks to us through the client's rlsmp_market.
+--   C>S rlsmpMarketGet {}                      -> S>C rlsmpMarketState {...}
+--   C>S rlsmpMarketAct {a, item?, n?, who?}    -> S>C rlsmpMarketResult {text}, then a fresh rlsmpMarketState
+-- a = buy | pickup | invite | accept: the same commands as the chat, run for the player; what the command would have said in chat comes
+-- back as `text`. At most one Get and one Act per player per second.
+
+local appLast = {get = {}, act = {}}   -- pid -> time of the last request, per kind (a click must not be eaten by the refresh that came first)
+
+local function appState(pid)
+  local s = loaded(pid)
+  if not s then return {ready = false} end
+  local m = stateOf(s.profile)
+  local now = util.now()
+  local out = {ready = true, member = m ~= nil and m.member == true, money = s.profile.ledger and s.profile.ledger.money or 0}
+  local inv = invites[pid]
+  if inv and inv.s == s and inv.expires >= now then out.invite = {from = inv.byName, seconds = inv.expires - now} end
+  local spot = M.spotAt(now)
+  out.spot = spot and spot.name or nil
+  if not out.member then return out end
+  out.rep, out.invitesLeft = m.rep, invitesLeft(m)
+  out.items = {}
+  for _, o in ipairs(offers()) do
+    out.items[#out.items + 1] = {name = o.name, label = o.label, price = o.price, minRep = o.minRep, durable = o.durable,
+      locked = m.rep < o.minRep, have = items.count(pid, o.name), onOrder = hasOnOrder(m, o.name)}
+  end
+  out.orders = {}
+  for _, o in ipairs(m.orders) do
+    local info = items.CATALOG[o.item]
+    out.orders[#out.orders + 1] = {id = o.id, item = o.item, label = info and info.label or o.item, n = o.n, spot = o.spot.name,
+      readyIn = math.max(0, o.readyAt - now), ready = o.readyAt <= now}
+  end
+  return out
+end
+
+local function appTooFast(pid, kind)
+  local now = util.now()
+  if appLast[kind][pid] == now then return true end
+  appLast[kind][pid] = now
+  return false
+end
+
+local function onAppGet(pid)
+  if not c().enabled or appTooFast(pid, "get") then return end
+  net.send(pid, "rlsmpMarketState", appState(pid))
+end
+
+local APP_ACTIONS = {buy = true, pickup = true, invite = true, accept = true}
+
+local function onAppAct(pid, d)
+  if not c().enabled or type(d) ~= "table" or appTooFast(pid, "act") then return end
+  local a = d.a
+  if type(a) ~= "string" or not APP_ACTIONS[a] then return end
+  local arg = ""
+  if a == "buy" then
+    local item = type(d.item) == "string" and d.item:sub(1, 64) or ""
+    local n = math.floor(tonumber(d.n) or 1)
+    arg = item .. " " .. math.max(1, math.min(10, n))
+  elseif a == "invite" then
+    arg = type(d.who) == "string" and d.who:sub(1, 64) or ""
+  end
+  sink = {pid = pid}
+  local ok, err = pcall(cmds[a], pid, arg)
+  local lines = sink
+  sink = nil
+  if not ok then util.warn("Market app action " .. a .. " failed: " .. tostring(err)) end
+  net.send(pid, "rlsmpMarketResult", {text = ok and table.concat(lines, " ") or "Something went wrong. Try again."})
+  net.send(pid, "rlsmpMarketState", appState(pid))
+end
+
 -- Reputation (for other modules) -------------------------------------------------------------------
 
 -- Change a member's reputation by n (whole number, at most market.maxRepChange either way). Kept between 0 and maxRep.
@@ -520,6 +594,8 @@ function M.init(config)
   end
   if #spots() == 0 then util.warn("market.dropSpots is empty: nobody can buy") end
   net.onChat("market", onChat)
+  net.onClient("rlsmpMarketGet", onAppGet)
+  net.onClient("rlsmpMarketAct", onAppAct)
   net.on("rlsmpMarketTick", tick)
   MP.CreateEventTimer("rlsmpMarketTick", 5000)
 end

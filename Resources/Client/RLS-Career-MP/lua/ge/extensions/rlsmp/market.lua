@@ -5,6 +5,8 @@
 -- This side only: a toast when an order is placed and when it is ready, a marker drawn at a ready spot when it is
 -- near, and a "type /market pickup" toast inside 15 m (it also asks rlsmp_positions to report right away, so the
 -- server's copy of our position is fresh). Pickup itself is the chat command; the server checks the position.
+-- The phone app (ui/ui-vue/mods/rls_career_mp/phone/PhoneBlackMarket.vue) calls M.uiGet() about every 1.5 s and M.uiAct(...) on a tap; both
+-- only relay to the server (rlsmpMarketGet / rlsmpMarketAct) and hand back what the server last said. No rules here.
 -- We do not use core_groundMarkers: RLS jobs (taxi, bus) own that route and would lose it.
 
 local M = {}
@@ -103,9 +105,53 @@ function M.onUpdate(dtReal)
   end
 end
 
+-- Phone app bridge -------------------------------------------------------------------------------------
+local appState, appResult, appResultSeq = nil, nil, 0
+local askedAt = -math.huge
+local ASK_EVERY = 1.5                   -- seconds between server requests while the app polls
+
+local function now() return os.clock() end
+
+local function onState(d)
+  if type(d) == "table" then appState = d end
+end
+
+local function onResult(d)
+  if type(d) ~= "table" then return end
+  appResultSeq = appResultSeq + 1
+  appResult = {text = tostring(d.text or ""):sub(1, 300), seq = appResultSeq}
+end
+
+-- What the app shows: {state = last rlsmpMarketState or nil, result = {text, seq} or nil, enabled}. Asks the server when the answer is stale.
+function M.uiGet()
+  if not enabled then return {enabled = false} end
+  if now() - askedAt >= ASK_EVERY then
+    askedAt = now()
+    net.send("rlsmpMarketGet", {})
+  end
+  return {enabled = true, state = appState, result = appResult}
+end
+
+-- action: "buy" (item, n) | "pickup" | "invite" (who) | "accept". The answer arrives as a result and a new state.
+function M.uiAct(action, a, b)
+  if not enabled then return false end
+  if type(action) ~= "string" then return false end
+  local body = {a = action}
+  if action == "buy" then body.item, body.n = tostring(a or ""), tonumber(b) or 1
+  elseif action == "invite" then body.who = tostring(a or "") end
+  if action == "pickup" and rlsmp_positions and rlsmp_positions.reportNow then rlsmp_positions.reportNow() end
+  net.send("rlsmpMarketAct", body)
+  askedAt = -math.huge                -- the next poll refreshes at once
+  return true
+end
+
+function M.onServerLeave() appState, appResult, askedAt = nil, nil, -math.huge end
+
 function M.onExtensionLoaded()
   net.on("rlsmpMarketDrop", onDrop)
   net.on("rlsmpMarketClear", onClear)
+  net.on("rlsmpMarketState", onState)
+  net.on("rlsmpMarketResult", onResult)
 end
 
 M._drops = function() return drops end

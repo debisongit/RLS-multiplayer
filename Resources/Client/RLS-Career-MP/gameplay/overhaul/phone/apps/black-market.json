@@ -1,0 +1,22 @@
+{
+  "id": "black-market",
+  "name": "Black Market",
+  "icon": "shoppingCart",
+  "route": "/overhaul/rlsmp-black-market",
+  "color": "#1a1a1f",
+  "iconColor": "#f97316",
+  "category": "Activities",
+  "storeTagline": "Invite only",
+  "storeDescription": "Order tools and papers, collect them at the drop spot, invite people you trust. Only on a BeamMP server running RLS-Career-MP, and only for members.",
+  "uiRoutes": [
+    {
+      "name": "rlsmp-black-market",
+      "path": "rlsmp-black-market",
+      "component": "/ui/ui-vue/mods/rls_career_mp/phone/PhoneBlackMarket.vue",
+      "uiOrder": 140,
+      "luaOrder": 80,
+      "backTarget": "phone-main",
+      "title": "Black Market"
+    }
+  ]
+}
