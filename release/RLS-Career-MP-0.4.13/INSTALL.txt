@@ -1,0 +1,8 @@
+RLS-Career-MP build 0.4.13
+
+1. Copy the Resources folder from here into your BeamMP server folder (merge it; your config, profiles and businesses are not touched).
+   Or run: tools/install_to_server.sh /path/to/BeamMP-Server
+2. Put the RLS Career Overhaul zip in Resources/Client/ as well.
+3. ServerConfig.toml:  Map = "/levels/rls_west_coast/info.json"   and   MaxCars = 100 or more.
+4. Restart the server. Players restart BeamNG once after an update.
+See README.md for troubleshooting and CHANGELOG.md for what changed.

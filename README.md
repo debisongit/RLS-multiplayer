@@ -53,6 +53,8 @@ Player chat commands: `/records` (event best times); `/dashcam` ($100 per car, m
 3. Distributed traffic director + anti-teleport police pursuits
 4. World: ✅ map travel blocked · ✅ event records (`/records`) · ✅ pink-slip duels (`/duel`, off by default, untested) · next: shared dealership stock
 
+Release: `release/` holds the latest ready-to-copy build; `CHANGELOG.md` lists every build; `tools/make_release.sh` rebuilds it.
+
 Docs: [handoff for Claude B](docs/HANDOFF_CLAUDE_B.md) · [next features and plans](docs/NEXT_FEATURES.md) · [how RLS works](docs/RLS_MAP.md) · [architecture](docs/ARCHITECTURE.md) · [protocol](docs/PROTOCOL.md) · [teamwork rules](docs/COLLAB.md)
 
 ## Dev
