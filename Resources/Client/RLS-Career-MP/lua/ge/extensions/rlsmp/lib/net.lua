@@ -61,21 +61,23 @@ end
 
 function M.onBig(kind, fn) bigHandlers[kind] = fn end
 
-local function onChunkBegin(h)
-  incoming[tostring(h.id)] = {assembler = transfer.newAssembler(h), header = h}
-end
+local ORPHAN_IDS = 4         -- unknown transfers we hold chunks for while their header is asked for again
+local ORPHAN_CHUNKS = 64     -- chunks kept per unknown transfer
+local HEADER_ASK_EVERY = 3   -- heartbeats (about seconds) between repeated header requests
+local done = {}              -- finished transfer ids: late duplicate chunks or headers for them are ignored
+local orphans = {}           -- transfer id -> {parts = {i = d}, count, wait}: chunks that came before (or without) their rlsmpChunkBegin
+local lastAsked              -- transfer id the last requestMissing asked about (they take turns)
 
-local function onChunk(c)
-  local id = tostring(c.id)
-  local job = incoming[id]
-  if not job then return end
-  job.assembler:add(c.i, c.d)
+local function addChunk(id, job, i, d)
+  job.assembler:add(i, d)
   -- Tell the server how far we are, so it sends no faster than we can read.
   if job.assembler.received % 8 == 0 and not job.assembler:isComplete() then
     M.send("rlsmpChunkProgress", {id = tonumber(id), got = job.assembler.received})
+    job.progressSent = true
   end
   if not job.assembler:isComplete() then return end
   incoming[id] = nil
+  done[id] = true
   local text, problem = job.assembler:finish()
   local fn = bigHandlers[job.header.kind]
   if not fn then return end
@@ -85,6 +87,68 @@ local function onChunk(c)
     return
   end
   fn(text, job.header.extra)
+end
+
+-- A header we already have (a late copy after we asked again) must not wipe the chunks received so far.
+local function onChunkBegin(h)
+  local id = tostring(h.id)
+  if incoming[id] or done[id] then return end
+  local job = {assembler = transfer.newAssembler(h), header = h}
+  incoming[id] = job
+  local kept = orphans[id]
+  orphans[id] = nil
+  if kept then
+    for i, d in pairs(kept.parts) do
+      if incoming[id] ~= job then break end   -- completed (and handled) already
+      addChunk(id, job, i, d)
+    end
+  end
+end
+
+local function askHeader(id)
+  M.send("rlsmpChunkHeader", {id = tonumber(id)})
+end
+
+local function onChunk(c)
+  local id = tostring(c.id)
+  if done[id] then return end
+  local job = incoming[id]
+  if job then return addChunk(id, job, c.i, c.d) end
+  -- Its rlsmpChunkBegin never arrived: ask for it once (heartbeat repeats), keep a few chunks meanwhile.
+  local o = orphans[id]
+  if not o then
+    local n = 0
+    for _ in pairs(orphans) do n = n + 1 end
+    if n >= ORPHAN_IDS then return end
+    o = {parts = {}, count = 0, wait = 0}
+    orphans[id] = o
+    askHeader(id)
+  end
+  local i = tonumber(c.i)
+  if i and type(c.d) == "string" and o.parts[i] == nil and o.count < ORPHAN_CHUNKS then
+    o.parts[i] = c.d
+    o.count = o.count + 1
+  end
+end
+
+-- Call about once per second. While a download runs, tell the server how far we are if the every-8-chunks
+-- report did not just go out (a lost report would otherwise hold the server's send window shut), and ask
+-- again for headers that have not come.
+function M.heartbeat()
+  for id, job in pairs(incoming) do
+    if job.progressSent then
+      job.progressSent = false
+    elseif job.assembler.received > 0 and not job.assembler:isComplete() then
+      M.send("rlsmpChunkProgress", {id = tonumber(id), got = job.assembler.received})
+    end
+  end
+  for id, o in pairs(orphans) do
+    o.wait = o.wait + 1
+    if o.wait >= HEADER_ASK_EVERY then
+      o.wait = 0
+      askHeader(id)
+    end
+  end
 end
 
 -- Progress of incoming transfers, for a loading message: received, total.
@@ -97,23 +161,30 @@ function M.incomingProgress()
   return got, total
 end
 
--- Ask the server to send again the chunks of unfinished downloads that have not shown up (at most 50 per transfer).
+-- Ask the server to send again the chunks of an unfinished download that have not shown up (at most 50).
+-- One transfer per call (the server takes one request per second), taking turns when several are unfinished.
 function M.requestMissing()
-  local asked = 0
+  local ids = {}
   for id, job in pairs(incoming) do
-    local list = {}
-    for i = 1, job.assembler.n do
-      if job.assembler.parts[i] == nil then
-        list[#list + 1] = i
-        if #list >= 50 then break end
-      end
-    end
-    if #list > 0 then
-      M.send("rlsmpChunkMissing", {id = tonumber(id), list = list})
-      asked = asked + #list
+    if job.assembler.received < job.assembler.n then ids[#ids + 1] = id end
+  end
+  if #ids == 0 then return 0 end
+  table.sort(ids, function(a, b) return (tonumber(a) or 0) < (tonumber(b) or 0) end)
+  local pick = ids[1]
+  for _, id in ipairs(ids) do
+    if lastAsked and (tonumber(id) or 0) > (tonumber(lastAsked) or 0) then pick = id break end
+  end
+  lastAsked = pick
+  local job = incoming[pick]
+  local list = {}
+  for i = 1, job.assembler.n do
+    if job.assembler.parts[i] == nil then
+      list[#list + 1] = i
+      if #list >= 50 then break end
     end
   end
-  return asked
+  M.send("rlsmpChunkMissing", {id = tonumber(pick), list = list})
+  return #list
 end
 
 -- Queue an upload: sends beginEvent with {id, n, len, sum} then chunkEvent with {id, i, d}.
@@ -144,6 +215,7 @@ end
 function M.reset()
   incoming = {}
   outgoing = {}
+  done, orphans, lastAsked = {}, {}, nil   -- transfer ids start again on the next server
   registered = {}   -- BeamMP forgets our handlers when a session ends: register them again next time
 end
 

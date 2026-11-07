@@ -4,9 +4,10 @@ local json = require("json")
 jsonEncode, jsonDecode = json.encode, json.decode
 function log() end
 function setExtensionUnloadMode() end
-local sent = {}
-TriggerServerEvent = function(name, data) sent[#sent + 1] = name end
-AddEventHandler = function() end
+local sent, sentData = {}, {}
+TriggerServerEvent = function(name, data) sent[#sent + 1] = name sentData[#sentData + 1] = {name = name, data = json.decode(data)} end
+local handlers = {}
+AddEventHandler = function(name, fn) handlers[name] = fn end
 guihooks = {trigger = function() end}
 extensions = {load = function() end}
 local mp = true
@@ -47,4 +48,41 @@ mp = false
 core.onServerLeave()
 for _ = 1, 20 do core.onUpdate(1) end
 check(hellos() == before + 1, "never starts outside a multiplayer session")
+
+-- downloads send a progress heartbeat; a career that RLS starts after our start timeout still gets going
+mp = true
+local walletOn = false
+rlsmp_wallet = {enable = function(on) walletOn = on end}
+rlsmp_saveBridge = {enable = function() end, writeProfile = function() return "autosave1" end, requestSave = function() end}
+overhaul_shell_gameMode.start = function() return true end
+local function lastLoaded() for k = #sentData, 1, -1 do if sentData[k].name == "rlsmpLoaded" then return sentData[k].data end end end
+local function count(name) local n = 0 for _, v in ipairs(sent) do if v == name then n = n + 1 end end return n end
+-- a failed join that never downloaded anything does not come back to life
+core.onServerLeave()
+core.onWorldReadyState(2)
+for _ = 1, 400 do core.onUpdate(1) end
+check(core.getState() == "failed", "no answer: failed")
+core.onOverhaulActive(true)
+check(core.getState() == "failed" and not walletOn, "RLS starting without our download is not adopted")
+core.onServerLeave()
+core.onWorldReadyState(2)
+local transfer = require("rlsmp/lib/transfer")
+local text = json.encode({files = {["info.json"] = "{}"}})
+local h, ch = transfer.describe(text, 4)
+h.id, h.kind, h.extra = 500, "profile", {profile = "rlsmpabc1"}
+handlers.rlsmpChunkBegin(json.encode(h))
+for i = 1, 3 do handlers.rlsmpChunk(json.encode({id = 500, i = i, d = ch[i]})) end
+local p0 = count("rlsmpChunkProgress")
+core.onUpdate(1)
+check(count("rlsmpChunkProgress") == p0 + 1, "download heartbeat sent about once per second")
+core.onUpdate(0.3)
+check(count("rlsmpChunkProgress") == p0 + 1, "not every frame")
+for i = 4, #ch do handlers.rlsmpChunk(json.encode({id = 500, i = i, d = ch[i]})) end
+check(core.getState() == "starting", "profile downloaded, RLS starting")
+for _ = 1, 185 do core.onUpdate(1) end
+check(core.getState() == "failed" and lastLoaded().ok == false, "start timeout reported")
+core.onOverhaulActive(true)
+check(core.getState() == "active" and walletOn and lastLoaded().ok == true, "late RLS activation recovers: active, modules on, rlsmpLoaded ok")
+core.onOverhaulActive(false)
+check(core.getState() == "idle" and not walletOn, "closing the career afterwards works as usual")
 print("core_start_test: " .. passed .. " checks passed")

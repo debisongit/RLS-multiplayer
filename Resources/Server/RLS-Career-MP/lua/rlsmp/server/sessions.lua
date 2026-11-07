@@ -156,7 +156,10 @@ end
 
 local function onLoaded(pid, data)
   local s = sessions[pid]
-  if not s or s.stage ~= "downloading" then return end
+  if not s then return end
+  -- A client that gave up waiting for RLS (start timeout) may still see the career start later: let it recover.
+  local late = s.stage == "failed" and data.ok and s.profile ~= nil
+  if s.stage ~= "downloading" and not late then return end
   if data.ok then
     s.stage = "loaded"
     util.info(s.name .. " is in their RLS career")

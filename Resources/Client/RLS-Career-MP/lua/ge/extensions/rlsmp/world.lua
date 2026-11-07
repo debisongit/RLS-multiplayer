@@ -3,7 +3,7 @@
 --
 -- Step 1: no map travel while online. RLS "travel to another map" loads a new level, which would drop the
 -- player from the BeamMP server (and the server only runs one map). We refuse it in both places RLS checks.
--- Wrapped once per module table, installed every frame (modules get reloaded).
+-- install() runs every frame and wraps again whenever the functions there are not ours (modules get reloaded).
 
 local M = {}
 
@@ -21,20 +21,30 @@ local function toast()
 end
 
 -- RLS calls its local switchMap from resolveTravelBlockers, so both exported entry points are wrapped.
-local wrapped = setmetatable({}, {__mode = "k"})
+-- Every install() checks that the functions there are still ours: a reloaded module table, or RLS putting a
+-- new function into the same table, gets wrapped again (like lib/replaceGuard.lua).
+local NAMES = {"switchMap", "resolveTravelBlockers"}
+local ours = {}                                    -- name -> our current wrapper
+local isOurs = setmetatable({}, {__mode = "k"})    -- every wrapper we made (never wrap our own wrapper)
 local function refuse(original)
-  return function(...)
+  local fn = function(...)
     if enabled then toast() return false, MESSAGE end
     return original(...)
   end
+  isOurs[fn] = true
+  return fn
 end
 
 function M.install()
   local sm = overhaul_career_garage_switchMap
-  if not sm or wrapped[sm] then return sm ~= nil end
-  wrapped[sm] = true
-  if sm.switchMap then sm.switchMap = refuse(sm.switchMap) end
-  if sm.resolveTravelBlockers then sm.resolveTravelBlockers = refuse(sm.resolveTravelBlockers) end
+  if not sm then return false end
+  for _, name in ipairs(NAMES) do
+    local current = sm[name]
+    if type(current) == "function" and current ~= ours[name] and not isOurs[current] then
+      ours[name] = refuse(current)
+      sm[name] = ours[name]
+    end
+  end
   return true
 end
 

@@ -7,6 +7,7 @@
 --   over the next ticks as "rlsmpChunkBegin" + many "rlsmpChunk" messages.
 --
 -- Event names are plain words (BeamMP splits on ':'), all prefixed with "rlsmp".
+-- Times here are wall clock (util.now = os.time), never os.clock (CPU time).
 
 local util = require("rlsmp.server.util")
 local transfer = require("rlsmp.shared.transfer")
@@ -15,9 +16,15 @@ local M = {}
 
 local cfg
 local outbox = {}       -- pid -> list of pending outgoing transfers
-local recent = {}       -- pid -> transferId -> {chunks, expires}: finished transfers kept briefly so lost chunks can be sent again
+local recent = {}       -- pid -> transferId -> {header, chunks, expires}: finished transfers kept briefly so lost chunks can be sent again
+local resends = {}      -- pid -> {list = {{id, i}, ...}, queued = {["id:i"] = true}}: lost chunks waiting for pump()
+local limits = {}       -- pid -> what -> util.now() of the last accepted request
 local KEEP_SECONDS = 120
 local WINDOW = 24       -- chunks that may be on the way before the client has confirmed some (a busy client drops what it cannot read)
+local SILENCE_SECONDS = 3   -- window full and no news this long: send ONE chunk, then wait again
+local REQUEST_EVERY = 1     -- seconds between accepted resend / header requests per player
+local MAX_MISSING = 50      -- chunk numbers read from one rlsmpChunkMissing
+local MAX_RESEND_QUEUE = 200
 local nextTransferId = 0
 
 -- BeamMP wants a *global function name* per event. We generate one per event.
@@ -63,6 +70,11 @@ function M.send(pid, eventName, data)
   return MP.TriggerClientEvent(pid, eventName, util.jsonEncode(data or {}))
 end
 
+-- BeamMP's TriggerClientEvent returns false when the message could not be queued; only an explicit false counts as failed.
+local function sendOk(pid, eventName, tbl)
+  return MP.TriggerClientEvent(pid, eventName, util.jsonEncode(tbl)) ~= false
+end
+
 -- Queue a big string for chunked delivery. `kind` tells the client what it is.
 function M.sendBig(pid, kind, payload, extra)
   nextTransferId = nextTransferId + 1
@@ -71,7 +83,7 @@ function M.sendBig(pid, kind, payload, extra)
   header.kind = kind
   header.extra = extra
   outbox[pid] = outbox[pid] or {}
-  table.insert(outbox[pid], {header = header, chunks = chunks, next = 0, t0 = os.clock(), bytes = #payload})
+  table.insert(outbox[pid], {header = header, chunks = chunks, next = 0, t0 = util.now(), bytes = #payload})
   return header.id
 end
 
@@ -79,72 +91,146 @@ function M.pendingFor(pid)
   return outbox[pid] and #outbox[pid] or 0
 end
 
+-- Lost chunks queued to go out again for this player.
+function M.resendsFor(pid)
+  return resends[pid] and #resends[pid].list or 0
+end
+
+-- Client requests (missing chunks, lost headers): only from players with a session, at most one per kind per second.
+local function allowRequest(pid, what)
+  local s = require("rlsmp.server.sessions").get(pid)   -- lazy: sessions requires net
+  if not s then return false end
+  local now = util.now()
+  limits[pid] = limits[pid] or {}
+  local last = limits[pid][what]
+  if last and now - last < REQUEST_EVERY then return false end
+  limits[pid][what] = now
+  return true
+end
+
+-- Header and chunks of transfer `id` for `pid`: the running job (once its header went out) or the copy kept after sending.
+local function findTransfer(pid, id)
+  for _, job in ipairs(outbox[pid] or {}) do
+    if job.header.id == id then
+      if job.next == 0 then return nil end
+      return job.header, job.chunks
+    end
+  end
+  local r = recent[pid] and recent[pid][id]
+  if r then return r.header, r.chunks end
+  return nil
+end
+
 -- The client reports how many chunks of transfer `id` it holds; this lets the next ones go out.
 local function onChunkProgress(pid, data)
   local id, got = tonumber(data.id), tonumber(data.got)
   if not id or not got then return end
   for _, job in ipairs(outbox[pid] or {}) do
-    if job.header.id == id and got > (job.got or 0) then job.got, job.gotAt = got, os.clock() end
+    if job.header.id == id and got > (job.got or 0) then job.got, job.gotAt = got, util.now() end
   end
 end
 
 function M.dropPlayer(pid)
   outbox[pid] = nil
   recent[pid] = nil
+  resends[pid] = nil
+  limits[pid] = nil
 end
 
--- The client says these chunks of transfer `id` never arrived: send them again (works while it is still being sent, too).
+-- The client says these chunks of transfer `id` never arrived: queue them again (works while it is still being sent, too).
+-- They go out through pump() with the normal per-tick budget, never as one burst.
 local function onChunkMissing(pid, data)
   local id, list = tonumber(data.id), data.list
   if not id or type(list) ~= "table" then return end
-  local chunks
-  for _, job in ipairs(outbox[pid] or {}) do if job.header.id == id then chunks = job.chunks end end
-  if not chunks and recent[pid] and recent[pid][id] then chunks = recent[pid][id].chunks end
+  if not allowRequest(pid, "missing") then return end
+  local _, chunks = findTransfer(pid, id)
   if not chunks then return end
-  local sent = 0
-  for _, i in ipairs(list) do
-    i = tonumber(i)
-    if i and chunks[i] and sent < 60 then
-      MP.TriggerClientEvent(pid, "rlsmpChunk", util.jsonEncode({id = id, i = i, d = chunks[i]}))
-      sent = sent + 1
+  local q = resends[pid] or {list = {}, queued = {}}
+  local added = 0
+  for k = 1, math.min(#list, MAX_MISSING) do
+    local i = math.tointeger(tonumber(list[k]))
+    local key = i and (id .. ":" .. i)
+    if i and chunks[i] and not q.queued[key] and #q.list < MAX_RESEND_QUEUE then
+      q.queued[key] = true
+      q.list[#q.list + 1] = {id = id, i = i}
+      added = added + 1
     end
   end
-  util.info(string.format("[rlsmp-timing] player %s asked for %d missing chunks of #%d, sent %d", tostring(pid), #list, id, sent))
+  if q.list[1] then resends[pid] = q end
+  util.info(string.format("[rlsmp-timing] player %s asked for %d missing chunks of #%d, queued %d", tostring(pid), #list, id, added))
+end
+
+-- The client got chunks of a transfer whose rlsmpChunkBegin it never saw: send the header again.
+local function onChunkHeader(pid, data)
+  local id = tonumber(data.id)
+  if not id then return end
+  if not allowRequest(pid, "header") then return end
+  local header = findTransfer(pid, id)
+  if not header then return end
+  if sendOk(pid, "rlsmpChunkBegin", header) then
+    util.info(string.format("[rlsmp-timing] sent the header of #%d to player %s again", id, tostring(pid)))
+  end
+end
+
+-- Lost chunks go first and skip the window: they fill the holes that keep the window full.
+local function pumpResends(pid, budget)
+  local q = resends[pid]
+  if not q then return budget end
+  while budget > 0 and q.list[1] do
+    local r = q.list[1]
+    local _, chunks = findTransfer(pid, r.id)
+    if chunks and chunks[r.i] then
+      if not sendOk(pid, "rlsmpChunk", {id = r.id, i = r.i, d = chunks[r.i]}) then return 0 end   -- try again next tick
+      budget = budget - 1
+    end
+    table.remove(q.list, 1)
+    q.queued[r.id .. ":" .. r.i] = nil
+  end
+  if not q.list[1] then resends[pid] = nil end
+  return budget
 end
 
 -- Called every pump tick: push a few chunks per player.
 local function pump()
-  local now = os.time()
+  local now = util.now()
   for pid, kept in pairs(recent) do
     for id, r in pairs(kept) do if r.expires < now then kept[id] = nil end end
     if next(kept) == nil then recent[pid] = nil end
   end
-  for pid, queue in pairs(outbox) do
-    local budget = cfg.transfer.chunksPerTick
+  local pids = {}
+  for pid in pairs(outbox) do pids[pid] = true end
+  for pid in pairs(resends) do pids[pid] = true end
+  for pid in pairs(pids) do
+    local budget = pumpResends(pid, cfg.transfer.chunksPerTick)
+    local queue = outbox[pid] or {}
     while budget > 0 and queue[1] do
       local job = queue[1]
       if job.next == 0 then
-        M.send(pid, "rlsmpChunkBegin", job.header)
+        if not sendOk(pid, "rlsmpChunkBegin", job.header) then break end
         job.next = 1
-        job.startedAt = os.clock()
-        job.gotAt = job.startedAt
-      elseif (job.next - 1) - (job.got or 0) >= WINDOW and os.clock() - (job.gotAt or job.startedAt or 0) < 3 then
-        break   -- wait for the client to confirm; after 3 s of silence we trickle on anyway
+        job.startedAt = now
+        job.gotAt = now
       else
-        MP.TriggerClientEvent(pid, "rlsmpChunk",
-          util.jsonEncode({id = job.header.id, i = job.next, d = job.chunks[job.next]}))
+        local full = (job.next - 1) - (job.got or 0) >= WINDOW
+        local silent = now - (job.gotAt or job.startedAt or now) >= SILENCE_SECONDS
+        if full and not silent then break end   -- wait for the client to confirm
+        if not sendOk(pid, "rlsmpChunk", {id = job.header.id, i = job.next, d = job.chunks[job.next]}) then break end
         job.next = job.next + 1
         budget = budget - 1
         if job.next > #job.chunks then
-          util.info(string.format("[rlsmp-timing] sent %s #%s to player %s: %d bytes, %d chunks, %.1fs",
-            tostring(job.header.kind), tostring(job.header.id), tostring(pid), job.bytes, #job.chunks, os.clock() - job.t0))
+          util.info(string.format("[rlsmp-timing] sent %s #%s to player %s: %d bytes, %d chunks, %ds",
+            tostring(job.header.kind), tostring(job.header.id), tostring(pid), job.bytes, #job.chunks, now - job.t0))
           table.remove(queue, 1)
           recent[pid] = recent[pid] or {}
-          recent[pid][job.header.id] = {chunks = job.chunks, expires = os.time() + KEEP_SECONDS}
+          recent[pid][job.header.id] = {header = job.header, chunks = job.chunks, expires = now + KEEP_SECONDS}
+        elseif full then
+          -- Window full and 3 s without news: this one chunk only, then wait another 3 s (a trickle, not a flood).
+          job.gotAt = now
+          break
         end
       end
     end
-    if not queue[1] then outbox[pid] = nil end
+    if outbox[pid] and not outbox[pid][1] then outbox[pid] = nil end
   end
 end
 M.pump = pump
@@ -155,6 +241,7 @@ function M.init(config)
   M.on("rlsmpPump", pump)
   M.onClient("rlsmpChunkMissing", onChunkMissing)
   M.onClient("rlsmpChunkProgress", onChunkProgress)
+  M.onClient("rlsmpChunkHeader", onChunkHeader)
   MP.CreateEventTimer("rlsmpPump", 50)
 end
 

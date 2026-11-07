@@ -5,6 +5,7 @@
 -- 2. Server streams our profile         -> saveBridge writes it to disk
 -- 3. Lift RLS's "no BeamMP" block       -> start RLS career on the server's map
 -- 4. RLS says career is active          -> tell the server (rlsmpLoaded), turn on uploads + wallet
+--    (also when it comes after we gave up waiting, as long as the save had been downloaded)
 --
 -- No RLS or BeamMP file is edited. We wrap one RLS function at runtime (refuseCareerStart).
 
@@ -34,6 +35,8 @@ local pending                 -- {profile, isNew, slot, opts}
 local isNewCareer = false
 local firstSaveTimer
 local resendTimer = 0
+local heartbeatTimer = 0
+local HEARTBEAT_EVERY = 1     -- seconds between download progress heartbeats (net.heartbeat)
 local staleCars, staleTimer   -- cars the server says already left (crash recovery), removed shortly after the career starts
 local watch = downloadWatch.new()   -- spots a download that stopped
 
@@ -81,6 +84,7 @@ end
 
 local function sendHello()
   downloadWatch.reset(watch)
+  pending = nil   -- set again only when this attempt's profile download completes
   setState("hello_sent")
   net.send("rlsmpHello", {v = transfer.PROTOCOL, build = transfer.BUILD})
 end
@@ -124,15 +128,26 @@ local function onProfile(text, extra, problem)
 end
 
 -- RLS hook: the career finished loading (or was closed).
+local function activate()
+  setState("active")
+  setModules(true)
+  net.send("rlsmpLoaded", {ok = true})
+  -- New careers get saved right away so the server has a copy from minute one.
+  if isNewCareer then firstSaveTimer = 10 end
+  if staleCars and #staleCars > 0 then staleTimer = 8 end
+end
+
 function M.onOverhaulActive(active)
   if not isMP() then return end
   if active and state == "starting" then
-    setState("active")
-    setModules(true)
-    net.send("rlsmpLoaded", {ok = true})
-    -- New careers get saved right away so the server has a copy from minute one.
-    if isNewCareer then firstSaveTimer = 10 end
-    if staleCars and #staleCars > 0 then staleTimer = 8 end
+    activate()
+  elseif active and state == "failed" and pending ~= nil then
+    -- We gave up waiting (start timeout) but RLS did start our downloaded career after all: carry on as normal,
+    -- otherwise the player would play with no save uploads and no wallet sync.
+    log("I", "RLS-Career-MP", "career became active after the start failed: recovering")
+    removeGuard.install()
+    removeGuard.enable(true)
+    activate()
   elseif not active and state == "active" then
     setModules(false)
     removeGuard.enable(false)
@@ -159,6 +174,12 @@ function M.onUpdate(dtReal)
   mapGate.install()
   removeGuard.install()
   stateTime = stateTime + (dtReal or 0)
+  -- Any download in progress (the save, or a fleet / duel car later): keep the server's send window open.
+  heartbeatTimer = heartbeatTimer + (dtReal or 0)
+  if heartbeatTimer >= HEARTBEAT_EVERY then
+    heartbeatTimer = 0
+    net.heartbeat()
+  end
   if state == "waiting_rls" then
     if rlsReady() then
       sendHello()

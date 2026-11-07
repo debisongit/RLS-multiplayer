@@ -22,7 +22,7 @@ Anything that may be large (a whole save) is split into chunks.
 |---|---|---|---|
 | 1 | C→S | `rlsmpHello` | `{v}` protocol version. Sent when the world is ready (`onWorldReadyState(2)`). |
 | 2 | S→C | big payload, `kind = "profile"` | text = `{files = {rel = fileText}}`, extra = `{profile, isNew, startingOptions, money}` |
-| 3 | C→S | `rlsmpLoaded` | `{ok, err?}` after RLS reports the career active (or failed) |
+| 3 | C→S | `rlsmpLoaded` | `{ok, err?}` after RLS reports the career active (or failed). If the client gave up (`start_timeout`, `ok = false`) but RLS then starts the downloaded career, it sends `{ok = true}` later; the server accepts that for a `failed` session that has its profile |
 | – | S→C | `rlsmpError` | `{code, msg}` |
 
 Server drops the player if: wrong `v`, no BeamMP account (unless `allowGuests`), account already online,
@@ -172,6 +172,9 @@ Log lines use the tag `RLSMP-GUARD`.
 - **Map travel** is refused online (client `world.lua` wraps `overhaul_career_garage_switchMap.switchMap` and `resolveTravelBlockers`). No messages.
 - `rlsmpEventDone` (client to server) `{race, t, place}`: a finished RLS freeroam event (from the RLS hook `onRlsFreeroamRaceResultFinalized`; only timed races, not derby/burnout/tractor pull).
   Server `events.lua` keeps the top 5 per event in `records.json`, announces records in chat, `/records [event]` lists them. Times are client-reported, no money depends on them.
+  Limits: one accepted run per player (account) per 5 s, others are ignored; a record goes to everybody's chat only if it is the event's first time or beats the old record
+  by at least 0.05 s (otherwise only the player is told); a player can open a new event name only while they hold fewer than 40 events alone (nobody else has a time there).
+- Map travel wrapping: `world.lua` checks every frame that `switchMap` / `resolveTravelBlockers` are still its wrappers and wraps again if RLS put new functions there.
 
 ### Pink-slip duels (server `duel.lua`, client `duel.lua`; off by default: `duel.enabled`)
 
@@ -198,13 +201,23 @@ Chat: `/duel <player>`, `/duel accept`, `/duel cancel`, `/duel claim` (re-send a
 
 ## Flow control
 
-- `rlsmpChunkProgress {id, got}` (client to server): sent every 8 chunks received. The server keeps at most 24 chunks in flight beyond `got`
-  (a busy client drops what it cannot read, which stalled a 177 chunk save at 129 and 153). After 3 s without news it trickles on anyway.
+- `rlsmpChunkProgress {id, got}` (client to server): sent every 8 chunks received, plus a heartbeat about once per second (from `rlsmp_core`)
+  while any download is unfinished and no every-8 report went out in that second (a lost report would keep the window shut).
+  The server keeps at most 24 chunks in flight beyond `got` (a busy client drops what it cannot read, which stalled a 177 chunk save at 129 and 153).
+  When the window is full and 3 s of wall clock pass without news, it sends ONE chunk and waits another 3 s (a trickle, not a flood). `got` values that do not grow are ignored.
 
 ## Lost chunks
 
-- `rlsmpChunkMissing {id, list}` (client to server): up to 50 chunk numbers of transfer `id` that never arrived. The client asks after 4 s without progress, repeating every 4 s.
-  The server resends them (up to 60 per request) from the running transfer or from a copy it keeps for 2 minutes after sending.
+- `rlsmpChunkMissing {id, list}` (client to server): up to 50 chunk numbers of transfer `id` that never arrived. The client asks after 4 s without progress, repeating every 4 s,
+  one transfer per request (several unfinished transfers take turns). The server accepts it only from players with a session, at most one per second per player,
+  reads at most 50 numbers (whole numbers that exist, each queued once) and queues them; `pump()` sends them first, within the normal per-tick budget
+  (`transfer.chunksPerTick`), outside the window. Source: the running transfer, or a copy kept for 2 minutes after sending (at most 200 queued per player).
+- `rlsmpChunkHeader {id}` (client to server): a chunk came for a transfer whose `rlsmpChunkBegin` never arrived. Asked once at the first such chunk, again about every 3 s
+  until it comes. The client keeps up to 64 chunks of up to 4 such transfers meanwhile. Same session / one-per-second rule. The server answers with `rlsmpChunkBegin`
+  (the original header) from the running transfer (once its header went out) or the kept copy.
+- The client ignores a `rlsmpChunkBegin` for a transfer it already has or has finished (so a second header never wipes chunks), and chunks of finished transfers
+  (a late resend never runs a big handler twice). Transfer ids are never reused while connected.
+- A chunk the server could not queue (`MP.TriggerClientEvent` returned `false`) is tried again on the next tick.
 
 ## Shared time of day
 

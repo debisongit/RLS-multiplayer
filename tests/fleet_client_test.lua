@@ -69,8 +69,9 @@ check(vehicles[10].fleetId == "1" and vehicles[10].niceName == "Shared ETK" and 
 -- take fails when the garage is full -> tells the server
 free = false
 sent = {}
+header.id = 2   -- every transfer has a new id (a finished id is ignored)
 server("rlsmpChunkBegin", header)
-for i, d in ipairs(chunks) do server("rlsmpChunk", {id = 1, i = i, d = d}) end
+for i, d in ipairs(chunks) do server("rlsmpChunk", {id = 2, i = i, d = d}) end
 check(sent[1].name == "rlsmpFleetRelease" and sent[1].data.fid == "1", "release sent when garage is full")
 free = true
 sent = {}

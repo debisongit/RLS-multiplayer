@@ -26,6 +26,17 @@ check(sm.switchMap("x") == true and switched == 2, "off again: travel works")
 overhaul_career_garage_switchMap = {switchMap = function() switched = switched + 10 return true end}
 w.install(); w.enable(true)
 check(overhaul_career_garage_switchMap.switchMap() == false, "reloaded module wrapped")
+-- RLS puts a new function into the SAME table: wrapped again on the next install
+local sm2 = overhaul_career_garage_switchMap
+local fresh = 0
+sm2.switchMap = function() fresh = fresh + 1 return true end
+sm2.resolveTravelBlockers = function() fresh = fresh + 1 return true end
+w.install()
+check(sm2.switchMap() == false and sm2.resolveTravelBlockers() == false and fresh == 0, "replaced functions in the same table are wrapped again")
+for _ = 1, 5 do w.install() end
+w.enable(false)
+check(sm2.switchMap() == true and fresh == 1, "installing every frame does not stack wrappers (original called once)")
+check(sm2.resolveTravelBlockers() == true and fresh == 2, "same for resolveTravelBlockers")
 -- event results
 w.enable(false)
 w.onRlsFreeroamRaceResultFinalized({raceName = "a", finishTime = 50})

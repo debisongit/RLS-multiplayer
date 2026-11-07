@@ -61,8 +61,9 @@ check(got and got.text == payload and got.extra.profile == "rlsmpabc1001", "down
 got = nil
 local bad
 net.onBig("profile", function(text, extra, problem) bad = problem end)
+header.id = 2   -- the server never reuses a transfer id; a finished id is ignored
 server("rlsmpChunkBegin", header)
-for i = 1, #chunks do server("rlsmpChunk", {id = 1, i = i, d = (i == 2) and "XXXXXXX" or chunks[i]}) end
+for i = 1, #chunks do server("rlsmpChunk", {id = 2, i = i, d = (i == 2) and "XXXXXXX" or chunks[i]}) end
 check(bad == "checksum_mismatch", "corruption detected")
 
 -- 3. writeProfile wipes old local data and patches the level -----------------------------------------
@@ -167,5 +168,76 @@ do
   sent = {}
   for i = 1, 8 do handlers["rlsmpChunk"](json.encode({id = 77, i = 1, d = chunks[1]})) end
   check(#sent == 0, "no progress report before 8 chunks")
+end
+
+-- heartbeat, lost headers, late duplicates
+do
+  local netlib = require("rlsmp/lib/net")
+  netlib.reset()
+  netlib.init()
+  local tr = require("rlsmp/lib/transfer")
+  local calls, text = 0, nil
+  netlib.onBig("hb", function(t) calls = calls + 1 text = t end)
+  local data = string.rep("abcdefghijklmnop", 200)
+  local h, ch = tr.describe(data, 100)   -- 32 chunks
+  h.id, h.kind = 90, "hb"
+  local function named(name) local out = {} for _, m in ipairs(sent) do if m.name == name then out[#out + 1] = m.data end end return out end
+  -- heartbeat sends the current count while a download runs, unless the every-8 report just went out
+  server("rlsmpChunkBegin", h)
+  sent = {}
+  for i = 1, 5 do server("rlsmpChunk", {id = 90, i = i, d = ch[i]}) end
+  netlib.heartbeat()
+  local p = named("rlsmpChunkProgress")
+  check(#p == 1 and p[1].id == 90 and p[1].got == 5, "heartbeat reports progress between the every-8 reports")
+  sent = {}
+  for i = 6, 8 do server("rlsmpChunk", {id = 90, i = i, d = ch[i]}) end
+  check(#named("rlsmpChunkProgress") == 1, "every-8 report")
+  netlib.heartbeat()
+  check(#named("rlsmpChunkProgress") == 1, "no heartbeat right after a report")
+  netlib.heartbeat()
+  check(#named("rlsmpChunkProgress") == 2 and named("rlsmpChunkProgress")[2].got == 8, "next heartbeat repeats the count (the report may have been lost)")
+  -- a duplicate header must not wipe what we have
+  server("rlsmpChunkBegin", h)
+  local got0 = netlib.incomingProgress()
+  check(got0 == 8, "a second rlsmpChunkBegin keeps the chunks received so far")
+  for i = 9, #ch do server("rlsmpChunk", {id = 90, i = i, d = ch[i]}) end
+  check(calls == 1 and text == data, "transfer completes once")
+  sent = {}
+  server("rlsmpChunk", {id = 90, i = 3, d = ch[3]})
+  server("rlsmpChunkBegin", h)
+  for i = 1, #ch do server("rlsmpChunk", {id = 90, i = i, d = ch[i]}) end
+  check(calls == 1 and #named("rlsmpChunkHeader") == 0 and netlib.incomingProgress() == 0, "late chunks or headers of a finished transfer are ignored")
+  netlib.heartbeat()
+  check(#named("rlsmpChunkProgress") == 0, "no heartbeat without a download")
+
+  -- the header was lost: chunks for an unknown id ask for it (once), are kept, and are used when it comes
+  local h2, ch2 = tr.describe(string.rep("Z", 1000), 100)   -- 10 chunks
+  h2.id, h2.kind = 91, "hb"
+  sent = {}
+  for i = 1, 6 do server("rlsmpChunk", {id = 91, i = i, d = ch2[i]}) end
+  local asks = named("rlsmpChunkHeader")
+  check(#asks == 1 and asks[1].id == 91, "unknown transfer: header asked for once")
+  netlib.heartbeat() netlib.heartbeat()
+  check(#named("rlsmpChunkHeader") == 1, "not asked again at once")
+  netlib.heartbeat()
+  check(#named("rlsmpChunkHeader") == 2, "asked again after about 3 s without it")
+  server("rlsmpChunkBegin", h2)
+  check(netlib.incomingProgress() == 6, "chunks that came before the header are kept")
+  for i = 7, 10 do server("rlsmpChunk", {id = 91, i = i, d = ch2[i]}) end
+  check(calls == 2 and text == string.rep("Z", 1000), "transfer with a lost header completes")
+  sent = {}
+  netlib.heartbeat() netlib.heartbeat() netlib.heartbeat()
+  check(#named("rlsmpChunkHeader") == 0, "no more header requests once it came")
+
+  -- requestMissing takes turns between unfinished transfers (the server takes one request per second)
+  local a, ca = tr.describe(string.rep("a", 500), 100)
+  local b, cb = tr.describe(string.rep("b", 500), 100)
+  a.id, a.kind, b.id, b.kind = 95, "hb", 96, "hb"
+  server("rlsmpChunkBegin", a) server("rlsmpChunkBegin", b)
+  server("rlsmpChunk", {id = 95, i = 1, d = ca[1]}) server("rlsmpChunk", {id = 96, i = 2, d = cb[2]})
+  sent = {}
+  netlib.requestMissing() netlib.requestMissing() netlib.requestMissing()
+  local m = named("rlsmpChunkMissing")
+  check(#m == 3 and m[1].id == 95 and m[2].id == 96 and m[3].id == 95 and #m[1].list == 4, "one transfer per request, taking turns")
 end
 print(string.format("client_test: %d checks passed", passed))
