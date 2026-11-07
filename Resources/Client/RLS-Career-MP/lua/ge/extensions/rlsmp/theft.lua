@@ -123,10 +123,13 @@ local function plateOf(o)
   return nil
 end
 
+local hasPlateRead, plateRead = pcall(require, "rlsmp/lib/plateRead")
+local colorName = (hasPlateRead and type(plateRead) == "table" and type(plateRead.colorName) == "function") and plateRead.colorName or T.colorName
+
 local function colorOf(o)
   local c = o and o.color
   if c == nil then return nil end
-  return T.colorName(c.x or c.r or c[1], c.y or c.g or c[2], c.z or c.b or c[3])
+  return colorName(c.x or c.r or c[1], c.y or c.g or c[2], c.z or c.b or c[3])
 end
 
 -- Count of possible witnesses around a position: AI traffic and other players' cars or walkers.
@@ -177,7 +180,10 @@ function M.convertParked(id)
   veh.playerUsable = true
   T.markConverted(newId)
   if gameplay_walk and gameplay_walk.removeVehicleFromBlacklist then gameplay_walk.removeVehicleFromBlacklist(newId) end
-  stolen[newId] = {vehId = newId, plate = snap.licenseText, model = snap.model, config = snap.config, color = snap.color,
+  if not T.cleanPlate(snap.licenseText) then
+    say("W", "the stolen car has no readable plate: the server cannot record it, so it will never be reported")
+  end
+  stolen[newId] = {vehId = newId, plate = T.cleanPlate(snap.licenseText) or snap.licenseText, model = snap.model, config = snap.config, color = snap.color,
     value = snap.value, year = snap.year, t = os.time(), reported = false}
   pendingEnter = {id = newId, at = clock + 0.5}
   return veh, snap
@@ -223,7 +229,7 @@ local function runAction(dt, pos)
   if T.dist(pos, action.startPos) > CANCEL_MOVE or T.dist(pos, posOf(car)) > radius() + 1.5 then
     return cancel("You walked away. Nothing happened.")
   end
-  noiseLevel, noiseUntil = math.max(noiseLevel, action.noise), clock + NOISE_SECONDS
+  noiseLevel, noiseUntil = action.noise, clock + NOISE_SECONDS
   local shown = math.floor(action.elapsed)
   if shown > action.lastShown and not action.finishing then
     action.lastShown = shown
@@ -259,6 +265,8 @@ function M.onUpdate(dtReal)
   local info = M.carInfo(objOf(id))
   if not info then return end
   target = {id = id, info = info, asked = clock}
+  say("I", string.format("stealable car %s nearby: model %s config %s value %s year %s plate %s", tostring(id), tostring(info.model),
+    tostring(info.configKey), tostring(info.value), tostring(info.year), tostring(plateOf(objOf(id)))))
   net.send("rlsmpTheftCheck", {id = id, value = info.value, year = info.year})
 end
 
@@ -318,7 +326,7 @@ end
 
 local function onReported(d)
   for _, rec in pairs(stolen) do
-    if rec.plate ~= nil and tostring(rec.plate):upper() == tostring(d.plate) then rec.reported = true end
+    if rec.plate ~= nil and T.cleanPlate(tostring(rec.plate)) == d.plate then rec.reported = true end
   end
   say("I", "reported stolen: " .. tostring(d.plate))
 end

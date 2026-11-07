@@ -135,7 +135,7 @@ local function methodInfo(name)
   return {
     method = name,
     label = type(m.label) == "string" and m.label or name,
-    seconds = clamp(n(m.seconds, 10), 1, 600),
+    seconds = math.floor(clamp(n(m.seconds, 10), 1, 600)),
     noise = clamp(n(m.noise, 0.5), 0, 1),
     failChance = clamp(n(m.failChance, 0), 0, 1),
     tracker = m.tracker == true,

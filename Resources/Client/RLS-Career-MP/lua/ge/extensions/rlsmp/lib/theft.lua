@@ -75,29 +75,42 @@ function M.realModel(model, partConfig)
   return real, nil, rest
 end
 
--- Colour word from linear 0-1 (or 0-255) RGB.
+-- Colour word from linear 0-1 RGB. The same buckets as lib/plateRead.colorName of the plate-reading feature (police match
+-- descriptions by model + colour word, so both must name a colour the same way); rlsmp/theft.lua prefers plateRead's when present.
 function M.colorName(r, g, b)
   r, g, b = tonumber(r), tonumber(g), tonumber(b)
-  if not (r and g and b) then return nil end
-  if r > 1 or g > 1 or b > 1 then r, g, b = r / 255, g / 255, b / 255 end
+  if not r or not g or not b then return nil end
+  local function c01(x) return x < 0 and 0 or (x > 1 and 1 or x) end
+  r, g, b = c01(r), c01(g), c01(b)
   local mx, mn = math.max(r, g, b), math.min(r, g, b)
-  local l = (mx + mn) / 2
-  local d = mx - mn
-  if d < 0.08 then
-    if l > 0.8 then return "white" elseif l > 0.45 then return "silver" elseif l > 0.18 then return "grey" else return "black" end
+  local v, d = mx, mx - mn
+  local s = mx == 0 and 0 or d / mx
+  if v < 0.15 then return "black" end
+  if s < 0.18 then
+    if v > 0.85 then return "white" end
+    if v > 0.55 then return "silver" end
+    return "grey"
   end
   local h
-  if mx == r then h = ((g - b) / d) % 6 elseif mx == g then h = (b - r) / d + 2 else h = (r - g) / d + 4 end
-  h = h * 60
-  if l < 0.12 then return "black" end
-  if h < 15 or h >= 345 then return (l < 0.3) and "maroon" or "red" end
-  if h < 40 then return (l < 0.35) and "brown" or "orange" end
+  if mx == r then h = 60 * (((g - b) / d) % 6)
+  elseif mx == g then h = 60 * ((b - r) / d + 2)
+  else h = 60 * ((r - g) / d + 4) end
+  if h < 15 or h >= 345 then return "red" end
+  if h < 40 then return v < 0.6 and "brown" or "orange" end
   if h < 70 then return "yellow" end
   if h < 165 then return "green" end
   if h < 200 then return "teal" end
   if h < 255 then return "blue" end
   if h < 290 then return "purple" end
   return "pink"
+end
+
+-- Plate text cleaned like the server does (theft.cleanPlate / plateRecords.cleanPlate). nil when unusable.
+function M.cleanPlate(s)
+  if type(s) ~= "string" then return nil end
+  s = s:gsub("%s+", " "):gsub("^ ", ""):gsub(" $", ""):upper()
+  if #s == 0 or #s > 16 or s:find("[%c|]") then return nil end
+  return s
 end
 
 function M.dist(a, b)

@@ -99,7 +99,8 @@ check(T.hash("a") == 0xE40C292C, "FNV-1a matches the reference value")
 local r, c, k = T.realModel("simple_traffic", "vehicles/simple_traffic/etk800_854t.pc")
 check(r == "etk800" and c == nil and k == "854t", "simplified car maps to the real model")
 check(T.realModel("covet", "vehicles/covet/base.pc") == "covet", "a normal car keeps its model")
-check(T.colorName(0.9, 0.05, 0.05) == "red" and T.colorName(1, 1, 1) == "white" and T.colorName(0.05, 0.1, 0.8) == "blue", "colour names")
+check(T.colorName(0.9, 0.05, 0.05) == "red" and T.colorName(1, 1, 1) == "white" and T.colorName(0.05, 0.1, 0.8) == "blue" and T.colorName(0.7, 0.7, 0.7) == "silver", "colour names (plateRead buckets)")
+check(T.cleanPlate("  ab  12 ") == "AB 12" and T.cleanPlate("") == nil and T.cleanPlate("a|b") == nil, "plates cleaned like the server")
 
 -- find a seed that makes car 10's spot stealable and car 11's not
 local spotA, spotB = {x = 1.5, y = 1.0}, {x = 2.0, y = -1.5}
