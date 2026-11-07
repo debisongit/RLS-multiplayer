@@ -20,7 +20,8 @@ overhaul_career_garage_inventory = {
   setVehicleDirty = function() end,
   getVehicles = function() return vehicles end,
 }
-overhaul_career_logistics_general = {canRemoveLogisticsVehicle = function() return true end}
+local removable = true
+overhaul_career_logistics_general = {canRemoveLogisticsVehicle = function() return removable end}
 local vmt = {__add = function(a, b) return a end, __mul = function(a) return a end}
 local function V(x, y, z) return setmetatable({x = x, y = y, z = z}, vmt) end
 local at = V(0, 0, 0)
@@ -44,7 +45,7 @@ check(last("rlsmpDuelCar") == nil, "disabled: no answer")
 duel.enable(true)
 server("rlsmpDuelWho", {id = 1})
 local car = last("rlsmpDuelCar")
-check(car and car.inv == 4 and car.model == "etk800" and car.pos.x == 0, "answers with the car and position")
+check(car and car.inv == 4 and car.cur == 4 and car.model == "etk800" and car.pos.x == 0, "answers with the car, the current car and position")
 
 -- finish line
 server("rlsmpDuelGo", {id = 1, finish = {x = 100, y = 0, z = 0}, radius = 20})
@@ -61,14 +62,21 @@ sent = {}
 duel.onUpdate(2)
 check(last("rlsmpDuelPos") == nil, "no position pings after the duel")
 
--- loser: car removed only after the server says ok
-server("rlsmpDuelHand", {slip = "s1", inv = 4})
-for _ = 1, 50 do net.pump(10) end
-check(#removed == 0 and #sent > 0, "car uploaded, still in the garage")
+-- loser: the server built the winner's car from its own copy; the client only removes the car, never uploads it
+check(handlers["rlsmpDuelHand"] == nil, "no hand-over upload handler any more")
+sent = {}
 server("rlsmpDuelAck", {slip = "s1", ok = false, inv = 4})
-check(#removed == 0, "refused hand-over keeps the car")
-server("rlsmpDuelAck", {slip = "s1", ok = true, inv = 4})
-check(removed[1] == 4, "removed after the server confirms")
+check(#removed == 0, "refused ack keeps the car")
+server("rlsmpDuelAck", {slip = "s1", ok = true, inv = 4, model = "pickup"})
+check(#removed == 0, "ack naming another model does not remove the car")
+removable = false
+server("rlsmpDuelAck", {slip = "s1", ok = true, inv = 4, model = "etk800"})
+check(#removed == 0, "car in use for a job is left for the join-time drop")
+removable = true
+server("rlsmpDuelAck", {slip = "s1", ok = true, inv = 4, model = "etk800"})
+check(removed[1] == 4, "removed when the server says so")
+for _ = 1, 50 do net.pump(10) end
+check(last("rlsmpUpBegin") == nil, "nothing uploaded for the hand-over")
 
 -- winner: car arrives and is tagged; a second delivery is only confirmed
 sent = {}

@@ -2,7 +2,8 @@
 -- SPDX-License-Identifier: AGPL-3.0-only
 --
 -- The server runs the duel. This side only: answers "which car are you in and where", reports its position once a second,
--- tells the server when it reached the finish, and moves a car between inventory and server (never deleting before the server confirms).
+-- tells the server when it reached the finish, removes a lost car when the server says so (the server builds the
+-- winner's car from its own copy of the save; nothing is uploaded from here), and adds a won car to the garage.
 
 local M = {}
 
@@ -35,7 +36,8 @@ local function onWho(msg)
   local id = i.getCurrentVehicle()
   local rec = id and i.getVehicle(id)
   local ok = rec and overhaul_career_logistics_general.canRemoveLogisticsVehicle(id) and not rec.fleetId
-  net.send("rlsmpDuelCar", {id = msg.id, inv = ok and id or nil, model = rec and rec.model, pos = myPos()})
+  -- cur = the car we sit in right now; the server refuses the stake unless it is the staked car.
+  net.send("rlsmpDuelCar", {id = msg.id, inv = ok and id or nil, cur = id, model = rec and rec.model, pos = myPos()})
 end
 
 local function onGo(msg)
@@ -48,17 +50,15 @@ local function onEnd()
   duelId, finish, finished = nil, nil, nil
 end
 
-local function onHand(msg)
-  if not enabled then return end
-  local rec = inv().getVehicle(msg.inv)
-  if not rec or not overhaul_career_logistics_general.canRemoveLogisticsVehicle(msg.inv) then
-    return toast("warning", "A car you lost in a duel is owed, but it can't be moved right now (job or listing?).")
-  end
-  rlsmp_fleet.upload("duelHand", {slip = msg.slip, inv = msg.inv, rec = rlsmp_fleet.cleanCopy(rec)})
-end
-
+-- We lost: the server already took its copy of the car, so remove it from the garage and save.
+-- If this fails (job, listing, not loaded) the server drops it on the next join instead.
 local function onAck(msg)
   if not enabled or not msg.ok or not msg.inv then return end
+  local rec = inv().getVehicle(msg.inv)
+  if not rec or (msg.model and rec.model ~= msg.model) then return end
+  if not overhaul_career_logistics_general.canRemoveLogisticsVehicle(msg.inv) then
+    return toast("warning", "You lost the duel. The car is in use right now; it leaves your garage when you next join.")
+  end
   inv().removeVehicle(msg.inv)
   if rlsmp_saveBridge then rlsmp_saveBridge.requestSave("rlsmp_duel") end
   toast("info", "You lost the duel. Your car went to the winner.")
@@ -116,12 +116,11 @@ function M.onExtensionLoaded()
   net.on("rlsmpDuelWho", onWho)
   net.on("rlsmpDuelGo", onGo)
   net.on("rlsmpDuelEnd", onEnd)
-  net.on("rlsmpDuelHand", onHand)
   net.on("rlsmpDuelAck", onAck)
   net.onBig("duelVehicle", onVehicle)
 end
 
-M._onWho, M._onGo, M._onHand, M._onAck, M._onVehicle = onWho, onGo, onHand, onAck, onVehicle
+M._onWho, M._onGo, M._onAck, M._onVehicle = onWho, onGo, onAck, onVehicle
 M.onInit = function() setExtensionUnloadMode(M, "manual") end
 
 return M

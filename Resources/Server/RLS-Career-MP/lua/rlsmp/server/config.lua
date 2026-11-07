@@ -163,7 +163,8 @@ M.defaults = {
   },
 
   -- Pink-slip duels (/duel <player>). OFF until you list at least one course and set enabled = true.
-  -- A course is {name = "airport", start = {x, y, z}, finish = {x, y, z}} in map coordinates; both players must
+  -- A course is {name = "airport", start = {x, y, z}, finish = {x, y, z}} in map coordinates
+  -- ({x = .., y = .., z = ..} works too); both players must
   -- be near the start. The loser's car moves to the winner. Untested in-game: try with spare cars first.
   duel = {
     enabled = false,
@@ -174,6 +175,12 @@ M.defaults = {
     raceTimeoutSeconds = 600,
     minRaceSeconds = 8,
     retrySeconds = 30,
+    -- Anti-cheat plausibility (positions are client-reported): fastest believable speed in m/s between pings and
+    -- from start to finish, and the fewest position pings (1 per second) a finisher must have sent during the race.
+    maxSpeed = 120,
+    minPings = 5,
+    -- Refuse a duel when the cheaper car is more than this many percent cheaper than the other one (0 = off).
+    maxValueGapPercent = 0,
   },
 
   vehicles = {

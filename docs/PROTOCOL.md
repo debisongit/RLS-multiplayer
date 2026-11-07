@@ -175,12 +175,26 @@ Log lines use the tag `RLSMP-GUARD`.
 
 ### Pink-slip duels (server `duel.lua`, client `duel.lua`; off by default: `duel.enabled`)
 
-Chat: `/duel <player>`, `/duel accept`, `/duel cancel`, `/duel claim`. Needs at least one course in `config.json` (`duel.courses`).
+Chat: `/duel <player>`, `/duel accept`, `/duel cancel`, `/duel claim` (re-send a won car now). Needs at least one course in `config.json`
+(`duel.courses`, `start`/`finish` as `{x, y, z}` or `{x = .., y = .., z = ..}`; a course without usable numbers is skipped with a warning).
 - server to client: `rlsmpDuelWho {id}` (answer with your car), `rlsmpDuelGo {id, finish, radius}`, `rlsmpDuelEnd {id}`,
-  `rlsmpDuelHand {slip, inv}` (loser: upload this car), `rlsmpDuelAck {ok, inv, slip}` (remove it now), big transfer `duelVehicle {slip, rec}` (winner).
-- client to server: `rlsmpDuelCar {id, inv, model, pos}`, `rlsmpDuelPos {pos}` (1 per second during a duel), `rlsmpDuelFinish {id}`,
-  upload kind `duelHand {slip, inv, rec}`, `rlsmpDuelReceived {slip}`, `rlsmpDuelRelease {slip, why}`.
-- Owed cars are kept in `duels.json` until the winner confirms. See the safety rules at the top of `server/duel.lua`.
+  `rlsmpDuelAck {ok, inv, slip, model}` (loser: remove this car now and save; the client skips it if the model differs or the car is in a job),
+  big transfer `duelVehicle {slip, rec}` (winner).
+- client to server: `rlsmpDuelCar {id, inv, cur, model, pos}` (`cur` = the inventory id of the car the player sits in; must equal `inv`),
+  `rlsmpDuelPos {pos}` (1 per second during a duel), `rlsmpDuelFinish {id}`, `rlsmpDuelReceived {slip}`, `rlsmpDuelRelease {slip, why}`.
+- Removed: `rlsmpDuelHand` and the upload kind `duelHand`. The loser's client never sends the car any more: the winner's
+  record is built from the server's own copy (`career/vehicles/<inv>.json`, must have `model` = the staked model and a `config` table).
+  If that copy is unusable, the winner is announced but no car moves.
+- At the win the slip goes into `duels.json` in stage `deliver`, the loser's slot is marked out (`profiles.markOut`, so the join-time
+  `extra.drop` list removes it if the loser was offline or the removal failed) and re-marked after any loser save that still has the car.
+  `rlsmpDuelReceived` only moves the slip to `delivered`; it is removed when a later winner save holds a car with that `slipId`
+  (or any winner save 60 s later). If the winner leaves before that, it goes back to `deliver` and is re-sent on the next join.
+  Old `duels.json` entries in stage `hand` are dropped at start (nothing had moved yet).
+- Plausibility (config `duel.maxSpeed` = 120 m/s, `duel.minPings` = 5): a ping implying a faster jump than `maxSpeed` since the last
+  accepted one is refused and that player cannot win the duel; a finish needs the start position (at GO) within `startRadius` of the
+  course start, start-to-finish straight distance over elapsed time under `maxSpeed`, and at least `minPings` pings since GO.
+  `duel.maxValueGapPercent` (0 = off) refuses a duel when the cheaper car (server copy's `configBaseValue`, RLS's base price of the config, not the depreciated value) is more than that many percent cheaper.
+- See the safety rules at the top of `server/duel.lua`.
 
 ## Flow control
 
