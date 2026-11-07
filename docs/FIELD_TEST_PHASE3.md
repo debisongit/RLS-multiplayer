@@ -471,3 +471,12 @@ Needs `"theft": {"enabled": true}` in the server config, and a black market memb
 - Never played. Stripping pays cash only: RLS has no way to take parts off a car, so nothing goes to your part inventory.
 - The car must be in the same game session that stole it: after a restart the server still has the record but the game forgot the car, so it can't be sold (the record expires after `keepHours`).
 - The value of a car comes from the game's price list (client-reported, capped at `fence.maxValue`). A car with no price in the list is valued at `fence.minValue` (2000): if payouts look tiny, the game had no price for that model.
+
+
+## Lockout kit, jammer, tracker blocker (build 0.4.28)
+
+1. Buy a lockout kit (`/market buy lockout_kit`, rep 10) and try an immobilizer-era car (about 1995 to 2010). Without the kit the prompt says "You need: Lockout kit". With kit + key programmer + blank key it works, takes about 25 s and is quiet (noise 0.2).
+2. Luxury car (new or over $120000) with the connector injector, key programmer and blank key: note the noise in the log. With a signal jammer owned it should be a quarter of that. A luxury theft without a tracker blocker is reported within about 20 s; with one you get "Your tracker blocker killed the GPS tracker" and the usual report time.
+3. Send me the `RLSMP-THEFT` and `[theft]` lines.
+
+Known gaps: police cannot ping a tracker or be sent after a car you stole with one unblocked beyond the normal report; finding and removing a tracker is not built. Old `config.json` files that already list `key_programmer` under `theft.methods` need `lockout_kit` added by hand.

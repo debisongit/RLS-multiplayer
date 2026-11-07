@@ -121,7 +121,10 @@ items.give(1, "key_programmer")
 items.give(1, "blank_key", 2)
 now = now + 20
 client(1, "rlsmpTheftStart", {value = 9000, year = 2004})
-check(last(1, "rlsmpTheftGo").method == "key_programmer", "immobilizer car: key programmer")
+check(last(1, "rlsmpTheftGo").ok == false and last(1, "rlsmpTheftGo").err:find("Lockout kit"), "immobilizer car: no way in without a lockout kit")
+items.give(1, "lockout_kit")
+client(1, "rlsmpTheftStart", {value = 9000, year = 2004})
+check(last(1, "rlsmpTheftGo").method == "key_programmer", "immobilizer car: lockout kit, key programmer, blank key")
 now = now + 25
 theft.setRandom(function() return 0.0 end)  -- would fail (failChance 0.15 > 0)
 client(1, "rlsmpTheftFinish", {})
@@ -131,7 +134,7 @@ theft.setRandom(function() return 0.5 end)
 client(1, "rlsmpTheftStart", {value = 9000, year = 2004})
 now = now + 25
 client(1, "rlsmpTheftFinish", {})
-check(last(1, "rlsmpTheftResult").ok == true and items.count(1, "blank_key") == 1 and items.has(1, "key_programmer"), "blank key used, programmer kept")
+check(last(1, "rlsmpTheftResult").ok == true and items.count(1, "blank_key") == 1 and items.has(1, "key_programmer") and items.has(1, "lockout_kit"), "blank key used, programmer and lockout kit kept")
 theft.setRandom(function() return 0.0 end)  -- seen, earliest report
 client(1, "rlsmpTheftDone", {plate = "XYZ9", model = "pessima", color = "blue", witnesses = 2})
 local r2 = theft.records()["XYZ9"]
@@ -168,6 +171,38 @@ now = now + 45
 client(2, "rlsmpTheftFinish", {})
 client(2, "rlsmpTheftDone", {plate = "LUX1", model = "vivace", color = "black", witnesses = 0})
 check(theft.records()["LUX1"].reportAt == now + 20 and theft.records()["LUX1"].tracker, "tracker reports in 20 s")
+check(math.abs(last(2, "rlsmpTheftGo").noise - 0.6) < 1e-9, "luxury alarm: full noise without a jammer")
+
+-- A jammer silences the alarm of the luxury method (noise x 0.25), and the witness chance follows
+items.give(2, "jammer")
+items.give(2, "blank_key")
+now = now + 20
+client(2, "rlsmpTheftStart", {value = 300000, year = 2019})
+check(math.abs(last(2, "rlsmpTheftGo").noise - 0.15) < 1e-9, "jammer: luxury noise 0.6 -> 0.15")
+check(math.abs(theft.pendingOf(2).noise - 0.15) < 1e-9, "jammer: the witness roll uses the quiet noise")
+client(2, "rlsmpTheftCancel", {})
+check(math.abs(theft.witnessChance(0, 0.15) - (0.15 + 0.3 * 0.15)) < 1e-9, "quiet noise lowers the witness chance")
+-- methods without an alarm are not changed by a jammer
+items.give(2, "signal_cloner")
+now = now + 20
+client(2, "rlsmpTheftStart", {value = 20000, year = 2016})
+check(math.abs(last(2, "rlsmpTheftGo").noise - 0.1) < 1e-9, "jammer does nothing for a method without an alarm")
+client(2, "rlsmpTheftCancel", {})
+
+-- A tracker blocker makes the luxury tracker report like any other car, and tells the thief
+items.give(2, "tracker_blocker")
+now = now + 20
+client(2, "rlsmpTheftStart", {value = 300000, year = 2019})
+now = now + 45
+theft.setRandom(function() return 0.9 end)
+client(2, "rlsmpTheftFinish", {})
+check(last(2, "rlsmpTheftResult").ok == true, "luxury theft with blocker and jammer works")
+client(2, "rlsmpTheftDone", {plate = "LUX2", model = "vivace", color = "black", witnesses = 0})
+local lux2 = theft.records()["LUX2"]
+check(lux2 and lux2.tracker == false and lux2.reportAt == now + 600, "tracker blocker: no fast report, the normal ten minutes")
+local blocked = false
+for i = #chat, 1, -1 do if chat[i][1] == 2 and chat[i][2]:find("tracker blocker killed") then blocked = true break end end
+check(blocked, "the thief is told the tracker was killed")
 
 -- Cancel and the chat command
 items.give(2, "signal_cloner")
@@ -188,6 +223,7 @@ now = now + 30
 check(#theft.reportDue() == 1, "and still reported after the restart")
 now = now + 49 * 3600
 theft.reportDue()
+theft.reportDue()   -- a record that was still waiting for its report is reported first and pruned on the next pass
 check(next(theft.records()) == nil, "old records pruned")
 
 -- No plateRecords: the hook is quiet

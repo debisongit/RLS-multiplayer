@@ -10,6 +10,11 @@
 Plain list of what changed in each build. The build number shows in the game log (`client loaded, build X`) and the server log.
 "Untested" means it passed the automatic tests but nobody has played it yet.
 
+## 0.4.28
+- Immobilizer-era cars (about 1995 to 2010) now need a way in: the new **lockout kit** (a tool, kept forever, black market rep 10, $2500) joins the key programmer and a blank key, so you open the door quietly instead of smashing the window. NOTE: if your server's `config.json` already contains `theft.methods.key_programmer`, add `"lockout_kit"` to its `items` list by hand (or delete that key so the new default is used); the market tier `lockout_kit` is added automatically. (untested)
+- **Signal jammer** now does something: it silences the alarm of luxury cars, so their theft noise (and with it the chance a witness sees you) drops to a quarter (`theft.jammerNoiseFactor`). Methods without an alarm are unchanged. (untested)
+- **Tracker blocker** (already worked) now tells you in chat when it killed a luxury car's GPS tracker, so the car is reported after the normal time instead of within 20 seconds. Still missing: police pinging the tracker, and finding and removing it. (untested)
+
 ## 0.4.27
 - The fence: stolen cars can now be turned into money. Drive the stolen car to the black market's ACTIVE drop spot (same spot as package pickups, it moves every 30 minutes), get out, stand next to it and type `/fence` to see what each way pays, then `/fence strip` (30% of the car's value, no papers), `/fence sell` (35%, no papers), `/fence resell` (60%, needs fake plate + VIN plate + part number, all used up) or `/fence gamble` (swap one or two papers: 45% or 52.5%, but a 30% chance the buyer is a trap: no money, the car is gone, you lose reputation). Black market members only; not while police chase you; good sales give reputation. The server pays, checks the spot and the car's owner, and saves money and papers together; the game only deletes the car after the server says so. Settings: `fence` in `config.json`. Needs `theft.enabled`. A car the game has no price for is valued at `fence.minValue` (2000). Note: stripping pays cash, it does not put parts into your part inventory. (untested)
 

@@ -342,6 +342,7 @@ Weights are `{name = number >= 0}` (at most 64 entries, names up to 64 character
   `seenReportMin`-`seenReportMax` s later; unseen: `unseenReportSeconds`; a method with `tracker` (luxury) reports within `trackerReportSeconds`
   unless the thief owns a `tracker_blocker`. Records live in `stolen.json` (`stolen[plate]`, plate cleaned like `plateRecords.cleanPlate`), pruned
   after `keepHours`. On the report the server calls `plateRecords.flag(plate, model, color, "stolen", accountId)` if that module exists (`theft.reportHook`).
+- Items that change a theft: immobilizer-era cars need `lockout_kit` + `key_programmer` + `blank_key` (the `key_programmer` method, tools kept, blank key used up). `jammer` (owned) multiplies the noise of methods marked `alarm = true` (luxury) by `theft.jammerNoiseFactor` (0.25) in `rlsmpTheftGo` and in the witness roll. `tracker_blocker` (owned) turns the fast tracker report off and the thief gets a chat line.
 - The stolen car is not added to the garage inventory. The client keeps it in `rlsmp_theft.stolenCars()`; `vehicleGuard` lets the player into exactly
   the converted vehicle ids (`lib/theft` converted set, removed when the car is destroyed). Log tag `RLSMP-THEFT`.
 
