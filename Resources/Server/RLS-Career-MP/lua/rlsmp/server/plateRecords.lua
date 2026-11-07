@@ -168,7 +168,7 @@ local function onEscaped(pid, d)
       tostring(pid), tostring(s.name), window))
     return
   end
-  if M.flag(d.plate, d.model, d.color, "escaped", s.accountId) then
+  if M.flag(d.plate, d.model, d.color, d.reason == "arrested" and "arrested" or "escaped", s.accountId) then
     lastEscape[pid] = now
   else
     util.warn("[plates] escape report from pid=" .. tostring(pid) .. " had a bad plate or model")

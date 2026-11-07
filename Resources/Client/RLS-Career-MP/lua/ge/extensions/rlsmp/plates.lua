@@ -290,26 +290,28 @@ end
 
 -- RLS hook (extensions.hook from police.lua evadeVehicle / trafficVehicle onPursuitUpdate).
 function M.onPursuitAction(vehId, action, data)
-  if action ~= "evade" or not active() or not be then return end
+  if (action ~= "evade" and action ~= "arrest") or not active() or not be then return end
+  local arrested = action == "arrest"
   local playerId = be:getPlayerVehicleID(0)
   local svc = overhaul_integration_services_police
   local handoff = svc and type(svc.getWalkHandoffVehId) == "function" and svc.getWalkHandoffVehId() or nil
   if vehId ~= playerId and vehId ~= handoff then return end
   if playerIsCop() then return end
-  if R.isStalemate(data) then
+  if not arrested and R.isStalemate(data) then
     p3.log("I", "plates: pursuit ended as a stalemate (not an escape), nothing reported")
     return
   end
   local info = carInfo(vehId)
   if not info then
-    p3.log("W", "plates: escaped, but the car's plate could not be read")
+    p3.log("W", "plates: " .. (arrested and "arrested" or "escaped") .. ", but the car's plate could not be read")
     return
   end
-  escapedUntil = now + config.afterEscapeSeconds
+  -- Escape: cops are likelier to read you for a while. Arrest: the plate is flagged too (the fine is paid, the plate stays on file).
+  if not arrested then escapedUntil = now + config.afterEscapeSeconds end
   cooldowns[R.key(info.plate, info.model)] = now + config.retriggerSeconds
-  net.send("rlsmpPlateEscaped", {plate = info.plate, model = info.model, color = info.color})
+  net.send("rlsmpPlateEscaped", {plate = info.plate, model = info.model, color = info.color, reason = arrested and "arrested" or "escaped"})
   p3.count("plates: escapes reported")
-  p3.log("I", string.format("plates: escaped in %s %s (%s), reported", info.model, info.plate, tostring(info.color)))
+  p3.log("I", string.format("plates: %s in %s %s (%s), reported", arrested and "arrested" or "escaped", info.model, info.plate, tostring(info.color)))
 end
 
 function M.onUpdate(dtReal, dtSim)

@@ -78,6 +78,16 @@ client("rlsmpPlateEscaped", 1, {plate = "AB 123", model = "etk800", color = "blu
 check(plates.lookup("ab 123", "etk800").flagged == true, "escape after a chase flags the plate")
 check(plates.lookup("AB 123", "pickup").flagged == false, "same plate, other model: not flagged")
 
+-- an arrest after a chase flags the plate too, with its own reason
+clock = clock + 100
+chased(1, true)
+fire("rlsmpPlateTick")
+chased(1, false)
+fire("rlsmpPlateTick")
+client("rlsmpPlateEscaped", 1, {plate = "ARR 9", model = "pickup", color = "red", reason = "arrested"})
+local arrested = plates.lookup("ARR 9", "pickup")
+check(arrested.flagged == true and arrested.reason == "arrested", "an arrest flags the plate with reason arrested")
+
 -- other players' cops read it
 clock = clock + 2
 client("rlsmpPlateLookup", 2, {plate = "AB 123", model = "etk800", color = "red"})

@@ -129,8 +129,11 @@ check(#esc == 1 and esc[1].plate == "AB 123" and esc[1].model == "etk800" and es
 plates.onPursuitAction(1, "evade", {timers = {evade = 0}})
 check(#sentNamed("rlsmpPlateEscaped") == 1 and saw("stalemate"), "stalemate end is not an escape")
 plates.onPursuitAction(99, "evade", {timers = {evade = 40}})
+check(#sentNamed("rlsmpPlateEscaped") == 1, "other cars are not escapes")
+local escapedBefore = #sentNamed("rlsmpPlateEscaped")
 plates.onPursuitAction(1, "arrest", {})
-check(#sentNamed("rlsmpPlateEscaped") == 1, "other cars and arrests are not escapes")
+local after = sentNamed("rlsmpPlateEscaped")
+check(#after == escapedBefore + 1 and after[#after].reason == "arrested" and after[#after].plate == "AB 123", "an arrest flags the plate too, with the reason arrested")
 player.pursuit.mode = 0
 chased = false
 

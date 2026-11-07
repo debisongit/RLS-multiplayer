@@ -3,6 +3,9 @@
 Plain list of what changed in each build. The build number shows in the game log (`client loaded, build X`) and the server log.
 "Untested" means it passed the automatic tests but nobody has played it yet.
 
+## 0.4.25
+- Being arrested now flags your plate too (same 2 hours as after an escape, reason "arrested"). An arrest does not make cops read you more often, only an escape does. (untested)
+
 ## 0.4.24
 - Plate reading and police records: a cop within 15 m reads your plate while you drive under 50 km/h (3 to 6 seconds, "Police reading your plate: AB ___" on screen; speeding up or driving off cancels it). After you escape a chase the plate is flagged for 2 real hours and the car's model and colour are remembered for 20 minutes (any player in the same model and colour can be picked up by the description). A read of a flagged plate starts an instant chase (one cop in five skips it, and the same plate is not chased again within 2 minutes). Changing the plate or repainting clears the flag. Normal reads: 35% of passing cops, 100% in the 20 minutes after an escape. Settings under `police.plateReading` in `config.json`, switch `police.plateReading.enabled`. Being arrested does not flag the plate yet. (untested)
 - Player items module on the server (`/items`), groundwork for the black market and car theft.
