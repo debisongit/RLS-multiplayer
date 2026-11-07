@@ -23,6 +23,7 @@ local modelList = nil              -- the game's car list, read when the menu op
 local toggledImgui = false         -- we made ImGui visible and must put it back
 local probed = false
 local drawFailed = false
+local inChild = false             -- between BeginChild1 and EndChild: a draw error must close it too (ImGui asserts on a mismatched stack)
 local searchBuf, modBuf            -- ImGui text buffers
 local readText = function(buf) local ok, s = pcall(ffi.string, buf) return ok and s or "" end
 
@@ -313,8 +314,10 @@ local function drawWindow(ui)
     ui.Text("")
     ui.Separator()
     ui.BeginChild1("rlsmpTrafficBody", ui.ImVec2(0, 460), true)
+    inChild = true
     local body = SECTIONS[st.section] or sectionCars
     body(ui)
+    inChild = false
     ui.EndChild()
   end
   ui.End()
@@ -328,6 +331,7 @@ function M.onUpdate()
   if not ok and not drawFailed then
     drawFailed = true
     p3.log("E", "traffic menu draw failed: " .. tostring(err))
+    if inChild then inChild = false pcall(ui.EndChild) end
     pcall(ui.End)
     M.close()
     toast("error", "The traffic menu could not be drawn (see the game log).")

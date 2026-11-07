@@ -427,7 +427,7 @@ shows it through RLS's own weather system, so rain, wet roads and tire grip matc
 ### Named failure modes
 | What you see | What it means |
 |---|---|
-| `[` does nothing, `/trafficmenu` works | The key name `lbracket` or a binding conflict. Rebind under Controls > RLS Career MP and tell me the key. |
+| `[` does nothing, `/trafficmenu` works | The key name `leftbracket` (taken from RLS's own code) or a binding conflict. Rebind under Controls > RLS Career MP and tell me the key. |
 | Window never appears, log `probe: ui_imgui is not available` | ImGui missing in this game; menu cannot be drawn. |
 | Window appears but the mouse does not click it | ImGui input vs game input. Send the `probe:` line (it lists mouse/visibility functions). |
 | Typing in the search box also drives the car | Known risk: keys reach the game while typing. Tell me. |

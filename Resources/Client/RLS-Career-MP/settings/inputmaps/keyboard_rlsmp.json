@@ -2,6 +2,6 @@
   "displayName": "Keyboard",
   "imagePack": "keyboard",
   "bindings": [
-    {"control": "lbracket", "action": "rlsmpTrafficMenu"}
+    {"control": "leftbracket", "action": "rlsmpTrafficMenu"}
   ]
 }

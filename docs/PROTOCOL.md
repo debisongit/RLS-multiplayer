@@ -204,7 +204,7 @@ Chat: `/duel <player>`, `/duel accept`, `/duel cancel`, `/duel claim`. Needs at 
 - `rlsmpTrafficAdminSet {set = {{p = {"trafficVariety","typeWeights","Truck"}, v = 0.5}}, rm = {{"trafficVariety","models","pickup"}}}` (client to server): path arrays, never strings. Answer `rlsmpTrafficAdminResult {ok, applied, rejected = {{p, why}}, saved}`, then a fresh state to every admin online.
 - `rlsmpTrafficAdminOpen {}` (server to client): sent by the chat command `/trafficmenu` for admins; the client then asks for the state.
 - Server `server/trafficAdmin.lua` is the security boundary: admin = name in `trafficAdmin.names` (case insensitive) or account id in `trafficAdmin.accountIds`, never a guest; every path must match an allowlist rule with a type and range; weight maps accept names of plain characters (max 64, max 64 entries). Values change INSIDE the existing config tables, `config.json` is rewritten, modules `resend()`. At most 3 requests per second per player. Log lines `RLSMP-ADMIN`.
-- Client `trafficMenu.lua` (ImGui window) + `lib/trafficMenu.lua` (pending changes, patch). Action `rlsmpTrafficMenu` (`core/input/actions/rlsmp.json`), default key `lbracket` (`settings/inputmaps/keyboard_rlsmp.json`).
+- Client `trafficMenu.lua` (ImGui window) + `lib/trafficMenu.lua` (pending changes, patch). Action `rlsmpTrafficMenu` (`core/input/actions/rlsmp.json`), default key `leftbracket` (`settings/inputmaps/keyboard_rlsmp.json`).
 
 ## Shared weather
 

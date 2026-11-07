@@ -114,6 +114,18 @@ check(#sent == 1, "server push asks for the state")
 server("rlsmpTrafficAdminState", {ok = true, cfg = SNAP})
 check(M.isOpen(), "opened by the chat command")
 
+-- 8a. an error inside the scrolling body closes the child AND the window once each
+M.onServerLeave()
+server("rlsmpTrafficAdminOpen", {})
+server("rlsmpTrafficAdminState", {ok = true, cfg = SNAP})
+check(M.isOpen(), "reopened for the child-error test")
+ui.Text = function() rec("Text") end
+local realSlider = ui.SliderFloat
+ui.SliderFloat = function() error("slider boom") end
+drawn.EndChild, drawn.End = 0, 0
+M.onUpdate()
+check(drawn.EndChild == 1 and drawn.End == 1 and not M.isOpen(), "error in the body: EndChild once, End once")
+
 -- 8. a draw error closes the menu instead of spamming ---------------------------------------------------------------------------
 ui.Text = function() error("boom") end
 M.onUpdate()
