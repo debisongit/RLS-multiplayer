@@ -103,6 +103,14 @@ now = now + 1
 fire("rlsmpChunkMissing", 3, json.encode({id = id3, list = {1, 2, 3}}))
 check(net.resendsFor(3) == 3, "already queued chunks are not queued again")
 for _ = 1, 5 do net.pump() end
+now = now + 1
+local mark = #sent[3]
+fire("rlsmpChunkMissing", 3, json.encode({id = id3, list = {5, 80}}))
+check(net.resendsFor(3) == 1, "a running transfer resends only chunks it already sent (80 is still to come)")
+net.pump()
+local outNow = {}
+for k = mark + 1, #sent[3] do if sent[3][k].name == "rlsmpChunk" then outNow[#outNow + 1] = sent[3][k].data.i end end
+check(outNow[1] == 5 and #outNow <= 2 and outNow[2] ~= 80, "the resend goes first, chunk 80 is not pushed outside the window")
 players[4] = {name = "ghost", ids = {beammp = "4"}}
 local ghostId = net.sendBig(4, "big", string.rep("g", 50000), nil)
 for _ = 1, 20 do net.pump() end

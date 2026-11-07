@@ -208,8 +208,9 @@ Chat: `/duel <player>`, `/duel accept`, `/duel cancel`, `/duel claim` (re-send a
 
 ## Lost chunks
 
-- `rlsmpChunkMissing {id, list}` (client to server): up to 50 chunk numbers of transfer `id` that never arrived. The client asks after 4 s without progress, repeating every 4 s,
-  one transfer per request (several unfinished transfers take turns). The server accepts it only from players with a session, at most one per second per player,
+- `rlsmpChunkMissing {id, list}` (client to server): up to 50 chunk numbers of transfer `id` that never arrived. During the save download the client asks every 4 s while there is a gap
+  below the highest chunk received (even while later chunks still trickle in) or after 4 s without progress, one transfer per request (several unfinished transfers take turns).
+  For a transfer still being sent the server queues only chunks it already sent (never pushes unsent ones past the window). The server accepts it only from players with a session, at most one per second per player,
   reads at most 50 numbers (whole numbers that exist, each queued once) and queues them; `pump()` sends them first, within the normal per-tick budget
   (`transfer.chunksPerTick`), outside the window. Source: the running transfer, or a copy kept for 2 minutes after sending (at most 200 queued per player).
 - `rlsmpChunkHeader {id}` (client to server): a chunk came for a transfer whose `rlsmpChunkBegin` never arrived. Asked once at the first such chunk, again about every 3 s

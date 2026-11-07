@@ -190,8 +190,9 @@ function M.onUpdate(dtReal)
     local got, total = net.incomingProgress()
     if state == "hello_sent" and got > 0 then setState("downloading") end
     local verdict, logNow = downloadWatch.step(watch, dtReal, got, state)
-    -- Chunks that went missing: ask for them again every 4 s of silence.
-    if state == "downloading" and watch.idle >= 4 then
+    -- Chunks that went missing: ask for them again every 4 s, while there are gaps (even if new chunks still
+    -- trickle in, which keeps watch.idle low) or after 4 s of silence (the last chunks were lost).
+    if state == "downloading" and (watch.idle >= 4 or net.hasHoles()) then
       resendTimer = resendTimer + (dtReal or 0)
       if resendTimer >= 4 then
         resendTimer = 0

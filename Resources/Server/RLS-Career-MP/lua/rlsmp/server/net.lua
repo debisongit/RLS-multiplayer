@@ -113,11 +113,11 @@ local function findTransfer(pid, id)
   for _, job in ipairs(outbox[pid] or {}) do
     if job.header.id == id then
       if job.next == 0 then return nil end
-      return job.header, job.chunks
+      return job.header, job.chunks, job.next - 1   -- only chunks already sent can be missing
     end
   end
   local r = recent[pid] and recent[pid][id]
-  if r then return r.header, r.chunks end
+  if r then return r.header, r.chunks, #r.chunks end
   return nil
 end
 
@@ -143,14 +143,14 @@ local function onChunkMissing(pid, data)
   local id, list = tonumber(data.id), data.list
   if not id or type(list) ~= "table" then return end
   if not allowRequest(pid, "missing") then return end
-  local _, chunks = findTransfer(pid, id)
+  local _, chunks, sentUpTo = findTransfer(pid, id)
   if not chunks then return end
   local q = resends[pid] or {list = {}, queued = {}}
   local added = 0
   for k = 1, math.min(#list, MAX_MISSING) do
     local i = math.tointeger(tonumber(list[k]))
     local key = i and (id .. ":" .. i)
-    if i and chunks[i] and not q.queued[key] and #q.list < MAX_RESEND_QUEUE then
+    if i and chunks[i] and i <= sentUpTo and not q.queued[key] and #q.list < MAX_RESEND_QUEUE then
       q.queued[key] = true
       q.list[#q.list + 1] = {id = id, i = i}
       added = added + 1

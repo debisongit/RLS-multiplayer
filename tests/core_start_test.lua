@@ -85,4 +85,21 @@ core.onOverhaulActive(true)
 check(core.getState() == "active" and walletOn and lastLoaded().ok == true, "late RLS activation recovers: active, modules on, rlsmpLoaded ok")
 core.onOverhaulActive(false)
 check(core.getState() == "idle" and not walletOn, "closing the career afterwards works as usual")
+-- lost chunks are asked for while later ones still trickle in (the server trickles when its window is full)
+core.onServerLeave()
+core.onWorldReadyState(2)
+local h3, ch3 = transfer.describe(string.rep("w", 400), 10)   -- 40 chunks
+h3.id, h3.kind, h3.extra = 600, "profile", {profile = "rlsmpabc1"}
+handlers.rlsmpChunkBegin(json.encode(h3))
+for _, i in ipairs({1, 2, 3, 10}) do handlers.rlsmpChunk(json.encode({id = 600, i = i, d = ch3[i]})) end
+local m0 = count("rlsmpChunkMissing")
+local nextChunk, asked = 11, nil
+for step = 1, 6 do
+  core.onUpdate(1)
+  if step % 3 == 0 then handlers.rlsmpChunk(json.encode({id = 600, i = nextChunk, d = ch3[nextChunk]})) nextChunk = nextChunk + 1 end
+  if count("rlsmpChunkMissing") > m0 and not asked then asked = step end
+end
+local miss
+for k = #sentData, 1, -1 do if sentData[k].name == "rlsmpChunkMissing" then miss = sentData[k].data break end end
+check(asked and asked <= 5 and miss.id == 600 and miss.list[1] == 4 and miss.list[6] == 9, "holes are asked for within ~4 s although chunks keep coming")
 print("core_start_test: " .. passed .. " checks passed")

@@ -69,7 +69,10 @@ local orphans = {}           -- transfer id -> {parts = {i = d}, count, wait}: c
 local lastAsked              -- transfer id the last requestMissing asked about (they take turns)
 
 local function addChunk(id, job, i, d)
-  job.assembler:add(i, d)
+  if job.assembler:add(i, d) then
+    i = tonumber(i)
+    if i > (job.top or 0) then job.top = i end
+  end
   -- Tell the server how far we are, so it sends no faster than we can read.
   if job.assembler.received % 8 == 0 and not job.assembler:isComplete() then
     M.send("rlsmpChunkProgress", {id = tonumber(id), got = job.assembler.received})
@@ -159,6 +162,17 @@ function M.incomingProgress()
     total = total + job.assembler.n
   end
   return got, total
+end
+
+-- True when a download has a gap below the highest chunk received: those were lost (the server sends in order).
+-- Ask for them right away even while new chunks still trickle in.
+function M.hasHoles()
+  for _, job in pairs(incoming) do
+    for i = 1, (job.top or 0) - 1 do
+      if job.assembler.parts[i] == nil then return true end
+    end
+  end
+  return false
 end
 
 -- Ask the server to send again the chunks of an unfinished download that have not shown up (at most 50).
