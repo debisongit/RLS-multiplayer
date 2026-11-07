@@ -17,7 +17,7 @@ Repo on GitHub: `debisongit/rls-multiplayer` (default listing shows our branch).
 
 ## How releases work
 1. Bump `M.BUILD` in `Resources/Server/RLS-Career-MP/lua/rlsmp/shared/transfer.lua` and `cp` it over `Resources/Client/RLS-Career-MP/lua/ge/extensions/rlsmp/lib/transfer.lua` (a test enforces identical files).
-2. Add a section to `CHANGELOG.md` (plain language, mark "(untested)").
+2. Add a section to `CHANGELOG.md` (plain language, mark "(untested)"). End every line with `(Claude A)` or `(Claude B)`, whoever made the change: both Claudes write in this one file.
 3. Write `release/NOTES-<build>.md` (copy the previous one, change the "New in" part) then run `tools/make_release.sh` (runs the tests, builds `release/RLS-Career-MP-<build>/` and the zip).
 4. Commit, rebase, push.
 5. Publish: the sandbox cannot push tags or call a create-release API, but the GitHub MCP tool **`mcp__github__actions_run_trigger`** (method `run_workflow`, owner `debisongit`, repo `rls-multiplayer`, workflow `release.yml`, ref `claude/amazing-sagan-kh6ecn`, inputs `{"version":"0.4.15"}`) starts `.github/workflows/release.yml` on the owner's account. It builds the zip and creates a **pre-release** (or attaches the zip if the release page already exists). Check the run with `actions_list`.
