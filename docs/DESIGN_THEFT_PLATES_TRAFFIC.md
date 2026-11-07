@@ -35,5 +35,10 @@ Everything below is a decision, not a promise: nothing is built or played yet un
   - Keyless / smart key (about 2010 on): relay box (needs the owner's key to be near the car, fails otherwise) or a signal cloner that captures the fob signal, or injecting commands through a car connector (pop a headlight/mirror connector, timer, then a programmed blank key). Each method has a failure chance and noise.
   - Luxury and newest: may need two steps (injection plus programmed key), has an alarm and a GPS tracker (reported faster, police can ping it until you find and block it).
   - No tow trucks or flatbeds (too expensive, owner said no).
-- **Black market** (custom, RLS has none): sells and buys what theft needs. See the open questions in the handoff; stock, prices and access rules are being decided.
+- **Black market** (custom, RLS has none). Decided with the owner:
+  - Reached through a **phone app to order** plus a **drop spot to collect** the package (a few spots that change).
+  - **Tools last forever** (buy once, keep). Prices have to carry the balance.
+  - Sells fake plates, VIN plates and part numbers, tracker blockers and jammers. Also a **fence**: buys stolen cars and parts (pays less than legit, asks fewer questions).
+  - Access is **invite plus reputation**: a player already in can invite someone; reputation grows with successful jobs and unlocks higher tier tools. Details still to decide: how reputation is earned and lost, how many invites, what a bust costs.
+  - The server owns the black market state (stock, prices, who is in, reputation, owned tools) in the player profile, not the client.
 - Items needed (screwdriver, cloning device, fake plate, VIN plate, part numbers) have to be added by us; RLS may have no item system (research pending).
