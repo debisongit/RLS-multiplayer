@@ -14,6 +14,7 @@ local BUBBLE = 450
 local enabled = false
 
 function M.enable(on) enabled = on == true end
+function M.isEnabled() return enabled end
 
 -- Positions of the other players' cars (and walking characters).
 local function playerPositions()

@@ -105,7 +105,18 @@ end
 local function resolvePending(cfg)
   if not pending then return end
   local fresh = {}
-  for id in pairs(idSet()) do if not pending.before[id] and id ~= pending.oldId then fresh[#fresh + 1] = id end end
+  local remote = mp.remoteSet()
+  local playerId = be and be.getPlayerVehicleID and be:getPlayerVehicleID(0)
+  local inv = overhaul_career_garage_inventory
+  for id in pairs(idSet()) do
+    if not pending.before[id] and id ~= pending.oldId then
+      -- only the car this swap created: right model, not another player's, not the player's own, not one of the player's garage cars
+      local o = objectOf(id)
+      local mine = o ~= nil and jbeamOf(o) == pending.entry.model and not remote[id] and id ~= playerId
+        and not (inv and inv.getInventoryIdFromVehicleId and inv.getInventoryIdFromVehicleId(id) ~= nil)
+      if mine then fresh[#fresh + 1] = id end
+    end
+  end
   local current = objectOf(pending.oldId)
   local inPlace = current ~= nil and jbeamOf(current) == pending.entry.model and pending.oldModel ~= pending.entry.model
   if #fresh > 0 or inPlace then
@@ -153,7 +164,7 @@ function M.check()
     alive[id] = true
     local hidden = false
     if veh.pos and P.skipReason(id, veh, pctx) == nil then
-      hidden = b ~= nil and veh.camVisible ~= true and not (b.stayFor and b.stayFor(veh))
+      hidden = b ~= nil and veh.camVisible ~= true and not (b.isEnabled and not b.isEnabled()) and not (b.stayFor and b.stayFor(veh))
     end
     local secs = S.seeHidden(tracker, id, hidden, clock)
     if hidden and secs >= cfg.swap.hiddenSeconds and secs > bestSecs and not S.recentlyDecided(tracker, id, clock) then

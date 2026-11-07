@@ -44,7 +44,8 @@ function M.check()
     if veh.pos and P.skipReason(id, veh, ctx) == nil then
       local stuck = U.seen(tracker, id, veh.pos.x, veh.pos.y, tonumber(veh.speed) or 0, clock)
       if stuck >= U.STUCK_SECONDS then
-        local hidden = veh.camVisible ~= true and not (b and b.stayFor and b.stayFor(veh))
+        local bubbleOff = b and b.isEnabled and not b.isEnabled()   -- without the bubble we do not know where the other players are
+        local hidden = veh.camVisible ~= true and not bubbleOff and not (b and b.stayFor and b.stayFor(veh))
         candidates[#candidates + 1] = {id = id, stuck = stuck, hidden = hidden}
       end
     end

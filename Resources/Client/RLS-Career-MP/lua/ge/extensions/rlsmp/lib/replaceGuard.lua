@@ -39,28 +39,47 @@ local function describe(id)
   return tostring(id) .. "(" .. tostring(name) .. ")"
 end
 
-local function replace(model, config, target, ...)
-  if target == nil or not vanilla or not mp.isMPSession() then return inner(model, config, target, ...) end
-  local targetId = idOf(target)
-  if not targetId then return inner(model, config, target, ...) end
-  local cur = getPlayerVehicle and getPlayerVehicle(0)
-  local curId = cur and cur:getID() or nil
-  local serverId, entry = mp.serverIdOf(targetId)
-  local registeredLocal = serverId ~= nil and entry.isLocal == true
+-- How the replacement is done.
+-- Never call BeamMP's replaceRequest from here: BeamMP saved whatever replaceVehicle was in place when the session started as its
+-- "original" and calls it from replaceRequest. If that is OUR wrapper, calling replaceRequest from the wrapper loops forever
+-- (a reviewer reproduced this on a copy of BeamMP's logic; it freezes the game). So in a session we do BeamMP's job ourselves:
+--   * a car that BeamMP knows as local: mark it as edited ("-" = BeamMP's marker, so it syncs the change) and replace it with the game's own function
+--   * anything else: spawn a new car through core_vehicles.spawnNewVehicle (BeamMP's own wrapper for that), as BeamMP does
+-- Outside a session the game's own function is used untouched.
+local busy = false
 
-  if mp.isRemote(targetId) then
-    log("I", TAG, string.format("replace %s target=%s is another player's car: left to BeamMP", tostring(model), describe(targetId)))
-    return inner(model, config, target, ...)
+local function replace(model, config, target, ...)
+  if not vanilla then return inner(model, config, target, ...) end   -- the game's own function was never captured: stay out of the way
+  if busy then return vanilla(model, config, target, ...) end        -- backstop against any call loop
+  if not mp.isMPSession() then return vanilla(model, config, target, ...) end
+  busy = true
+  local ok, a, b, c = pcall(function(...)
+    local targetId = target ~= nil and idOf(target) or nil
+    if targetId and mp.isRemote(targetId) then
+      log("W", TAG, string.format("replace %s refused: target %s is another player's car", tostring(model), describe(targetId)))
+      return nil
+    end
+    local cur = getPlayerVehicle and getPlayerVehicle(0)
+    local victim = targetId and target or cur
+    local victimId = targetId or (cur and cur:getID())
+    local serverId, entry = nil, nil
+    if victimId then serverId, entry = mp.serverIdOf(victimId) end
+    if victimId and serverId ~= nil and entry.isLocal == true then
+      if targetId and targetId ~= (cur and cur:getID()) then
+        log("I", TAG, string.format("replace %s target=%s but player is in %s: replacing the target itself", tostring(model), describe(targetId), describe(cur and cur:getID())))
+      end
+      entry.jbeam = "-"
+      return vanilla(model, config or {}, victim, ...)
+    end
+    log("I", TAG, string.format("replace %s: car %s is not a known local car, spawning a new one as BeamMP does", tostring(model), describe(victimId)))
+    return core_vehicles.spawnNewVehicle(model, config or {})
+  end, ...)
+  busy = false
+  if not ok then
+    log("E", TAG, "replace failed: " .. tostring(a))
+    return nil
   end
-  if targetId == curId and registeredLocal then
-    log("I", TAG, string.format("replace %s target=%s is the player's own car: BeamMP's replace is right (passthrough)", tostring(model), describe(targetId)))
-    return inner(model, config, target, ...)
-  end
-  -- BeamMP would replace the player's vehicle (e.g. the walking character), or spawn a new car, instead of the named car.
-  log("I", TAG, string.format("replace %s target=%s but player is in %s (beammp knows target: %s): replacing the target itself",
-    tostring(model), describe(targetId), describe(curId), tostring(registeredLocal)))
-  if registeredLocal then entry.jbeam = "-" end   -- BeamMP's own marker, so it syncs the changed car to the others as an edit
-  return vanilla(model, config, target, ...)
+  return a, b, c
 end
 
 function M.install()
