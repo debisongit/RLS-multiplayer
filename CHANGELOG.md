@@ -3,6 +3,9 @@
 Plain list of what changed in each build. The build number shows in the game log (`client loaded, build X`) and the server log.
 "Untested" means it passed the automatic tests but nobody has played it yet.
 
+## 0.4.19
+- Traffic variety, step 1: traffic and parked cars use more varied models and configs. Each game builds its groups from a bigger pool, no model fills more than 25% of a group, and the server can weight car Types, road classes (city, main, highway), day and night, and add cars from mods the server ships (`trafficVariety` in the server config). Nothing is excluded beyond what RLS already refuses. Cars keep their model once they exist, so area and time only apply to cars built from now on; live swapping while you drive is step 2. Log tag `RLSMP-P3`, design in `docs/DESIGN_TRAFFIC_VARIETY.md`. (untested)
+
 ## 0.4.18
 - Part shop fix: buying or removing a part at your garage computer no longer spawns a second car. BeamMP's "replace vehicle" ignores which car RLS names and replaces the car YOU are in; in the shop you stand on foot, so it replaced your walking character and left the shopped car behind, still frozen ("a fake car you can hop in but can't drive"). Now the named car is replaced in place. Log tag `RLSMP-REPLACE`. This is the cause behind the duplicate car that 0.4.17 cleans up, so after this build no copy is left behind and that cleanup is only a safety net. (untested; the missing power steering may be a separate problem)
 

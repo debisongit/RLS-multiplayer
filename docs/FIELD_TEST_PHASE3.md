@@ -284,3 +284,40 @@ RLSMP-REPLACE|replace etk800 target=123(etk800) but player is in 45(unicycle) (b
 - Not played in the game. The missing power steering could be a separate problem; this build only fixes which car is replaced.
 - Fixing it relies on the game's own `replaceVehicle` being captured before BeamMP swaps it (the warning line above says if it was not).
 
+## Traffic variety, step 1 (build 0.4.19)
+
+More varied traffic and parked cars (see `docs/DESIGN_TRAFFIC_VARIETY.md`). **Live swapping while you drive is not in this build**:
+a car keeps its model once it exists, so road class and day or night only change cars built later (traffic start, refills, parked cars).
+
+### Test steps
+1. Install `0.4.19` (check both logs say `0.4.19`), join, start your career and drive for a few minutes. Does the traffic look more varied (more different models,
+   no model repeated many times in a row)? Do the same on a second join.
+2. Look for these lines in the game log (tag `RLSMP-P3`):
+   ```
+   RLSMP-P3|wrapped core_multiSpawn.createGroup (variety)
+   RLSMP-P3|traffic variety settings received: enabled=true mods=0 maxShare=0.25 oversample=2.0 traffic=true parked=true
+   RLSMP-P3|probe: group filters = Config Type,Type; first entry fields = config,model...; model Types in the pool = Car=..,Truck=..
+   RLSMP-P3|probe: road class source = speedLimit
+   RLSMP-P3|variety traffic group: want=12 pool=24 mods=0 picked=12 distinct models=8 relaxed=0 zone=city night=false
+   ```
+   and on the server `RLSMP-P3 traffic variety sent to pid=...`. **Send me the `probe:` lines**: they tell me the real `Type` names and whether the game knows road speed limits.
+3. Try a weight: in the server `config.json` set `"trafficVariety": {"typeWeights": {"Truck": 0}}` (use a Type name from the probe line) and restart.
+   No cars of that Type should appear in newly built groups.
+4. Optional, with a car mod: put its zip in the server's `Resources/Client` folder, list the model name under `"mods": {"modname": 3}`, restart. Every player downloads the zip when joining.
+
+### Named failure modes
+| What you see | What it means |
+|---|---|
+| No `wrapped core_multiSpawn.createGroup (variety)` line | The wrapper was not installed (the game's spawner was not ready). Send the log. |
+| `W RLSMP-P3|RLS's wrapperLifetime is not available` | RLS is missing or changed; variety stays off. Send the log. |
+| `probe: road class source = none` | The game gave no speed limit for the road: road class multipliers do nothing. Day and night still work. |
+| `variety failed, the game's own group is used` | An error inside our code; the game was not affected. Send the log line. |
+| `relaxed=` above 0 in the group line | The pool was too small for the 25% rule. Not a problem by itself. |
+| `mod model X is not installed here` | That game does not have the mod. It skips it. Other players with the mod may see black blobs if they do not. |
+| Black blobs and a pop-up for every car on another player's screen | They are missing a mod model that someone's traffic uses. Remove the mod or make sure the zip is in `Resources/Client`. |
+| Traffic or police behave oddly after this build | Set `"trafficVariety": {"enabled": false}` and restart the server; send me the log. |
+
+### Known gaps
+- Not played. Everything about the car lists comes from reading RLS's code; the game's own spawner code is not visible to me.
+- Joins have stalled before during the save download; a big car mod makes joins heavier for everybody.
+

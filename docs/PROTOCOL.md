@@ -212,6 +212,15 @@ No new network events: it rides on the save upload and the profile download.
 - Known gap: RLS does not save `nextShopUpdateTime`, so the first time the shop opens each game runs `updateVehicleList(false)`, expires old offers and
   fills open dealer slots with its own `math.random`. Only listings that existed at join are shared; a sale is seen by others only after they rejoin.
 
+## Traffic variety
+
+| Direction | Event | Body |
+|---|---|---|
+| S→C | `rlsmpTrafficVariety` | `{enabled, typeWeights, mods, zones, day, night, oversample, maxShare, maxCandidates, applyToTraffic, applyToParked, zoneSpeedLimits}` sent once when a player finishes loading (also when `enabled` is false) |
+
+Weights are `{name = number >= 0}` (at most 64 entries, names up to 64 characters). `typeWeights`, `zones[zone]`, `day` and `night` are keyed by the model's `Type`;
+`mods` by model name. The client sanitizes everything again. Settings are forgotten when the player leaves the server.
+
 ## Reserved prefixes for later phases
 
 - `rlsmpBiz*` – Phase 2 business / syndicate (Claude A)

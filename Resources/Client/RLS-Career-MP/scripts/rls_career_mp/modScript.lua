@@ -15,3 +15,4 @@ boot('rlsmp_core')
 -- Phase 3 (traffic / police): loaded separately so core.lua stays untouched.
 boot('rlsmp_traffic')
 boot('rlsmp_police')
+boot('rlsmp_trafficVariety')
