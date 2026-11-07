@@ -149,13 +149,6 @@ M.defaults = {
     swap = {enabled = false, live = false, perMinute = 2, hiddenSeconds = 5, checkSeconds = 2, minRatio = 1.5, maxFailures = 3},
   },
 
-  -- Who may change the traffic settings in the game (the menu on the [ key or /trafficmenu). Checked on the server, by BeamMP account name
-  -- (not case sensitive; guests never count) and, if you like, by BeamMP account id.
-  trafficAdmin = {
-    names = {"polakpls", "sucuk21"},
-    accountIds = {},
-  },
-
   smartTraffic = {
     enabled = true,
     mix = {normal = 80, slow = 10, aggressive = 6, racer = 3, drunk = 1},

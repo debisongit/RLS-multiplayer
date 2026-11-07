@@ -386,8 +386,21 @@ function M.pushConfig()
   for pid in pairs(told) do if not live[pid] then told[pid], pending[pid], cooldown[pid], lastCheck[pid] = nil, nil, nil, nil end end
 end
 
+local offTold = false
+
+-- Settings the menu changed: send the config again (also the "theft is off now" one, once).
+function M.resend() told = {} offTold = false end
+
 function M.tick()
-  if not enabled() then return end
+  if not enabled() then
+    -- switched off while players are in: tell every game once, so no prompt stays on screen
+    if not offTold then
+      offTold = true
+      M.pushConfig()
+    end
+    return
+  end
+  offTold = false
   M.pushConfig()
   M.reportDue()
 end
@@ -409,7 +422,8 @@ function M.init(config, pluginRoot)
   serverTag = tostring(config.serverTag or "")
   stolen, pending, cooldown, told, lastCheck = {}, {}, {}, {}, {}
   file = pluginRoot and (pluginRoot .. "stolen.json") or nil
-  if not enabled() then return end
+  offTold = false
+  -- Always listening: every handler checks enabled() itself, so the in-game menu can switch theft on and off without a restart.
   local saved = file and storage.readJson(file)
   if type(saved) == "table" and type(saved.stolen) == "table" then
     for plate, rec in pairs(saved.stolen) do
@@ -424,7 +438,8 @@ function M.init(config, pluginRoot)
   net.onChat("steal", onSteal)
   net.on("rlsmpTheftTick", M.tick)
   MP.CreateEventTimer("rlsmpTheftTick", 1000)
-  util.info(string.format("Car theft on: %d per mille of parked cars, new pick every %d min", M.payload().perMille, M.periodSeconds() // 60))
+  util.info(enabled() and string.format("Car theft on: %d per mille of parked cars, new pick every %d min", M.payload().perMille, M.periodSeconds() // 60)
+    or "Car theft is off (switch it on in the traffic menu or with theft.enabled in config.json)")
 end
 
 M.TIER_ORDER = TIER_ORDER

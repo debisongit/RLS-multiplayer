@@ -2,7 +2,7 @@
 -- SPDX-License-Identifier: AGPL-3.0-only
 --
 -- The menu edits a copy of the server's settings. Every edit is remembered as a "pending" change (path -> value) until Apply sends them as one
--- patch {set = {{p = path, v = value}}, rm = {path}}. The SERVER decides who may change what (server/trafficAdmin.lua); this file only keeps
+-- patch {set = {{p = path, v = value}}, rm = {path}}. The SERVER decides what may be changed and to what range (server/trafficAdmin.lua); this file only keeps
 -- the menu tidy: values shown, changes counted, the patch built, the real car models and Types listed.
 
 local M = {}
@@ -15,6 +15,9 @@ M.SECTIONS = {
   {id = "swap", label = "Swapping"},
   {id = "weather", label = "Weather"},
   {id = "police", label = "Police"},
+  {id = "theft", label = "Theft"},
+  {id = "fence", label = "Fence"},
+  {id = "market", label = "Market"},
 }
 M.ZONES = {{id = "city", label = "City roads"}, {id = "main", label = "Main roads"}, {id = "highway", label = "Highways"}}
 M.TIMES = {{id = "any", label = "Any time"}, {id = "day", label = "Day"}, {id = "night", label = "Night"}}
@@ -201,6 +204,15 @@ function M.whereMap(st)
   if st.time == "day" then return {"trafficVariety", "day"} end
   if st.time == "night" then return {"trafficVariety", "night"} end
   return {"trafficVariety", "zones", st.zone}
+end
+
+-- The names under snap[a][b] (theft methods, market items), sorted. Empty when the server did not send them.
+function M.names(st, a, b)
+  local out = {}
+  local t = st.snap and type(st.snap[a]) == "table" and st.snap[a][b]
+  if type(t) == "table" then for name in pairs(t) do out[#out + 1] = name end end
+  table.sort(out)
+  return out
 end
 
 function M.child(path, name)

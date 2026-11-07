@@ -277,6 +277,11 @@ local function onConfig(d)
   cfg = {enabled = d.enabled == true, seed = tonumber(d.seed) or 0, period = tonumber(d.period) or 0,
     perMille = tonumber(d.perMille) or 0, periodSeconds = tonumber(d.periodSeconds) or 3600, radius = tonumber(d.radius) or 3}
   if was ~= cfg.period then spots, target = {}, nil end
+  if not cfg.enabled then
+    -- switched off from the menu: drop the prompt, and stop a steal that is running (the server refuses the finish anyway)
+    if action then net.send("rlsmpTheftCancel", {}) toast("warning", "Car theft was switched off.") end
+    target, action = nil, nil
+  end
   say("I", string.format("config: enabled=%s period=%s perMille=%s", tostring(cfg.enabled), tostring(cfg.period), tostring(cfg.perMille)))
 end
 

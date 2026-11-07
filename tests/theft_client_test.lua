@@ -255,6 +255,21 @@ order = {}
 server("rlsmpTheftResult", {ok = false, err = "It did not work."})
 check(#order == 0 and objects[10] ~= nil and toasts[#toasts]:find("did not work"), "failure: the parked car stays")
 
+-- 7b. switched off while a steal is running: the action stops and the server is told
+parked = {10}
+mkObj(10, "covet", spotA.x, spotA.y, {partConfig = "vehicles/covet/base.pc"})
+theft.onServerLeave() theft.enable(true)
+server("rlsmpTheftConfig", {enabled = true, seed = seed, period = 3, perMille = 150, periodSeconds = 3600, radius = 3})
+step(2)
+server("rlsmpTheftCan", {ok = true, id = 10, method = "window_screwdriver", label = "Smash", seconds = 30})
+server("rlsmpTheftSteal", {})
+server("rlsmpTheftGo", {ok = true, method = "window_screwdriver", seconds = 30, noise = 0})
+step(2)
+check(theft._action() ~= nil, "a steal is running")
+local cancels = count("rlsmpTheftCancel")
+server("rlsmpTheftConfig", {enabled = false, seed = seed, period = 3, perMille = 150})
+check(theft._action() == nil and theft._target() == nil and count("rlsmpTheftCancel") == cancels + 1 and toasts[#toasts]:find("switched off"), "switched off mid-steal: stopped, server told, player told")
+
 -- 8. Off when the server says so
 theft.onServerLeave() theft.enable(true)
 server("rlsmpTheftConfig", {enabled = false, seed = seed, period = 3, perMille = 150})

@@ -1,12 +1,13 @@
--- RLS-Career-MP server: the in-game traffic settings menu (Phase 3).
+-- RLS-Career-MP server: the in-game settings menu (Phase 3): AI traffic, car theft, fence, black market, police, weather.
 -- SPDX-License-Identifier: AGPL-3.0-only
 --
--- A few players (config `trafficAdmin`: BeamMP account names, optionally account ids) can change the AI traffic settings from a menu in the game
--- (client rlsmp_trafficMenu: the [ key, or /trafficmenu). THIS FILE is what protects it: the client only asks, the server checks every time.
---   * who: the sender's BeamMP name (not case sensitive) or account id must be listed, and guests never count;
+-- EVERY player on the server can open the menu (client rlsmp_trafficMenu: the [ key, or /trafficmenu) and change settings: there is no admin list
+-- any more (the owner's decision). What still protects the server is THIS FILE:
 --   * what: only settings on the allowlist below, each with a type and a range (anything else, or a value out of range, is rejected);
+--   * how often: at most 3 requests per second per player;
 --   * how: a change is set INSIDE the existing section tables (the other modules keep references to them), the config.json is saved,
---     the modules are told to resend their settings to everybody, and every admin gets the fresh state.
+--     the modules are told to resend their settings to everybody, and everybody who has the menu open gets the fresh state;
+--   * who: every change is logged with the player's name and account id (log tag RLSMP-ADMIN).
 -- Events: rlsmpTrafficAdminGet (C>S), rlsmpTrafficAdminSet {set = {{p = path, v = value}}, rm = {path}} (C>S),
 --         rlsmpTrafficAdminState / rlsmpTrafficAdminResult / rlsmpTrafficAdminOpen (S>C). Settings that are read only once at startup
 --         (timer intervals, the weather period length) are NOT editable here, because changing them live would do nothing.
@@ -54,9 +55,44 @@ local STATIC = {
   ["weather.force"] = {"enum", values = {[""] = true, clear = true, partlyCloudy = true, overcast = true, drizzle = true, rain = true, storm = true}},
   ["police.antiTeleport"] = {"bool"},
   ["police.blockRoadblocks"] = {"bool"},
+  ["police.enabled"] = {"bool"},
+  ["police.plateFlagSeconds"] = {"number", 60, 86400, true},
+  ["police.descriptionSeconds"] = {"number", 60, 86400, true},
+  ["police.plateReading.enabled"] = {"bool"},
+  ["police.plateReading.rangeMeters"] = {"number", 3, 100},
+  ["police.plateReading.maxSpeedKmh"] = {"number", 5, 200},
+  ["police.plateReading.readChance"] = {"number", 0, 1},
+  ["police.plateReading.afterEscapeChance"] = {"number", 0, 1},
+  ["police.plateReading.skipChance"] = {"number", 0, 1},
 }
 for _, name in ipairs(PERSONALITIES) do STATIC["smartTraffic.mix." .. name] = {"number", 0, 100} end
 for _, name in ipairs(CONDITIONS) do STATIC["weather.mix." .. name] = {"number", 0, 100} end
+
+-- Car theft, the fence and the black market (all read live by their modules, except what is said in the comments).
+local function rules(prefix, list)
+  for field, rule in pairs(list) do STATIC[prefix .. field] = rule end
+end
+rules("theft.", {
+  enabled = {"bool"}, perMille = {"number", 0, 1000, true}, periodSeconds = {"number", 60, 86400, true}, radius = {"number", 1, 10},
+  retrySeconds = {"number", 0, 300, true}, jammerNoiseFactor = {"number", 0, 1},
+  baseWitnessChance = {"number", 0, 1}, perWitness = {"number", 0, 1}, noiseWitness = {"number", 0, 1}, maxWitnessChance = {"number", 0, 1},
+  witnessCap = {"number", 0, 20, true}, seenReportMin = {"number", 1, 3600, true}, seenReportMax = {"number", 1, 3600, true},
+  unseenReportSeconds = {"number", 1, 86400, true}, trackerReportSeconds = {"number", 1, 3600, true}, keepHours = {"number", 1, 720, true},
+  ["tiers.immobilizerYear"] = {"number", 1900, 2100, true}, ["tiers.keylessYear"] = {"number", 1900, 2100, true},
+  ["tiers.newestYear"] = {"number", 1900, 2100, true}, ["tiers.luxuryValue"] = {"number", 0, 100000000, true},
+})
+rules("fence.", {
+  enabled = {"bool"}, maxValue = {"number", 0, 100000000, true}, minValue = {"number", 0, 1000000, true},
+  stripRate = {"number", 0, 1}, resellRate = {"number", 0, 1}, gambleBase = {"number", 0, 1}, gamblePerPaper = {"number", 0, 0.5},
+  gambleMaxPapers = {"number", 1, 3, true}, gambleBust = {"number", 0, 1},
+  ["rep.strip"] = {"number", 0, 25, true}, ["rep.sell"] = {"number", 0, 25, true}, ["rep.resell"] = {"number", 0, 25, true}, ["rep.gamble"] = {"number", 0, 25, true},
+})
+rules("market.", {
+  enabled = {"bool"}, bustRep = {"number", 0, 100, true}, bustTakesPapers = {"bool"}, bustTakesTools = {"bool"},
+  minDelaySeconds = {"number", 0, 3600, true}, maxDelaySeconds = {"number", 0, 3600, true}, maxOpenOrders = {"number", 1, 10, true},
+  pickupRadius = {"number", 5, 200}, rotateMinutes = {"number", 1, 1440, true}, baseInvites = {"number", 0, 20, true},
+  repPerInvite = {"number", 1, 100, true}, maxInvites = {"number", 0, 50, true}, fenceCarRate = {"number", 0, 1}, fencePartRate = {"number", 0, 1},
+})
 
 -- Rules for maps with names chosen by the player (car Types and models): first segments -> rule, last segment is the name.
 local DYNAMIC_WEIGHT = {"number", 0, 20}
@@ -69,8 +105,8 @@ local DYNAMIC = {
 }
 
 local config, configPath
-local adminCfg
 local seen = {}        -- pid -> {second, count}
+local watchers = {}    -- pid -> true once the player asked for the settings (they get the fresh state after a change)
 
 -- Names of Types, models and zones: short, plain characters.
 local function goodKey(k)
@@ -185,11 +221,60 @@ local function copyZones(src)
   return out
 end
 
+-- Rules that depend on the config: a theft method's numbers, and a black market item's price and rep.
+local function addDerivedRules()
+  for name, m in pairs(type(config.theft) == "table" and type(config.theft.methods) == "table" and config.theft.methods or {}) do
+    if goodKey(name) and type(m) == "table" then
+      local base = "theft.methods." .. name .. "."
+      STATIC[base .. "seconds"] = {"number", 1, 600, true}
+      STATIC[base .. "noise"] = {"number", 0, 1}
+      STATIC[base .. "failChance"] = {"number", 0, 1}
+      STATIC[base .. "enabled"] = {"bool"}
+    end
+  end
+  local itemsOk, items = pcall(require, "rlsmp.server.items")
+  for name, t in pairs(type(config.market) == "table" and type(config.market.tiers) == "table" and config.market.tiers or {}) do
+    if goodKey(name) and type(t) == "table" and itemsOk and items.known(name) then
+      local base = "market.tiers." .. name .. "."
+      STATIC[base .. "price"] = {"number", 1, 100000000, true}
+      STATIC[base .. "minRep"] = {"number", 0, 100, true}
+      STATIC[base .. "off"] = {"bool"}
+    end
+  end
+end
+
+-- The values of every rule under theft / fence / market that exists in the config, as nested tables.
+local function copyRuled(prefixes)
+  local out = {}
+  for dotted in pairs(STATIC) do
+    local segs = {}
+    for seg in dotted:gmatch("[^.]+") do segs[#segs + 1] = seg end
+    if prefixes[segs[1]] then
+      local src, dst = config, out
+      for i = 1, #segs - 1 do
+        src = type(src) == "table" and src[segs[i]] or nil
+        dst[segs[i]] = dst[segs[i]] or {}
+        dst = dst[segs[i]]
+      end
+      if type(src) == "table" then dst[segs[#segs]] = src[segs[#segs]] end
+    end
+  end
+  return out
+end
+
 function M.snapshot()
   local t, s, v, w, p = config.traffic or {}, config.smartTraffic or {}, config.trafficVariety or {}, config.weather or {}, config.police or {}
+  local pr = type(p.plateReading) == "table" and p.plateReading or {}
   local swap = type(v.swap) == "table" and v.swap or {}
   local limits = type(v.zoneSpeedLimits) == "table" and v.zoneSpeedLimits or {}
+  local extra = copyRuled({theft = true, fence = true, market = true})
+  -- A method without an "enabled" key is ON (theft.lua: enabled ~= false); show it that way, or the menu would list every method as off.
+  for name, m in pairs(type(extra.theft) == "table" and type(extra.theft.methods) == "table" and extra.theft.methods or {}) do
+    local real = config.theft.methods[name]
+    if type(m) == "table" and type(real) == "table" then m.enabled = real.enabled ~= false end
+  end
   return {
+    theft = extra.theft, fence = extra.fence, market = extra.market,
     traffic = {enabled = t.enabled, totalBudget = t.totalBudget, baseBudget = t.baseBudget, perPlayerBudget = t.perPlayerBudget,
       minPerPlayer = t.minPerPlayer, maxPerPlayer = t.maxPerPlayer},
     smartTraffic = {enabled = s.enabled, policeReact = s.policeReact, mix = copyMap(s.mix)},
@@ -201,27 +286,20 @@ function M.snapshot()
       swap = {enabled = swap.enabled, live = swap.live, perMinute = swap.perMinute, hiddenSeconds = swap.hiddenSeconds,
         minRatio = swap.minRatio, maxFailures = swap.maxFailures}},
     weather = {enabled = w.enabled, force = w.force, mix = copyMap(w.mix), periodMinutes = w.periodMinutes},
-    police = {antiTeleport = p.antiTeleport, blockRoadblocks = p.blockRoadblocks},
+    police = {enabled = p.enabled, antiTeleport = p.antiTeleport, blockRoadblocks = p.blockRoadblocks,
+      plateFlagSeconds = p.plateFlagSeconds, descriptionSeconds = p.descriptionSeconds,
+      plateReading = {enabled = pr.enabled, rangeMeters = pr.rangeMeters, maxSpeedKmh = pr.maxSpeedKmh, readChance = pr.readChance,
+        afterEscapeChance = pr.afterEscapeChance, skipChance = pr.skipChance}},
   }
 end
 
--- Who -----------------------------------------------------------------------------------------------------------------------------------
--- Returns true plus the player's name and account id for logs.
-function M.isAdmin(pid)
+-- Who ---------------------------------------------------------------------------------------------------------------------------------
+-- Everybody who is on the server (has a session) may use the menu. Returns true plus the player's name and account id for logs.
+function M.canUse(pid)
   local s = sessions.get(pid)
-  if not s or s.guest == true then return false end
-  local name = tostring((MP.GetPlayerName and MP.GetPlayerName(pid)) or s.name or ""):lower()
-  if name ~= "" then
-    for _, n in ipairs(adminCfg.names or {}) do
-      if tostring(n):lower() == name then return true, name, s.accountId end
-    end
-  end
-  if s.accountId ~= nil then
-    for _, id in ipairs(adminCfg.accountIds or {}) do
-      if tostring(id) == tostring(s.accountId) then return true, name, s.accountId end
-    end
-  end
-  return false
+  if not s then return false end
+  local name = tostring((MP.GetPlayerName and MP.GetPlayerName(pid)) or s.name or "")
+  return true, name, s.accountId
 end
 
 local function say(pid, text) if MP.SendChatMessage then MP.SendChatMessage(pid, "[Traffic] " .. text) end end
@@ -235,7 +313,7 @@ local function tooFast(pid)
 end
 
 local function modulesResend()
-  for _, name in ipairs({"smartTraffic", "trafficVariety", "trafficPolice"}) do
+  for _, name in ipairs({"smartTraffic", "trafficVariety", "trafficPolice", "theft", "plateRecords"}) do
     local ok, mod = pcall(require, "rlsmp.server." .. name)
     if ok and type(mod) == "table" and mod.resend then mod.resend() end
   end
@@ -245,33 +323,30 @@ local function sendState(pid)
   net.send(pid, "rlsmpTrafficAdminState", {ok = true, cfg = M.snapshot()})
 end
 
-local function sendStateToAdmins()
-  for pid in pairs(sessions.all()) do
-    if M.isAdmin(pid) then sendState(pid) end
+local function sendStateToWatchers()
+  for pid in pairs(watchers) do
+    if sessions.get(pid) then sendState(pid) else watchers[pid] = nil end
   end
 end
 
 local function onGet(pid)
   if tooFast(pid) then return end
-  local ok, name, account = M.isAdmin(pid)
-  if not ok then
-    util.warn(string.format("RLSMP-ADMIN refused the traffic menu to pid=%s (%s)", tostring(pid), tostring(MP.GetPlayerName and MP.GetPlayerName(pid))))
+  if not M.canUse(pid) then
     net.send(pid, "rlsmpTrafficAdminState", {ok = false})
-    say(pid, "You are not allowed to use the traffic menu.")
     return
   end
+  watchers[pid] = true
   sendState(pid)
 end
 
 local function onSet(pid, data)
   if tooFast(pid) then return end
-  local ok, name, account = M.isAdmin(pid)
+  local ok, name, account = M.canUse(pid)
   if not ok then
-    util.warn(string.format("RLSMP-ADMIN refused a settings change from pid=%s (%s)", tostring(pid), tostring(MP.GetPlayerName and MP.GetPlayerName(pid))))
     net.send(pid, "rlsmpTrafficAdminState", {ok = false})
-    say(pid, "You are not allowed to change traffic settings.")
     return
   end
+  watchers[pid] = true       -- somebody who changes settings has the menu open
   local applied, rejected, done = M.applyPatch(data)
   local saved = true
   if applied > 0 then
@@ -287,26 +362,22 @@ local function onSet(pid, data)
     util.warn(string.format("RLSMP-ADMIN %s: %d changes rejected, first: %s (%s)", tostring(name), #rejected, type(first.p) == "table" and table.concat(first.p, ".") or "?", tostring(first.why)))
   end
   net.send(pid, "rlsmpTrafficAdminResult", {ok = true, applied = applied, rejected = rejected, saved = saved})
-  if applied > 0 then sendStateToAdmins() end
+  if applied > 0 then sendStateToWatchers() end
 end
 
 local function onMenuCommand(pid)
-  if M.isAdmin(pid) then
-    net.send(pid, "rlsmpTrafficAdminOpen", {})
-  else
-    say(pid, "You are not allowed to use the traffic menu.")
-  end
+  if M.canUse(pid) then net.send(pid, "rlsmpTrafficAdminOpen", {}) end
 end
 
 function M.init(cfg, pluginRoot)
   config = cfg
-  adminCfg = cfg.trafficAdmin or {}
   configPath = (pluginRoot or "") .. "config/config.json"
-  seen = {}
+  seen, watchers = {}, {}
+  addDerivedRules()
   net.onClient("rlsmpTrafficAdminGet", onGet)
   net.onClient("rlsmpTrafficAdminSet", onSet)
   net.onChat("trafficmenu", onMenuCommand)
-  util.info("Traffic menu: " .. #(adminCfg.names or {}) .. " admin name(s) allowed")
+  util.info("Settings menu: open to every player (changes are range checked and logged as RLSMP-ADMIN)")
 end
 
 M._ruleFor = ruleFor

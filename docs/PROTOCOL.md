@@ -90,10 +90,10 @@ refuses `gameplay_traffic.forceTeleport` on police units. Everything is restored
 
 Server `plateRecords.lua` owns `config.police.plateFlagSeconds` (7200), `config.police.descriptionSeconds` (1200) and `config.police.plateReading` (master switch `enabled`, default on).
 It keeps, shared by every player: **plate flags** keyed by plate text (trimmed, upper case, at most 16 characters) + model, valid `plateFlagSeconds`; **car descriptions** keyed by model + colour name, valid `descriptionSeconds`.
-A lookup matches a fresh flag first (`matchedBy = "plate"`), then a fresh description (`"description"`). Saved in `plates.json`, expired entries pruned every minute.
+A lookup matches a fresh flag first (`matchedBy = "plate"`, whoever drives that plate + model), then a fresh description (`"description"`) - and a description only for the player whose account made it (the `by` stored with it; a player without an account id never matches one). The client only reads its OWN player's car, so the asker is the driver. Saved in `plates.json`, expired entries pruned every minute.
 - `rlsmpPlateEscaped` is accepted only from a loaded player, at most once per `escapeCooldownSeconds` (60), and only if `positions` saw that player chased within `escapeNeedsChaseSeconds` (300, 0 = trust the client). It flags the plate (reason `escaped`) and remembers the description when a colour is given.
 - `rlsmpPlateChanged`: at most one per 3 s per player. A different plate text deletes the flag of `oldPlate` + model; a different colour deletes the description `model` + `oldColor`.
-- Lookups: at most `lookupsPerMinute` (20) per player are looked up; every lookup gets an answer. While `enabled` is false lookups answer clean and escapes / changes are ignored.
+- Lookups: at most `lookupsPerMinute` (20) per player are looked up; every lookup gets an answer. While plate reading is off (`plateReading.enabled` false, or `police.enabled` false) lookups answer clean and escapes / changes are ignored. The menu can change these settings live (`plateRecords.resend` sends them again).
 - Lua API for other server modules: `flag(plate, model, color, reason, by?)`, `lookup(plate, model, color)`, `clearPlate(plate, model)`, `clearDescription(model, color)`, `prune()`, `records()`.
 
 Client `plates.lua` (`rlsmp_plates`, pure rules in `lib/plateRead.lua`), only in a multiplayer session while the career is active, after the config arrived, every 0.5 s, for the local player's car only:
@@ -289,12 +289,13 @@ The screen has no rules: it shows what the server last sent and relays taps. Not
   Computed from the server wall clock (`server/clock.lua`), so restarts keep it consistent. Client `clock.lua` draws the sky 4x per second and
   moves RLS's weather forward every 10 s (`sleepTo`); RLS's own day cycle is paused while connected. Config `time = {enabled, dayMinutes = 45, syncSeconds = 5}`.
 
-## Traffic settings menu (admin channel)
+## Settings menu (server `trafficAdmin.lua`, client `trafficMenu.lua`; open to every player since 0.4.29)
 
-- `rlsmpTrafficAdminGet {}` (client to server): asks for the settings. Answer `rlsmpTrafficAdminState {ok, cfg}`; `ok = false` (no `cfg`) when the player is not an admin.
+- `rlsmpTrafficAdminGet {}` (client to server): asks for the settings. Answer `rlsmpTrafficAdminState {ok, cfg}`; `ok = false` (no `cfg`) only for somebody who is not on the server (no session).
 - `rlsmpTrafficAdminSet {set = {{p = {"trafficVariety","typeWeights","Truck"}, v = 0.5}}, rm = {{"trafficVariety","models","pickup"}}}` (client to server): path arrays, never strings. Answer `rlsmpTrafficAdminResult {ok, applied, rejected = {{p, why}}, saved}`, then a fresh state to every admin online.
-- `rlsmpTrafficAdminOpen {}` (server to client): sent by the chat command `/trafficmenu` for admins; the client then asks for the state.
-- Server `server/trafficAdmin.lua` is the security boundary: admin = name in `trafficAdmin.names` (case insensitive) or account id in `trafficAdmin.accountIds`, never a guest; every path must match an allowlist rule with a type and range; weight maps accept names of plain characters (max 64, max 64 entries). Values change INSIDE the existing config tables, `config.json` is rewritten, modules `resend()`. At most 3 requests per second per player. Log lines `RLSMP-ADMIN`.
+- `rlsmpTrafficAdminOpen {}` (server to client): sent by the chat command `/trafficmenu`; the client then asks for the state.
+- Editable: traffic, smart traffic, variety, weather and police settings, plus (0.4.29) `theft.*` (also `theft.methods.<name>.seconds|noise|failChance|enabled` for each method in the config), `fence.*` (and `fence.rep.<mode>`) and `market.*` (and `market.tiers.<item>.price|minRep|off` for each item sold). Not editable: the admin list, drop spot places, a method's item list or tier, anything not on the allowlist. `theft.enabled` is live: theft always listens and refuses while off; the modules' `resend()` makes the games hear a change (`theft.resend`).
+- There is no admin list any more: every player on the server (guests too) can open the menu and change settings. `server/trafficAdmin.lua` is what limits them: every path must match an allowlist rule with a type and a range, weight maps accept names of plain characters (max 64, max 64 entries), at most 3 requests per second per player, every change is logged with the player's name and account id (`RLSMP-ADMIN`). Values change INSIDE the existing config tables, `config.json` is rewritten, modules `resend()`; everybody who asked for the settings (or changed something) gets the fresh state.
 - Client `trafficMenu.lua` (ImGui window) + `lib/trafficMenu.lua` (pending changes, patch). Action `rlsmpTrafficMenu` (`core/input/actions/rlsmp.json`), default key `leftbracket` (`settings/inputmaps/keyboard_rlsmp.json`).
 
 ## Shared weather

@@ -28,7 +28,7 @@ local function take() local t = sent sent = {} return t end
 -- defaults
 check(cfg.trafficVariety.enabled == true and cfg.trafficVariety.maxShare == 0.25 and cfg.trafficVariety.oversample == 2, "defaults")
 check(next(cfg.trafficVariety.mods) == nil and next(cfg.trafficVariety.typeWeights) == nil and next(cfg.trafficVariety.models) == nil, "no mods and no weights out of the box")
-check(cfg.trafficAdmin.names[1] == "polakpls" and cfg.trafficAdmin.names[2] == "sucuk21", "the two admins out of the box")
+check(cfg.trafficAdmin == nil, "no admin list: the settings menu is open to everybody")
 check(cfg.trafficVariety.zoneSpeedLimits.city == 17 and cfg.trafficVariety.zoneSpeedLimits.main == 27, "road class limits")
 check(cfg.trafficVariety.swap.enabled == false and cfg.trafficVariety.swap.live == false, "live swapping: both switches off out of the box")
 

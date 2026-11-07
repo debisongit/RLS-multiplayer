@@ -98,4 +98,15 @@ local base = {"a"}
 local c = L.child(base, "b")
 check(#base == 1 and #c == 2, "child copies the path")
 
+-- names under a section (theft methods, market items)
+st = L.new()
+check(#L.names(st, "theft", "methods") == 0, "names: no snapshot, no names")
+L.setSnapshot(st, {theft = {methods = {signal_cloner = {}, window_screwdriver = {}, key_programmer = {}}}, market = {tiers = "x"}})
+local nm = L.names(st, "theft", "methods")
+check(#nm == 3 and nm[1] == "key_programmer" and nm[3] == "window_screwdriver", "names: sorted")
+check(#L.names(st, "market", "tiers") == 0 and #L.names(st, "fence", "rep") == 0, "names: not a table or missing section is empty")
+local ids = {}
+for _, sec in ipairs(L.SECTIONS) do ids[sec.id] = true end
+check(ids.theft and ids.fence and ids.market and #L.SECTIONS == 10, "the menu has the theft, fence and market sections")
+
 print(string.format("traffic_menu_lib_test: %d checks passed", passed))
