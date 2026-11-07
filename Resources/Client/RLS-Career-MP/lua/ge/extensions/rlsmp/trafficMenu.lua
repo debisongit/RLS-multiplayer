@@ -2,7 +2,7 @@
 -- SPDX-License-Identifier: AGPL-3.0-only
 --
 -- Opened with the [ key (action rlsmpTrafficMenu, see core/input/actions/rlsmp.json) or the chat command /trafficmenu. Anybody can press the key, but the SERVER
--- decides: it only sends the settings (and only accepts changes) when the player is on its list (config `trafficAdmin`, server/trafficAdmin.lua).
+-- decides what may be changed and to what range (server/trafficAdmin.lua). Since 0.4.29 every player can open it: there is no admin list.
 -- The menu is an ImGui window (the same kind RLS's own debug tools use): sections Cars, Where & when, Behaviour, Amount, Swapping, Weather, Police, Theft, Fence, Market.
 -- Changes are collected and sent as one patch with the Apply button; the server answers with what it applied and the fresh settings.
 -- Pure logic (pending changes, the patch, the car lists): lib/trafficMenu.lua. Draw code only uses ImGui calls RLS itself uses.
@@ -95,7 +95,7 @@ function M.close()
   restoreVisible()
 end
 
--- The [ key: close if open, else ask the server (it answers with the settings only for admins).
+-- The [ key: close if open, else ask the server for the settings.
 function M.toggle()
   if open then return M.close() end
   wantOpen = true

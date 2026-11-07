@@ -413,15 +413,15 @@ shows it through RLS's own weather system, so rain, wet roads and tire grip matc
 
 ## Traffic settings menu (build 0.4.23)
 
-**Who:** only `polakpls` and `sucuk21` (server config `trafficAdmin.names`). Others pressing `[` just get "You are not allowed".
+**Who:** since 0.4.29 every player (there is no admin list). In 0.4.23 to 0.4.28 only `polakpls` and `sucuk21` could use it.
 
 **Steps**
-1. Join the server as an admin. Press `[`. A window "RLS Traffic settings" should open. If nothing happens, type `/trafficmenu`.
+1. Join the server. Press `[`. A window "RLS Traffic settings" should open. If nothing happens, type `/trafficmenu`.
 2. Cars: move a car type slider (for example Truck to 0), press Apply. The status line should say "1 setting applied and saved". Look at `config/config.json` on the server: `trafficVariety.typeWeights.Truck` is 0.
 3. Search a single car, set its slider, Apply. Same check under `trafficVariety.models`.
 4. Where & when: choose Highways, then Night, change a weight, Apply.
 5. Behaviour: change the personality mix; the percentages next to the sliders follow.
-6. Press `[` again (or Close): the window closes. Press `[` as a non-admin (second player): "not allowed" message, no window.
+6. Press `[` again (or Close): the window closes. Have a second player press `[`: they get the window too, and see the new values after you press Apply.
 7. Send me the lines tagged `traffic menu`, `probe: ui_imgui` and `RLSMP-ADMIN` from the game log and server log.
 
 ### Named failure modes
@@ -434,13 +434,12 @@ shows it through RLS's own weather system, so rain, wet roads and tire grip matc
 | `W traffic menu draw failed` | A widget call failed; send the line. |
 | Status "N refused (path: why)" | The server refused a value (out of range or unknown setting). Send the text. |
 | "applied but NOT saved to config.json" | Server cannot write its config; check file permissions and the server log. |
-| A non-admin got the window | Serious: send the server log (`RLSMP-ADMIN`). |
 
 ### Known gaps
 - Never played. Key name, mouse handling and typing while driving are unverified.
 - A car keeps its model once spawned; new weights apply to cars built from now on (and to swaps if Swapping is on).
 - Hand edits to `config.json` while the server runs are overwritten by the next Apply. Intervals read only at start (timer periods, weather period) are not editable here.
-- Admin names are plain BeamMP names; account ids are safer (`trafficAdmin.accountIds`).
+- Everybody can change the settings (including prices, what the fence pays and whether theft is on): the server only checks ranges. Every change is in the server log as `RLSMP-ADMIN <name> ... changed ...`.
 
 
 ## The fence (build 0.4.27)
@@ -509,14 +508,14 @@ Known gaps: police cannot ping a tracker or be sent after a car you stole with o
 
 ## Theft, fence and market pages in the menu (build 0.4.29)
 
-1. As an admin press `[`. The tab row now has ten tabs (five to a row): the last three are Theft, Fence, Market.
+1. Press `[`. The tab row now has ten tabs (five to a row): the last three are Theft, Fence, Market.
 2. Theft page: tick "Car theft on", press Apply. The status should say "1 setting applied and saved"; the server log shows `RLSMP-ADMIN ... theft.enabled=true`, and `config/config.json` has `"enabled": true` under `theft`. Walking up to a parked car should now give the theft prompt (if you own the tools), without a server restart. Untick it and Apply: the prompt stops.
 3. Fence page: change "Strip pays" to 0.5, Apply, then use `/fence` at the drop spot: the quote follows.
 4. Market page: change an item's price, Apply, then `/market list` shows the new price.
 5. Out-of-range values (typed into a number box beyond its range) are clamped by the menu and refused by the server with "out of range".
 6. Send me: the `traffic menu`, `RLSMP-ADMIN` and `RLSMP-THEFT` lines.
 
-Known gaps: never played. Drop spot places and the admin names are only in `config.json`. Changes made to `config.json` by hand while the server runs are overwritten by the next Apply.
+Known gaps: never played. Drop spot places are only in `config.json`. Changes made to `config.json` by hand while the server runs are overwritten by the next Apply.
 
 
 ## Plate reading fixes (build 0.4.29)

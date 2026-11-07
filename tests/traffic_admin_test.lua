@@ -54,52 +54,43 @@ local function set(pid, changes, rm) nextSecond() fromClient(pid, "rlsmpTrafficA
 local function lastResult() local m = find(take(), "rlsmpTrafficAdminResult") return m and m.data end
 
 join(0, "polakpls")
-join(1, "SUCUK21")          -- name in capitals
+join(1, "SUCUK21")
 join(2, "someoneelse")
-join(3, "Polakpls", {guest = true})   -- a guest using an admin name
+join(3, "guest1234", {guest = true})
 join(4, "guest4321")
 
--- who ------------------------------------------------------------------------------------------------------------------------------------
-check(admin.isAdmin(0) == true, "polakpls is an admin")
-check(admin.isAdmin(1) == true, "sucuk21 is an admin, whatever the capitals")
-check(admin.isAdmin(2) == false, "anybody else is not")
-check(admin.isAdmin(3) == false, "a guest with an admin's name is never an admin")
-check(admin.isAdmin(99) == false, "a player that has no session is not")
-cfg.trafficAdmin.accountIds = {"acc2"}
-check(admin.isAdmin(2) == true, "an account id on the list works too")
-cfg.trafficAdmin.accountIds = {}
-check(admin.isAdmin(2) == false, "...and stops when it is taken off")
-players[0] = "PoLaKpLs"
-check(admin.isAdmin(0) == true, "the name is read from BeamMP, not case sensitive")
-players[0] = "polakpls"
+-- who: everybody on the server (no admin list any more) ----------------------------------------------------------------------------------------
+check(admin.canUse(0) == true and admin.canUse(1) == true and admin.canUse(2) == true, "every player may use the menu")
+check(admin.canUse(3) == true and admin.canUse(4) == true, "also guests")
+check(admin.canUse(99) == false, "but not somebody who has no session (not on the server)")
+check(cfg.trafficAdmin == nil and admin.isAdmin == nil, "there is no admin list and no admin check left")
 
--- the menu opens only for admins ---------------------------------------------------------------------------------------------------------
+-- the menu opens for everybody -----------------------------------------------------------------------------------------------------------------
 nextSecond()
 fromClient(2, "rlsmpTrafficAdminGet", {})
 local m = take()
-check(#m == 1 and m[1].data.ok == false and m[1].data.cfg == nil, "a non-admin gets no settings")
-check(#chat > 0 and chat[#chat].pid == 2 and chat[#chat].text:find("not allowed"), "...and is told so in chat")
-check(#warned > 0 and warned[#warned]:find("RLSMP-ADMIN refused the traffic menu", 1, true), "the refusal is logged")
-nextSecond()
-fromClient(0, "rlsmpTrafficAdminGet", {})
-m = take()
-check(#m == 1 and m[1].data.ok == true and type(m[1].data.cfg) == "table", "an admin gets the settings")
+check(#m == 1 and m[1].data.ok == true and type(m[1].data.cfg) == "table", "an ordinary player gets the settings")
 local snap = m[1].data.cfg
 check(snap.smartTraffic.mix.normal == 80 and snap.traffic.maxPerPlayer == 18 and snap.weather.mix.clear == 35 and snap.police.antiTeleport == true, "...the current values")
-check(snap.trafficAdmin == nil and snap.serverTag == nil and snap.identity == nil, "...and only the editable parts, never the admin list or the server tag")
+check(snap.trafficAdmin == nil and snap.serverTag == nil and snap.identity == nil, "...and only the editable parts, never the server tag or other config")
+nextSecond()
+fromClient(99, "rlsmpTrafficAdminGet", {})
+m = take()
+check(#m == 1 and m[1].data.ok == false and m[1].data.cfg == nil, "a pid without a session gets nothing")
 chat = {}
 say(2, "/trafficmenu")
-check(#take() == 0 and chat[1].text:find("not allowed"), "/trafficmenu: a non-admin only gets a message")
-say(0, "/trafficmenu")
-check(find(take(), "rlsmpTrafficAdminOpen", 0) ~= nil, "/trafficmenu: an admin gets the menu opened")
-
--- changes by a non-admin do nothing ----------------------------------------------------------------------------------------------------------
+check(find(take(), "rlsmpTrafficAdminOpen", 2) ~= nil, "/trafficmenu opens the menu for an ordinary player")
+say(3, "/trafficmenu")
+check(find(take(), "rlsmpTrafficAdminOpen", 3) ~= nil, "...and for a guest")
 local before = json.encode(cfg)
-set(2, {{p = {"smartTraffic", "mix", "drunk"}, v = 50}})
-check(json.encode(cfg) == before, "a non-admin cannot change anything")
-check(not find(take(), "rlsmpTrafficAdminResult"), "...and gets no result, only a refusal")
-set(3, {{p = {"smartTraffic", "mix", "drunk"}, v = 50}})
-check(json.encode(cfg) == before, "a guest with an admin's name cannot either")
+set(99, {{p = {"smartTraffic", "mix", "drunk"}, v = 50}})
+check(json.encode(cfg) == before and not find(take(), "rlsmpTrafficAdminResult"), "somebody not on the server cannot change anything")
+set(2, {{p = {"smartTraffic", "mix", "drunk"}, v = 7}})
+r = lastResult()
+check(r and r.applied == 1 and cfg.smartTraffic.mix.drunk == 7, "an ordinary player can change a setting")
+set(3, {{p = {"smartTraffic", "mix", "drunk"}, v = 6}})
+r = lastResult()
+check(r and r.applied == 1 and cfg.smartTraffic.mix.drunk == 6, "a guest can too")
 
 -- valid changes -----------------------------------------------------------------------------------------------------------------------------------
 set(0, {
@@ -127,7 +118,7 @@ local f = assert(io.open(tmp .. "/config/config.json", "r"))
 local onDisk = json.decode(f:read("*a"))
 f:close()
 check(onDisk.smartTraffic.mix.drunk == 5 and onDisk.trafficVariety.models.pickup == 3 and onDisk.weather.force == "rain", "saved to config.json")
-check(onDisk.trafficAdmin.names[1] == "polakpls", "(the file is the whole config)")
+check(onDisk.traffic ~= nil and onDisk.serverTag == cfg.serverTag, "(the file is the whole config)")
 
 -- modules resend to everybody, admins get the fresh state ------------------------------------------------------------------------------------------
 sent = {}
@@ -137,13 +128,14 @@ check(st ~= nil and st.data.mix.drunk == 5 and st.data.policeReact == false, "sm
 sent = {}
 _G[handlers["rlsmpTrafficVarietyTick"]]()
 local tv = find(sent, "rlsmpTrafficVariety", 2)
-check(tv ~= nil and tv.data.models.pickup == 3 and tv.data.zones.highway.Truck == 2 and tv.data.swap.enabled == true, "traffic variety resends too, to a player who is not an admin")
+check(tv ~= nil and tv.data.models.pickup == 3 and tv.data.zones.highway.Truck == 2 and tv.data.swap.enabled == true, "traffic variety resends too, to a player who has the menu closed")
 sent = {}
 _G[handlers["rlsmpWeatherTick"]]()
 check(find(sent, "rlsmpWeather", 2).data.c == "rain", "the weather module reads the new forced condition")
 set(1, {{p = {"traffic", "maxPerPlayer"}, v = 20}})
 m = take()
-check(find(m, "rlsmpTrafficAdminState", 0) ~= nil and find(m, "rlsmpTrafficAdminState", 1) ~= nil and find(m, "rlsmpTrafficAdminState", 2) == nil, "after a change both admins get the fresh state, a non-admin does not")
+check(find(m, "rlsmpTrafficAdminState", 1) ~= nil and find(m, "rlsmpTrafficAdminState", 2) ~= nil and find(m, "rlsmpTrafficAdminState", 3) ~= nil and find(m, "rlsmpTrafficAdminState", 4) == nil,
+  "after a change everybody who has the menu open (asked, or changed something) gets the fresh state, a player who never opened it does not")
 check(find(m, "rlsmpTrafficAdminResult", 1).data.applied == 1, "the sender gets the result")
 
 -- the allowlist ---------------------------------------------------------------------------------------------------------------------------------------
@@ -182,7 +174,6 @@ check(rejectedWith({p = "weather.force", v = "rain"}) ~= "NOT REJECTED", "a path
 check(rejectedWith({p = {"weather", 5}, v = "rain"}):find("bad path"), "a path with a number in it")
 check(rejectedWith({p = {"a", "b", "c", "d", "e"}, v = 1}):find("bad path"), "a path that is too long")
 check(rejectedWith({v = 1}) ~= "NOT REJECTED", "a change without a path")
-check(cfg.trafficAdmin.names[1] == "polakpls" and cfg.trafficAdmin.names[2] == "sucuk21", "after all that the admin list is unchanged")
 check(cfg.weather.force == "rain" and cfg.traffic.maxPerPlayer == 20, "...and so are the earlier settings")
 
 -- a mix of good and bad: the good ones count ---------------------------------------------------------------------------------------------------------------

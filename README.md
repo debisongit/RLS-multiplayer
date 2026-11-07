@@ -36,7 +36,7 @@ A comprehensive multiplayer synchronization framework and server suite that enab
 - **Vehicle Variety & Custom Swapping (`trafficVariety`, `trafficSwap`):** Diverse traffic pools matched to the player's level, map region, and current economy bracket.
 - **Driver AI Personalities (`personalities`):** Distinct driving traits (aggressive, cautious, erratic) synced across clients.
 - **Overhead Status & Labels (`trafficLabels`):** Real-time UI markers for AI, traffic roles, player vehicles, and pursuit targets.
-- **In-Game Admin Menu (`trafficMenu`, `trafficAdmin`):** In-game radial/action menus for hosts to spawn, clear, tune density, or reassign traffic.
+- **In-Game Settings Menu (`trafficMenu`, `trafficAdmin`):** press `[` (or `/trafficmenu`): every player can change the traffic, theft, fence, black market, police and weather settings; the server checks the ranges and logs each change.
 
 ### 🛠️ Stability, Guards & Network QoL
 - **Deduplication Engine (`dedupe`):** Prevents duplicate ghost vehicles on connect/reconnect.

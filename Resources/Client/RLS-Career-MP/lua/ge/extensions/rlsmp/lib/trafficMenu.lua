@@ -2,7 +2,7 @@
 -- SPDX-License-Identifier: AGPL-3.0-only
 --
 -- The menu edits a copy of the server's settings. Every edit is remembered as a "pending" change (path -> value) until Apply sends them as one
--- patch {set = {{p = path, v = value}}, rm = {path}}. The SERVER decides who may change what (server/trafficAdmin.lua); this file only keeps
+-- patch {set = {{p = path, v = value}}, rm = {path}}. The SERVER decides what may be changed and to what range (server/trafficAdmin.lua); this file only keeps
 -- the menu tidy: values shown, changes counted, the patch built, the real car models and Types listed.
 
 local M = {}

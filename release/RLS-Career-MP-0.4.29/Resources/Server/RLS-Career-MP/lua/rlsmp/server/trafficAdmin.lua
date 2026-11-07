@@ -1,12 +1,13 @@
--- RLS-Career-MP server: the in-game traffic settings menu (Phase 3).
+-- RLS-Career-MP server: the in-game settings menu (Phase 3): AI traffic, car theft, fence, black market, police, weather.
 -- SPDX-License-Identifier: AGPL-3.0-only
 --
--- A few players (config `trafficAdmin`: BeamMP account names, optionally account ids) can change the AI traffic, car theft, fence and black market settings from a menu in the game
--- (client rlsmp_trafficMenu: the [ key, or /trafficmenu). THIS FILE is what protects it: the client only asks, the server checks every time.
---   * who: the sender's BeamMP name (not case sensitive) or account id must be listed, and guests never count;
+-- EVERY player on the server can open the menu (client rlsmp_trafficMenu: the [ key, or /trafficmenu) and change settings: there is no admin list
+-- any more (the owner's decision). What still protects the server is THIS FILE:
 --   * what: only settings on the allowlist below, each with a type and a range (anything else, or a value out of range, is rejected);
+--   * how often: at most 3 requests per second per player;
 --   * how: a change is set INSIDE the existing section tables (the other modules keep references to them), the config.json is saved,
---     the modules are told to resend their settings to everybody, and every admin gets the fresh state.
+--     the modules are told to resend their settings to everybody, and everybody who has the menu open gets the fresh state;
+--   * who: every change is logged with the player's name and account id (log tag RLSMP-ADMIN).
 -- Events: rlsmpTrafficAdminGet (C>S), rlsmpTrafficAdminSet {set = {{p = path, v = value}}, rm = {path}} (C>S),
 --         rlsmpTrafficAdminState / rlsmpTrafficAdminResult / rlsmpTrafficAdminOpen (S>C). Settings that are read only once at startup
 --         (timer intervals, the weather period length) are NOT editable here, because changing them live would do nothing.
@@ -104,8 +105,8 @@ local DYNAMIC = {
 }
 
 local config, configPath
-local adminCfg
 local seen = {}        -- pid -> {second, count}
+local watchers = {}    -- pid -> true once the player asked for the settings (they get the fresh state after a change)
 
 -- Names of Types, models and zones: short, plain characters.
 local function goodKey(k)
@@ -292,23 +293,13 @@ function M.snapshot()
   }
 end
 
--- Who -----------------------------------------------------------------------------------------------------------------------------------
--- Returns true plus the player's name and account id for logs.
-function M.isAdmin(pid)
+-- Who ---------------------------------------------------------------------------------------------------------------------------------
+-- Everybody who is on the server (has a session) may use the menu. Returns true plus the player's name and account id for logs.
+function M.canUse(pid)
   local s = sessions.get(pid)
-  if not s or s.guest == true then return false end
-  local name = tostring((MP.GetPlayerName and MP.GetPlayerName(pid)) or s.name or ""):lower()
-  if name ~= "" then
-    for _, n in ipairs(adminCfg.names or {}) do
-      if tostring(n):lower() == name then return true, name, s.accountId end
-    end
-  end
-  if s.accountId ~= nil then
-    for _, id in ipairs(adminCfg.accountIds or {}) do
-      if tostring(id) == tostring(s.accountId) then return true, name, s.accountId end
-    end
-  end
-  return false
+  if not s then return false end
+  local name = tostring((MP.GetPlayerName and MP.GetPlayerName(pid)) or s.name or "")
+  return true, name, s.accountId
 end
 
 local function say(pid, text) if MP.SendChatMessage then MP.SendChatMessage(pid, "[Traffic] " .. text) end end
@@ -332,33 +323,30 @@ local function sendState(pid)
   net.send(pid, "rlsmpTrafficAdminState", {ok = true, cfg = M.snapshot()})
 end
 
-local function sendStateToAdmins()
-  for pid in pairs(sessions.all()) do
-    if M.isAdmin(pid) then sendState(pid) end
+local function sendStateToWatchers()
+  for pid in pairs(watchers) do
+    if sessions.get(pid) then sendState(pid) else watchers[pid] = nil end
   end
 end
 
 local function onGet(pid)
   if tooFast(pid) then return end
-  local ok, name, account = M.isAdmin(pid)
-  if not ok then
-    util.warn(string.format("RLSMP-ADMIN refused the traffic menu to pid=%s (%s)", tostring(pid), tostring(MP.GetPlayerName and MP.GetPlayerName(pid))))
+  if not M.canUse(pid) then
     net.send(pid, "rlsmpTrafficAdminState", {ok = false})
-    say(pid, "You are not allowed to use the traffic menu.")
     return
   end
+  watchers[pid] = true
   sendState(pid)
 end
 
 local function onSet(pid, data)
   if tooFast(pid) then return end
-  local ok, name, account = M.isAdmin(pid)
+  local ok, name, account = M.canUse(pid)
   if not ok then
-    util.warn(string.format("RLSMP-ADMIN refused a settings change from pid=%s (%s)", tostring(pid), tostring(MP.GetPlayerName and MP.GetPlayerName(pid))))
     net.send(pid, "rlsmpTrafficAdminState", {ok = false})
-    say(pid, "You are not allowed to change traffic settings.")
     return
   end
+  watchers[pid] = true       -- somebody who changes settings has the menu open
   local applied, rejected, done = M.applyPatch(data)
   local saved = true
   if applied > 0 then
@@ -374,27 +362,22 @@ local function onSet(pid, data)
     util.warn(string.format("RLSMP-ADMIN %s: %d changes rejected, first: %s (%s)", tostring(name), #rejected, type(first.p) == "table" and table.concat(first.p, ".") or "?", tostring(first.why)))
   end
   net.send(pid, "rlsmpTrafficAdminResult", {ok = true, applied = applied, rejected = rejected, saved = saved})
-  if applied > 0 then sendStateToAdmins() end
+  if applied > 0 then sendStateToWatchers() end
 end
 
 local function onMenuCommand(pid)
-  if M.isAdmin(pid) then
-    net.send(pid, "rlsmpTrafficAdminOpen", {})
-  else
-    say(pid, "You are not allowed to use the traffic menu.")
-  end
+  if M.canUse(pid) then net.send(pid, "rlsmpTrafficAdminOpen", {}) end
 end
 
 function M.init(cfg, pluginRoot)
   config = cfg
-  adminCfg = cfg.trafficAdmin or {}
   configPath = (pluginRoot or "") .. "config/config.json"
-  seen = {}
+  seen, watchers = {}, {}
   addDerivedRules()
   net.onClient("rlsmpTrafficAdminGet", onGet)
   net.onClient("rlsmpTrafficAdminSet", onSet)
   net.onChat("trafficmenu", onMenuCommand)
-  util.info("Traffic menu: " .. #(adminCfg.names or {}) .. " admin name(s) allowed")
+  util.info("Settings menu: open to every player (changes are range checked and logged as RLSMP-ADMIN)")
 end
 
 M._ruleFor = ruleFor
