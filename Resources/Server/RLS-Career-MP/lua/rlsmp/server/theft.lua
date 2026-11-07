@@ -216,6 +216,16 @@ end
 local function save() if file then storage.writeJson(file, {stolen = stolen}) end end
 
 function M.records() return stolen end
+function M.isEnabled() return enabled() end
+
+-- For the fence (server/fence.lua): take a record out of memory (nothing is written yet), put it back, write the file.
+function M.take(plate)
+  local rec = stolen[plate]
+  stolen[plate] = nil
+  return rec
+end
+function M.put(rec) if type(rec) == "table" and rec.plate then stolen[rec.plate] = rec end end
+M.save = save
 function M.pendingOf(pid) return pending[pid] end
 
 -- Called when a stolen car is reported. Replaceable (tests, later modules). Default: flag the plate in plateRecords if present.

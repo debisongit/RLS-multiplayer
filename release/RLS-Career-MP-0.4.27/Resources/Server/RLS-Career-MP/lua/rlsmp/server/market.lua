@@ -360,7 +360,7 @@ function cmds.accept(pid)
 end
 
 function cmds.fence(pid)
-  say(pid, string.format("The fence buys stolen cars (about %d%% of their value) and parts (about %d%%). It opens with the car theft feature.",
+  say(pid, string.format("The fence buys stolen cars (about %d%% of their value) and parts (about %d%%). It works with car theft on: bring a stolen car to the drop spot and use /fence.",
     math.floor(c().fenceCarRate * 100 + 0.5), math.floor(c().fencePartRate * 100 + 0.5)))
 end
 

@@ -441,3 +441,33 @@ shows it through RLS's own weather system, so rain, wet roads and tire grip matc
 - A car keeps its model once spawned; new weights apply to cars built from now on (and to swaps if Swapping is on).
 - Hand edits to `config.json` while the server runs are overwritten by the next Apply. Intervals read only at start (timer periods, weather period) are not editable here.
 - Admin names are plain BeamMP names; account ids are safer (`trafficAdmin.accountIds`).
+
+
+## The fence (build 0.4.27)
+
+Needs `"theft": {"enabled": true}` in the server config, and a black market member (console `rlsmp market grant <name>`).
+
+**Steps**
+1. Steal a car (see the theft section). The log has `RLSMP-THEFT converting parked ...`.
+2. Type `/fence`: it lists the car with prices for strip, sell, resell, gamble. Note the drop spot name it gives.
+3. Drive to that spot (the ACTIVE one, the one `/fence` names). Get OUT of the car and stand next to it.
+4. `/fence strip`. Expect: a toast "Sold: $...", the car disappears, your money goes up by 30% of the car's value, and a `[fence]` line in the server log.
+5. Try `/fence sell` far from the spot: expect "Bring the car there". Try while a cop chases you: "Lose the police first".
+6. With a fake plate, a VIN plate and a part number from the market: `/fence resell` pays 60% and uses all three. With one or two: `/fence gamble`; about 3 in 10 should be a trap.
+7. Send me the lines tagged `RLSMP-THEFT` (client) and `[fence]` (server), plus what money showed before and after.
+
+### Named failure modes
+| What you see | What it means |
+|---|---|
+| "Get out of the car and stand next to it first" | You were still in the car. The car is deleted, so you must be on foot. |
+| "Stand next to the stolen car you want to sell" | More than 8 m away, or the game lost track of the car (a reload). Send the log. |
+| "That car is not on your list" | The server has no record: the theft was never confirmed (check `[theft] ... stole` in the server log), or you restarted the game. |
+| "Bring the car there" although you are at the spot | The spot moved (every 30 minutes), or `/where` shows a different position. Send `/where`. |
+| "The server has no fresh position" | Wait 10 s and retry. If it never works the client position reports are not reaching the server. |
+| Money did not change on screen but the server log says paid | `rlsmpWalletSet` was not applied. Send both logs. |
+| The car stays after "Sold" | The delete failed. Send the client log. |
+
+### Known gaps
+- Never played. Stripping pays cash only: RLS has no way to take parts off a car, so nothing goes to your part inventory.
+- The car must be in the same game session that stole it: after a restart the server still has the record but the game forgot the car, so it can't be sold (the record expires after `keepHours`).
+- The value of a car comes from the game's price list (client-reported, capped at `fence.maxValue`).

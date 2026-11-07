@@ -298,6 +298,19 @@ M.defaults = {
 
   -- Black market (server market.lua): invite + reputation, order with /market buy, collect at a drop spot.
   -- Nobody is in until the server owner types `rlsmp market grant <player>` in the server console.
+  -- The fence sells or strips stolen cars at the black market's active drop spot (needs theft.enabled and a market member).
+  -- Rates are shares of the car's value. market.fenceCarRate is what "sell" pays.
+  fence = {
+    enabled = true,
+    maxValue = 300000,        -- the car value the fence works from is capped here (the value comes from the game)
+    stripRate = 0.30,         -- parts for cash, no papers
+    resellRate = 0.60,        -- fake plate + VIN plate + part number, all used up
+    gambleBase = 0.45,        -- swap one or two papers: base share with one paper...
+    gamblePerPaper = 0.075,   -- ...plus this for each extra paper
+    gambleMaxPapers = 2,
+    gambleBust = 0.30,        -- chance the buyer is a trap: no money, car gone, market.bust
+    rep = {strip = 1, sell = 1, resell = 3, gamble = 2},   -- reputation for a good sale
+  },
   market = {
     enabled = true,
     founderRep = 10,          -- rep of a member made with the console command

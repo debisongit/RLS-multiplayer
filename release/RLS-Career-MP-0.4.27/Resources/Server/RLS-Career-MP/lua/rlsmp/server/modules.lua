@@ -30,5 +30,6 @@ return {
   "rlsmp.server.items",
   "rlsmp.server.market",
   "rlsmp.server.theft",
+  "rlsmp.server.fence",
   "rlsmp.server.shop",
 }
