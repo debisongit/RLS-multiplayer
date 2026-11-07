@@ -194,43 +194,83 @@ T.install()
 g = core_multiSpawn.createGroup(6, TRAFFIC)
 check(#g == 6 and saw("variety failed, the game's own group is used"), "an error inside: logged, the game's own group is used")
 
--- 9. RLS refreshes its own wrappers: no fighting, no growth ----------------------------------------------------------------
+-- 9. RLS wraps over us, like it does in a real career start. Its wrapper is NOT registered as a forwarder of what it wraps
+--    (trafficConfigFilter's makeWrapper does not register it), so we are no longer "intact" and wrap again: only ONE layer may be active.
+local function rlsPlainWrap(orig) return function(amount, params) return orig(amount, params) end end
+local function countLines(fragment) local k = 0 for _, l in ipairs(logged) do if l:find(fragment, 1, true) then k = k + 1 end end return k end
 core_multiSpawn = {createGroup = vanilla}
--- like RLS's patch registry: every wrapper it installs is registered as a forwarder of what it wraps
-local rlsWrap = function(orig)
-  local wrapper = function(amount, params) return orig(amount, params) end
-  wl.registerForwarder(wrapper, orig)
-  return wrapper
+T.install()                                           -- our extension loads first, at mod mount
+local rewrapsBefore = 0
+for _, l in ipairs(logged) do if l:find("rewrapped createGroup", 1, true) then rewrapsBefore = rewrapsBefore + 1 end end
+for round = 1, 5 do
+  core_multiSpawn.createGroup = rlsPlainWrap(core_multiSpawn.createGroup)   -- RLS (re)installs its filter over everything
+  for _ = 1, 6 do T.install() end                    -- our every-frame check
 end
-local rlsReplacement = rlsWrap(vanilla)
-core_multiSpawn.createGroup = rlsReplacement        -- RLS's filter, installed first
-local rlsInstalls = 0
-local function rlsRefresh()                          -- RLS's patch refresh: re-wrap only if its wrapper is not intact
-  if not wl.intact({target = core_multiSpawn, key = "createGroup", replacement = rlsReplacement}) then
-    rlsInstalls = rlsInstalls + 1
-    rlsReplacement = rlsWrap(core_multiSpawn.createGroup)
-    core_multiSpawn.createGroup = rlsReplacement
-  end
+local rewraps = 0
+for _, l in ipairs(logged) do if l:find("rewrapped createGroup", 1, true) then rewraps = rewraps + 1 end end
+check(rewraps - rewrapsBefore == 5, "one re-wrap per RLS reinstall, never more (5 reinstalls, 30 checks)")
+check(forwarders[core_multiSpawn.createGroup] ~= nil, "the outermost function is our newest layer")
+local layersBefore = 0
+logged = {}
+vanillaCalls = {}
+g = core_multiSpawn.createGroup(10, TRAFFIC)
+check(#g == 10, "the group is built")
+check(countLines("variety traffic group:") == 1, "exactly one layer builds the group (one log line), although six of ours are in the chain")
+check(#vanillaCalls == 1 and vanillaCalls[1] == 20, "the game is asked once, for a 2x pool (not a pool of a pool)")
+-- RLS's patch refresh also keeps working: it sees our newest layer through the forwarder we registered
+local rlsReplacement = core_multiSpawn.createGroup   -- stand-in: pretend this is RLS's current binding
+check(wl.intact({target = core_multiSpawn, key = "createGroup", replacement = core_multiSpawn.createGroup}), "our newest layer is intact")
+-- a police group still passes straight through every layer
+vanillaCalls = {}
+core_multiSpawn.createGroup(5, POLICE)
+check(#vanillaCalls == 1 and vanillaCalls[1] == 5, "police groups pass through all layers untouched")
+
+-- 9b. if RLS's wrapper IS a registered forwarder, we never re-wrap
+core_multiSpawn = {createGroup = vanilla}
+T.install()
+local rlsRegistered = function(orig)
+  local w = function(amount, params) return orig(amount, params) end
+  wl.registerForwarder(w, orig)
+  return w
 end
-T.install()                                          -- we wrap on top of RLS's filter
-local mine = core_multiSpawn.createGroup
-check(mine ~= rlsReplacement and forwarders[mine] == rlsReplacement, "wrapped on top of RLS's filter as its forwarder")
-for _ = 1, 6 do rlsRefresh() T.install() end
-check(rlsInstalls == 0, "RLS's refresh sees our wrapper as part of its chain and does not re-wrap")
-check(core_multiSpawn.createGroup == mine, "our wrapper stays the outermost one")
--- RLS reinstalls its filter over everything (e.g. it was reloaded): we end up inside it and stay stable
-core_multiSpawn.createGroup = rlsWrap(core_multiSpawn.createGroup)
-local outer = core_multiSpawn.createGroup
-for _ = 1, 6 do T.install() end
-check(core_multiSpawn.createGroup == outer, "RLS's wrapper outside ours: we leave it alone (our wrapper is inside the chain)")
--- the game replaces the whole function (a reload): one new wrap, then stable
+logged = {}
+for _ = 1, 4 do
+  core_multiSpawn.createGroup = rlsRegistered(core_multiSpawn.createGroup)
+  for _ = 1, 6 do T.install() end
+end
+check(countLines("rewrapped createGroup") == 0, "RLS wrapper registered as a forwarder: our layer stays intact, no re-wrap at all")
+logged = {}
+for _ = 1, 20 do T.install() end
+check(countLines("rewrapped createGroup") == 0 and countLines("wrapped core_multiSpawn.createGroup") == 0, "nothing happens while our layer is intact")
+
+-- 9c. the game replaces the whole function (a reload): one new wrap, then stable
 core_multiSpawn.createGroup = vanilla
+logged = {}
 T.install()
 local fresh = core_multiSpawn.createGroup
-check(fresh ~= vanilla and forwarders[fresh] == vanilla, "after the function was replaced, wrapped exactly once")
+check(fresh ~= vanilla and forwarders[fresh] == vanilla, "after the function was replaced, wrapped again")
 for _ = 1, 6 do T.install() end
 check(core_multiSpawn.createGroup == fresh, "...and stable")
-check(wl ~= nil, "stand-in registry in use")
+
+-- 9d. RLS's Lua is missing: a failed require is not retried every frame
+package.loaded["rlsmp/trafficVariety"] = nil
+package.loaded["overhaul/lib/shell/wrapperLifetime"] = nil
+local loaderCalls = 0
+local searchers = package.searchers or package.loaders
+local counter = function(name)   -- counts how often the game's module search is asked for RLS's library (not found each time)
+  if name == "overhaul/lib/shell/wrapperLifetime" then loaderCalls = loaderCalls + 1 end
+  return "\n\tno such module (test)"
+end
+table.insert(searchers, counter)
+local T2 = require("rlsmp/trafficVariety")
+core_multiSpawn = {createGroup = vanilla}
+for _ = 1, 120 do T2.install() end
+check(loaderCalls == 2, "120 frames without RLS: the library was looked for twice, not 120 times (" .. loaderCalls .. ")")
+check(core_multiSpawn.createGroup == vanilla, "without RLS's wrapperLifetime nothing is wrapped")
+check(saw("RLS's wrapperLifetime is not available"), "and it says so")
+for i = #searchers, 1, -1 do if searchers[i] == counter then table.remove(searchers, i) end end
+package.loaded["overhaul/lib/shell/wrapperLifetime"] = wl
+package.loaded["rlsmp/trafficVariety"] = T
 
 -- 10. leaving the server forgets the settings -----------------------------------------------------------------------------------
 server({enabled = true})

@@ -312,6 +312,8 @@ a car keeps its model once it exists, so road class and day or night only change
 | `W RLSMP-P3|RLS's wrapperLifetime is not available` | RLS is missing or changed; variety stays off. Send the log. |
 | `probe: road class source = none` | The game gave no speed limit for the road: road class multipliers do nothing. Day and night still work. |
 | `variety failed, the game's own group is used` | An error inside our code; the game was not affected. Send the log line. |
+| `W RLSMP-P3|rewrapped createGroup ...` | Normal a few times: RLS wrapped over ours (for example when the career starts) and we put one layer on top; the older layer is switched off. If it repeats every few seconds, send the log. |
+| Taxis disappear or cannot be hailed | Taxis should not pass through this code, but I could not verify that in the game. Set `"trafficVariety": {"applyToTraffic": false}` and restart; send me the log. |
 | `relaxed=` above 0 in the group line | The pool was too small for the 25% rule. Not a problem by itself. |
 | `mod model X is not installed here` | That game does not have the mod. It skips it. Other players with the mod may see black blobs if they do not. |
 | Black blobs and a pop-up for every car on another player's screen | They are missing a mod model that someone's traffic uses. Remove the mod or make sure the zip is in `Resources/Client`. |

@@ -22,6 +22,10 @@ local MOD_CONFIGS_PER_MODEL = 4   -- how many eligible configs of a modded model
 
 local config            -- sanitized settings from the server; nil until it speaks
 local ours, installedOn -- our createGroup wrapper and the core_multiSpawn table it lives on
+local layer             -- state of our newest wrapper; older layers (kept in the chain by RLS's wrappers) become plain passthroughs
+local building = 0      -- > 0 while a group is being built: any other layer of ours that is called meanwhile just passes through
+local wl                -- RLS's wrapperLifetime once it could be loaded
+local tries = 0         -- install() calls, so a failed require is only retried now and then
 local typeCache = {}    -- model name -> Type string or false
 local missingMods = {}  -- mod model name -> true once logged as not installed
 local probed = false
@@ -169,27 +173,46 @@ local function build(original, amount, params)
   return group
 end
 
--- Wraps core_multiSpawn.createGroup once; safe to call every frame (no re-wrap while our wrapper is still part of the chain).
+-- RLS's wrapperLifetime, loaded once. A failed require is not cached by Lua, so it is only retried every 60th call (~1 s).
+local function lifetime()
+  if wl then return wl end
+  tries = tries + 1
+  if tries % 60 ~= 1 then return nil end
+  local ok, mod = pcall(require, "overhaul/lib/shell/wrapperLifetime")
+  if ok and type(mod) == "table" and mod.registerForwarder and mod.intact then wl = mod return wl end
+  p3.logOnChange("variety-nowl", true, "W", "RLS's wrapperLifetime is not available: traffic variety stays inactive")
+  return nil
+end
+
+-- Wraps core_multiSpawn.createGroup; safe to call every frame (nothing happens while our wrapper is still part of the chain).
+-- RLS's own wrapper is not registered as a forwarder of what it wraps, so when RLS wraps OVER us we are no longer "intact" and wrap
+-- again. The older layer then stays in the chain but is switched off (a plain passthrough), so only one layer ever builds a group.
 function M.install()
   if not (core_multiSpawn and type(core_multiSpawn.createGroup) == "function") then return false end
-  local ok, wl = pcall(require, "overhaul/lib/shell/wrapperLifetime")
-  if not (ok and type(wl) == "table" and wl.registerForwarder and wl.intact) then
-    p3.logOnChange("variety-nowl", true, "W", "RLS's wrapperLifetime is not available: traffic variety stays inactive")
-    return false
-  end
+  local lib = lifetime()
+  if not lib then return false end
   if ours and installedOn == core_multiSpawn
-      and wl.intact({target = core_multiSpawn, key = "createGroup", replacement = ours}) then return true end
+      and lib.intact({target = core_multiSpawn, key = "createGroup", replacement = ours}) then return true end
   local original = core_multiSpawn.createGroup
+  if layer then
+    layer.active = false
+    p3.count("rewrapped createGroup")
+    p3.log("W", "rewrapped createGroup (RLS or the game replaced it after we wrapped); the older layer is now a passthrough")
+  end
+  local mine = {active = true}
+  layer = mine
   local function wrapper(amount, params)
-    if not active() or isPoliceIntent(params) or tonumber(amount) == nil or amount < 1 then
+    if not mine.active or building > 0 or not active() or isPoliceIntent(params) or tonumber(amount) == nil or amount < 1 then
       return original(amount, params)
     end
+    building = building + 1
     local ok2, result = pcall(build, original, amount, params)
+    building = building - 1
     if ok2 and type(result) == "table" and #result > 0 then return result end
     if not ok2 then p3.log("W", "variety failed, the game's own group is used: " .. tostring(result)) end
     return original(amount, params)
   end
-  wl.registerForwarder(wrapper, original)
+  lib.registerForwarder(wrapper, original)
   ours, installedOn = wrapper, core_multiSpawn
   core_multiSpawn.createGroup = wrapper
   p3.log("I", "wrapped core_multiSpawn.createGroup (variety)")

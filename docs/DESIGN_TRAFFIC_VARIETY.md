@@ -20,8 +20,11 @@ Client `rlsmp/trafficVariety.lua` wraps `core_multiSpawn.createGroup`:
 Road class comes from the nearest road's `speedLimit` (city < 17 m/s, main < 27, else highway; `speedLimit` is unverified in the game, a probe line says if it was found);
 day or night from `core_environment.getLightState().isNight`.
 
-Why it fits RLS: RLS installs its filter with `overhaul_shell_patches` and re-wraps whenever its wrapper is not "intact". We register our wrapper with
-`overhaul/lib/shell/wrapperLifetime.registerForwarder`, so RLS sees us as part of its chain and does not stack on top of us; we never re-wrap while intact.
+How it lives next to RLS: RLS installs its own `createGroup` filter with `overhaul_shell_patches` and re-checks it every ~2 s. We register our wrapper with
+`overhaul/lib/shell/wrapperLifetime.registerForwarder`, so RLS sees us as part of its chain and does not wrap over us again. The other way round does not work: RLS's own
+wrapper is not registered as a forwarder, so when RLS wraps OVER us our check says "not intact" and we wrap again on top. The older layer stays in the chain but is switched
+off (a plain passthrough), and a re-entrancy counter makes sure only one layer ever builds a group (`rewrapped createGroup` counts these in the log). The test
+`tests/traffic_variety_client_test.lua` section 9 reproduces this order (and fails without the fix).
 
 **Limit of step 1:** a car keeps its model once it exists, so area and time only matter for cars built later (traffic start, refills, parked cars),
 not while you drive from the city to the highway. That is what step 2 is for.
