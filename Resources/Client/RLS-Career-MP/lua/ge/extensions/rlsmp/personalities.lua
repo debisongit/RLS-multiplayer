@@ -305,6 +305,7 @@ M._step = step
 M._setSend = function(fn) send = fn or defaultSend end
 M._setRandom = function(fn) rnd = fn or math.random end
 M._now = function() return now end
+M.context = context   -- for rlsmp_unjam
 M.onInit = function() setExtensionUnloadMode(M, "manual") end
 
 return M

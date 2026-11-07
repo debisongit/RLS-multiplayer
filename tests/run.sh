@@ -36,6 +36,7 @@ luajit tests/claims_client_test.lua
 luajit tests/traffic_labels_client_test.lua
 luajit tests/unstuck_test.lua
 luajit tests/bubble_test.lua
+luajit tests/unjam_test.lua
 luajit tests/clock_client_test.lua
 luajit tests/core_start_test.lua
 luajit tests/world_client_test.lua

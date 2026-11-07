@@ -1,4 +1,4 @@
-# Handoff: take over from Claude A (written at 0.4.14, now 0.4.15)
+# Handoff: take over from Claude A (written at 0.4.14, kept up to date, now 0.4.16)
 
 Read first: `docs/RESEARCH_PLATES_THEFT.md` (what RLS gives us for plates, police, parked cars, parts; read before building plate reading or theft), `docs/HANDOFF_CLAUDE_B.md` (architecture, lessons, rules), `docs/COLLAB.md`, `docs/PROTOCOL.md`, `docs/DESIGN_THEFT_PLATES_TRAFFIC.md` (owner's decisions for the next features), `CHANGELOG.md`.
 Branch: **`claude/amazing-sagan-kh6ecn`** (only push there; always `git fetch origin claude/amazing-sagan-kh6ecn && git rebase origin/claude/amazing-sagan-kh6ecn` before pushing; `tests/run.sh` must pass; no PR unless asked).
@@ -22,6 +22,11 @@ Repo on GitHub: `debisongit/rls-multiplayer` (default listing shows our branch).
 4. Commit, rebase, push.
 5. Publish: the sandbox cannot push tags or call a create-release API, but the GitHub MCP tool **`mcp__github__actions_run_trigger`** (method `run_workflow`, owner `debisongit`, repo `rls-multiplayer`, workflow `release.yml`, ref `claude/amazing-sagan-kh6ecn`, inputs `{"version":"0.4.15"}`) starts `.github/workflows/release.yml` on the owner's account. It builds the zip and creates a **pre-release** (or attaches the zip if the release page already exists). Check the run with `actions_list`.
    Note: tag `v0.4.13` already exists remotely at an older commit.
+
+## Update log (newest first; update this on every build)
+- **0.4.16**: stuck traffic recycling (`rlsmp/unjam.lua` + `lib/unjam.lua`, 30 s still then fadeOut via RLS's own recycle, one car per 5 s, skips visible/near-player/police/job cars; thresholds are constants at the top of `lib/unjam.lua`, not in config yet). Owner reported traffic cars getting stuck and honking. Untested. `bubble.stayFor(car)` was added for it.
+- 0.4.15: smart traffic personalities merged (see below), research in `docs/RESEARCH_PLATES_THEFT.md`.
+- Owner's design answers for theft, plates, black market: `docs/DESIGN_THEFT_PLATES_TRAFFIC.md`.
 
 ## Update: 0.4.15 merged smart traffic; the research report is in `docs/RESEARCH_PLATES_THEFT.md`. The "Unmerged" section below is history.
 
