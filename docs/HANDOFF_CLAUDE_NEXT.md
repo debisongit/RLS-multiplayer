@@ -1,4 +1,4 @@
-# Handoff: take over from Claude A (written at 0.4.14, kept up to date, now 0.4.16)
+# Handoff: take over from Claude A (written at 0.4.14, kept up to date, now 0.4.17)
 
 Read first: `docs/RESEARCH_PLATES_THEFT.md` (what RLS gives us for plates, police, parked cars, parts; read before building plate reading or theft), `docs/HANDOFF_CLAUDE_B.md` (architecture, lessons, rules), `docs/COLLAB.md`, `docs/PROTOCOL.md`, `docs/DESIGN_THEFT_PLATES_TRAFFIC.md` (owner's decisions for the next features), `CHANGELOG.md`.
 Branch: **`claude/amazing-sagan-kh6ecn`** (only push there; always `git fetch origin claude/amazing-sagan-kh6ecn && git rebase origin/claude/amazing-sagan-kh6ecn` before pushing; `tests/run.sh` must pass; no PR unless asked).
@@ -24,6 +24,7 @@ Repo on GitHub: `debisongit/rls-multiplayer` (default listing shows our branch).
    Note: tag `v0.4.13` already exists remotely at an older commit.
 
 ## Update log (newest first; update this on every build)
+- **0.4.17**: duplicate car after changing parts. Log `38de4064-beamng.log` (build 0.4.12 client): garage car 170592 (server id 1-0) was never deleted when RLS replaced it after a part change; RLS's `inventory/spawn.lua` `createSpawnedVehicle` uses `core_vehicles.replaceVehicle(model, data, oldVehObj)` and the log shows a NEW vehicle 182628 spawned while the old kept receiving part conditions, with BeamMP syncing the part-shop preview car (`partsTree` spawn, 182124) as a real vehicle (server id 1-9) and a spawn/delete id race on 1-9. Root cause NOT proven (probably BeamMP and `replaceVehicle` interacting). We added `rlsmp/dedupe.lua` (symptom fix: delete a local car with the same model and plate as an inventory slot but not bound to it, after 4 s, never the player's current car). Next step if it still happens: log inventory binding changes and `onVehicleDestroyed` ids around a part change, or wrap `core_vehicles.replaceVehicle` to delete the old object ourselves.
 - **0.4.16**: stuck traffic recycling (`rlsmp/unjam.lua` + `lib/unjam.lua`, 30 s still then fadeOut via RLS's own recycle, one car per 5 s, skips visible/near-player/police/job cars; thresholds are constants at the top of `lib/unjam.lua`, not in config yet). Owner reported traffic cars getting stuck and honking. Untested. `bubble.stayFor(car)` was added for it.
 - 0.4.15: smart traffic personalities merged (see below), research in `docs/RESEARCH_PLATES_THEFT.md`.
 - Owner's design answers for theft, plates, black market: `docs/DESIGN_THEFT_PLATES_TRAFFIC.md`.
