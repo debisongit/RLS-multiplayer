@@ -32,5 +32,10 @@ jobs:
         run: |
           have="$(grep -o 'BUILD = "[^"]*"' Resources/Server/RLS-Career-MP/lua/rlsmp/shared/transfer.lua | cut -d'"' -f2)"
           [ "$have" = "$BUILD" ] || { echo "Code is build $have but you asked for $BUILD"; exit 1; }
-          gh release create "v$BUILD" "release/RLS-Career-MP-$BUILD.zip" --target "$GITHUB_SHA" \
-            --title "RLS-Career-MP $BUILD" --notes-file "release/NOTES-$BUILD.md" --prerelease
+          if gh release view "v$BUILD" >/dev/null 2>&1; then
+            # The release page already exists (made by hand): just attach the zip and leave the text alone.
+            gh release upload "v$BUILD" "release/RLS-Career-MP-$BUILD.zip" --clobber
+          else
+            gh release create "v$BUILD" "release/RLS-Career-MP-$BUILD.zip" --target "$GITHUB_SHA" \
+              --title "RLS-Career-MP $BUILD" --notes-file "release/NOTES-$BUILD.md" --prerelease
+          fi
