@@ -204,6 +204,32 @@ local cars = theft.stolenCars()
 check(#cars == 1 and cars[1].vehId == newId and cars[1].plate == "CVT 42", "stolenCars lists it")
 server("rlsmpTheftReported", {plate = "CVT 42"})
 check(theft.stolenCars()[1].reported == true, "reported marked")
+-- 6b. The fence: /fence asks, the client names the stolen car next to the player, deletes it only when the server says so
+local sentBefore = count("rlsmpFenceSell")
+walkerObj.pos = {x = spotA.x + 100, y = spotA.y, z = 0}
+server("rlsmpFenceAsk", {mode = "strip"})
+check(count("rlsmpFenceSell") == sentBefore and toasts[#toasts]:find("Stand next to the stolen car"), "fence: nobody near a stolen car, nothing sent")
+local reported = 0
+rlsmp_positions = {reportNow = function() reported = reported + 1 end}
+walkerObj.pos = {x = spotA.x + 3, y = spotA.y, z = 0}
+playerId = newId
+server("rlsmpFenceAsk", {mode = "strip"})
+check(count("rlsmpFenceSell") == sentBefore and toasts[#toasts]:find("Get out"), "fence: must be on foot")
+playerId = 1
+server("rlsmpFenceAsk", {mode = "gamble"})
+local fs = last("rlsmpFenceSell")
+check(count("rlsmpFenceSell") == sentBefore + 1 and fs.plate == "CVT 42" and fs.mode == "gamble", "fence: the plate and mode are sent")
+check(reported == 1, "fence: a fresh position report is asked for before the sale")
+server("rlsmpFenceResult", {ok = false, mode = "gamble", err = "The fence works at Joe's Junkyard right now. Bring the car there."})
+check(objects[newId] ~= nil and #theft.stolenCars() == 1 and toasts[#toasts]:find("Bring the car"), "fence refused: the car stays, the reason is shown")
+order = {}
+server("rlsmpFenceAsk", {mode = "strip"})
+server("rlsmpFenceResult", {ok = true, mode = "strip", pay = 1800, takeCar = true})
+check(order[1] == "delete " .. newId and objects[newId] == nil and #theft.stolenCars() == 0 and toasts[#toasts]:find("1800"), "fence sold: the car is deleted and forgotten")
+check(not T.isConverted(newId), "fence sold: no longer enterable")
+server("rlsmpFenceResult", {ok = true, mode = "strip", pay = 5, takeCar = true})
+check(true, "a stray result without a pending car does nothing")
+
 theft.onVehicleDestroyed(newId)
 check(not T.isConverted(newId) and #theft.stolenCars() == 0, "destroyed: forgotten")
 -- a later parked car that reuses the id is blocked again

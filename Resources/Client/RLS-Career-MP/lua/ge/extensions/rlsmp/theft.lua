@@ -12,7 +12,7 @@
 --    delete the parked object, core_vehicles.spawnNewVehicle with RLS's own parked-car spawn options, ignoreParking, never
 --    isParked, simple_traffic mapped to the real model, off the walk blacklist), vehicleGuard is told this id is ours to enter,
 --    the player gets in, and the server hears about it (rlsmpTheftDone) and decides when it is reported.
--- The car is NOT put in the garage inventory (selling and stripping come later): M.stolenCars() lists them for that step.
+-- The car is NOT put in the garage inventory: selling and stripping go through the fence (/fence, server/fence.lua) using M.stolenCars().
 -- rlsmpTheftReported needs nothing here: the police find the car by its plate (plate reading).
 -- Untested in-game. Log tag RLSMP-THEFT.
 
@@ -331,6 +331,52 @@ local function onReported(d)
   say("I", "reported stolen: " .. tostring(d.plate))
 end
 
+-- The fence (server/fence.lua) ------------------------------------------------------------------------
+-- /fence <mode> makes the server send rlsmpFenceAsk. The player must be on foot next to one of the stolen cars; we name it by its plate.
+-- The server checks everything (spot, papers, ownership, money). Only when its answer says takeCar do we delete the car.
+local FENCE_REACH = 8       -- metres from the player to the car
+local fenceCarId
+
+function M.nearestStolen(pos, reach)
+  local best, bestD
+  for _, rec in ipairs(M.stolenCars()) do
+    local d = T.dist(pos, posOf(objOf(rec.vehId)))
+    if d <= reach and (not bestD or d < bestD) then best, bestD = rec, d end
+  end
+  return best
+end
+
+local function onFenceAsk(d)
+  if not active() then return end
+  local _, pos = walker()
+  if not pos then return toast("warning", "Get out of the car and stand next to it first.", 5000) end
+  local rec = M.nearestStolen(pos, FENCE_REACH)
+  if not rec or not rec.plate then return toast("warning", "Stand next to the stolen car you want to sell.", 5000) end
+  fenceCarId = rec.vehId
+  if rlsmp_positions and rlsmp_positions.reportNow then rlsmp_positions.reportNow() end   -- the server wants a fresh position for the drop spot check
+  say("I", string.format("fence %s: car %s plate %s", tostring(d.mode), tostring(rec.vehId), tostring(rec.plate)))
+  net.send("rlsmpFenceSell", {plate = rec.plate, mode = d.mode})
+end
+
+local function onFenceResult(d)
+  local id = fenceCarId
+  fenceCarId = nil
+  if d.takeCar and id then
+    local o = objOf(id)
+    stolen[id] = nil
+    T.forget(id)
+    if o then o:delete() end
+  end
+  if d.ok then
+    toast("success", string.format("Sold: $%d.", math.floor(tonumber(d.pay) or 0)), 6000)
+  elseif d.busted then
+    toast("error", tostring(d.err or "It was a trap."), 8000)
+  else
+    toast("warning", tostring(d.err or "The fence said no."), 6000)
+  end
+  say("I", string.format("fence result: ok=%s mode=%s pay=%s busted=%s", tostring(d.ok), tostring(d.mode), tostring(d.pay), tostring(d.busted)))
+end
+
 function M.onVehicleDestroyed(id)
   T.forget(id)
   stolen[id] = nil
@@ -350,6 +396,8 @@ function M.onExtensionLoaded()
   net.on("rlsmpTheftGo", onGo)
   net.on("rlsmpTheftResult", onResult)
   net.on("rlsmpTheftReported", onReported)
+  net.on("rlsmpFenceAsk", onFenceAsk)
+  net.on("rlsmpFenceResult", onFenceResult)
 end
 
 M._target = function() return target end

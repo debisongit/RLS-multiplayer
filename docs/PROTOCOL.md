@@ -231,7 +231,7 @@ Chat: `/duel <player>`, `/duel accept`, `/duel cancel`, `/duel claim` (re-send a
 
 Custom (RLS has none). Chat commands, hidden from other players; the server owns membership, reputation, orders and money.
 
-`/market` (help, your rep, invites left) · `list` (items your rep allows, with prices) · `buy <item> [count]` · `orders` · `pickup` · `invite <player>` · `accept` · `fence` (stub: explains the fence, which opens with car theft)
+`/market` (help, your rep, invites left) · `list` (items your rep allows, with prices) · `buy <item> [count]` · `orders` · `pickup` · `invite <player>` · `accept` · `fence` (short explanation; the real fence is `/fence`, below)
 Console: `rlsmp market grant <player>` (online player becomes a member with `market.founderRep`) · `rlsmp market revoke <player>`.
 
 - Profile: `market = {member, rep, invites (used), invitedBy, joinedAt, nextOrder, orders = [{id, item, n, price, at, readyAt, spot = {name, x, y, z}}]}`. Items go to `profile.items` (`items.lua`).
@@ -344,6 +344,19 @@ Weights are `{name = number >= 0}` (at most 64 entries, names up to 64 character
   after `keepHours`. On the report the server calls `plateRecords.flag(plate, model, color, "stolen", accountId)` if that module exists (`theft.reportHook`).
 - The stolen car is not added to the garage inventory. The client keeps it in `rlsmp_theft.stolenCars()`; `vehicleGuard` lets the player into exactly
   the converted vehicle ids (`lib/theft` converted set, removed when the car is destroyed). Log tag `RLSMP-THEFT`.
+
+## The fence (server `fence.lua`; client part is in `rlsmp/theft.lua`; needs `theft.enabled`)
+
+Chat (members only): `/fence` lists your stolen cars with prices; `/fence strip | sell | resell | gamble` sells the stolen car you stand next to.
+- Prices are shares of the car's value (from the theft record, capped at `fence.maxValue`): `strip` `stripRate` (0.30), `sell` `market.fenceCarRate` (0.35), `resell` `resellRate` (0.60, needs fake_plate + vin_plate + part_number, all used up), `gamble` `gambleBase` (0.45) + `gamblePerPaper` (0.075) per extra paper, using the papers the player has up to `gambleMaxPapers` (2), used up; `gambleBust` (0.30) chance of a trap: no money, car taken, `market.bust`. Good sales give `fence.rep[mode]` reputation.
+- The server checks: fence enabled and theft on, loaded player, black market member, the plate is in the player's OWN theft record, the latest `rlsmpPos` report is fresh and within `market.pickupRadius` of the active drop spot (`market.spotAt(now)`), not chased, wallet seeded, one sale at a time. The record leaves memory, money and papers change in ONE profile save, then `stolen.json` is written; a failed save undoes everything.
+
+| Direction | Event | Body |
+|---|---|---|
+| S→C | `rlsmpFenceAsk` | `{mode}` from the chat command; the client looks for a stolen car within 8 m of the player (who must be on foot) |
+| C→S | `rlsmpFenceSell` | `{plate, mode}` |
+| S→C | `rlsmpFenceResult` | `{ok, mode, pay, busted?, takeCar?, err?}`; the client deletes the car only when `takeCar` is true (a sale or a trap) |
+| S→C | `rlsmpWalletSet` | `{money, why = "fence"}` the new balance after a paid sale |
 
 ## Reserved prefixes for later phases
 
