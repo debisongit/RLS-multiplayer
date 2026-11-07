@@ -82,5 +82,7 @@ function M.install()
 end
 
 function M.hasVanilla() return vanilla ~= nil end
+-- The game's own replaceVehicle (captured before BeamMP swapped it), for code that must replace one specific car (live traffic swapping).
+function M.getVanilla() return vanilla end
 
 return M

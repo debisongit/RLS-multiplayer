@@ -29,15 +29,22 @@ off (a plain passthrough), and a re-entrancy counter makes sure only one layer e
 **Limit of step 1:** a car keeps its model once it exists, so area and time only matter for cars built later (traffic start, refills, parked cars),
 not while you drive from the city to the highway. That is what step 2 is for.
 
-## Step 2 (not built): live swapping out of sight
-Research so far (RLS source, BeamMP source):
-- A traffic car's model never changes after spawn (respawn and pooling move the same object). To change it the car has to be replaced or deleted and respawned.
-- RLS recycles cars out of sight through its own `fadeOut` and respawn (`C:tryRespawn`, `C:onRespawn`; `respawnCount` goes up); Claude A's `rlsmp/unjam.lua` and `bubble.stayFor` already use that path.
-- `core_vehicles.replaceVehicle(model, options, oldVeh)` replaces a specific car; `lib/replaceGuard.lua` makes it work in a BeamMP session.
-- BeamMP: every local spawn is sent to all players (`Os` packet) and each config change means a respawn on every other game; remote spawns queue up while a player drives and
-  all appear in one hitch when they stop. So swaps must be rare (a few per minute), only for cars nobody can see, and never for cars in a chase.
-- A swapped car must go back into RLS's traffic system (`gameplay_traffic.insertTraffic`), keep its role, and RLS's saved traffic state must stay consistent.
-Needs an in-game probe first (what exactly `onRespawn` and the pool do) before any code.
+## Step 2: live swapping out of sight (build 0.4.20, built, untested)
+The owner chose "swap cars out of sight as you drive". It is built as a careful first version, **off by default**, in two switches under `trafficVariety.swap`:
+- `enabled`: **watch only**. Every `checkSeconds` the client looks at the traffic cars; one that is hidden for `hiddenSeconds` in a row and that weighs clearly less than a
+  different offered model for the current road class and time of day (`minRatio` 1.5) is logged as `swap would happen (watch only): car .. A (Type, weight) -> B/config (Type, weight)`.
+  Nothing in the game changes. At most `perMinute` decisions per minute.
+- `live`: **really replaces the car** (experimental). It calls the game's own `replaceVehicle` (captured by `lib/replaceGuard.lua`) for that one car with a named config, finds
+  the new car and hands it to RLS's traffic with `gameplay_traffic.insertTraffic`. After `maxFailures` failures it switches itself off and only watches.
+
+What counts as "out of sight": not visible on this camera (`camVisible`), not within 450 m of or visible to any other player (Claude A's `rlsmp_bubble`), and
+`personality.skipReason` is nil (standard civilian AI car, active, not in a pursuit, not crashed, not a job car, not the player's or another player's, not parked).
+Candidates are only entries the game offered in recent traffic groups (already filtered by RLS), kept by `rlsmp_trafficVariety`.
+With default weights every car weighs 1, so nothing is ever swapped: swapping only follows real weights (type, road class, day or night, mods).
+
+BeamMP facts that shaped it: a swap is a delete and a spawn that every other game receives (their spawns queue up while they drive), so the rate is low and only invisible cars are used.
+Still unverified in the game: what `replaceVehicle` returns for a different model, whether `insertTraffic` is enough to restore the car's role and pooling, and RLS's saved traffic state
+after a swap. The watch-only mode and the `swap done` / `swap failed` log lines are there to find that out.
 
 ## Open questions
 - Which `Type` names does the game use? (The log line `model Types in the pool = ...` lists them after the first group; put them in `typeWeights`.)

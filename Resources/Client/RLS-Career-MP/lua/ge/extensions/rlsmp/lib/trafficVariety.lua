@@ -22,6 +22,7 @@ M.DEFAULTS = {
   applyToTraffic = true,
   applyToParked = true,
   zoneSpeedLimits = {city = 17, main = 27},   -- m/s: slower than city = "city", slower than main = "main", else "highway"
+  swap = {enabled = false, live = false, perMinute = 2, hiddenSeconds = 5, checkSeconds = 2, minRatio = 1.5, maxFailures = 3},
 }
 
 local MAX_ENTRIES = 64
@@ -47,6 +48,22 @@ local function weightMap(src)
   end
   return out
 end
+
+-- Live swapping settings. `enabled` only watches and logs what it would do; `live` really replaces cars (experimental).
+local function swapSettings(src)
+  src = type(src) == "table" and src or {}
+  local d = M.DEFAULTS.swap
+  return {
+    enabled = src.enabled == true,
+    live = src.live == true,
+    perMinute = math.floor(number(src.perMinute, d.perMinute, 0, 12)),
+    hiddenSeconds = number(src.hiddenSeconds, d.hiddenSeconds, 1, 120),
+    checkSeconds = number(src.checkSeconds, d.checkSeconds, 0.5, 30),
+    minRatio = number(src.minRatio, d.minRatio, 1, 100),
+    maxFailures = math.floor(number(src.maxFailures, d.maxFailures, 1, 20)),
+  }
+end
+M.sanitizeSwap = swapSettings
 
 -- Turns whatever the server sent (or a hand-edited config.json) into a safe settings table.
 function M.sanitize(src)
@@ -74,6 +91,7 @@ function M.sanitize(src)
     applyToTraffic = src.applyToTraffic ~= false,
     applyToParked = src.applyToParked ~= false,
     zoneSpeedLimits = {city = city, main = main},
+    swap = swapSettings(src.swap),
   }
 end
 

@@ -29,6 +29,8 @@ local tries = 0         -- install() calls, so a failed require is only retried 
 local typeCache = {}    -- model name -> Type string or false
 local missingMods = {}  -- mod model name -> true once logged as not installed
 local probed = false
+local recent, recentSeen = {}, {}   -- cars the game offered for traffic groups recently (RLS-approved), for live swapping
+local RECENT_MAX = 120
 
 local function careerActive() return overhaul_career_career ~= nil and overhaul_career_career.isActive() end
 
@@ -148,6 +150,23 @@ local function probe(params, pool, group)
     .. "; model Types in the pool = " .. table.concat(census, ","))
 end
 
+-- Remembers the (already RLS-filtered) entries of a traffic group, so live swapping can pick from cars the game really offers.
+local function remember(list)
+  for _, e in ipairs(list) do
+    if type(e) == "table" and e.model then
+      local key = tostring(e.model) .. "/" .. tostring(e.config)
+      if not recentSeen[key] then
+        recentSeen[key] = true
+        recent[#recent + 1] = {model = e.model, config = e.config}
+        if #recent > RECENT_MAX then
+          local old = table.remove(recent, 1)
+          recentSeen[tostring(old.model) .. "/" .. tostring(old.config)] = nil
+        end
+      end
+    end
+  end
+end
+
 -- Builds the new group, or returns nil to let the game keep its own.
 local function build(original, amount, params)
   local parked = isParkedIntent(params)
@@ -165,6 +184,7 @@ local function build(original, amount, params)
   local function infoOf(e) return {type = typeOfModel(e.model), mod = config.mods[e.model] ~= nil} end
   local group, relaxed = V.select(candidates, want, infoOf, ctx, config)
   if #group == 0 then return nil end
+  if not parked then remember(candidates) end
   probe(params, pool, group)
   p3.logOnChange("variety-zone", ctx.zoneSource, "I", "probe: road class source = " .. ctx.zoneSource)
   p3.count(parked and "variety groups (parked)" or "variety groups (traffic)")
@@ -231,9 +251,14 @@ function M.onUpdate() M.install() end
 
 function M.onServerLeave()
   config, typeCache, missingMods, probed = nil, {}, {}, false
+  recent, recentSeen = {}, {}
 end
 
 function M.getConfig() return config end
+-- For live swapping (rlsmp_trafficSwap): the entries seen recently, the current day/night and road class, and a model's Type/mod info.
+function M.candidates() local out = {} for i, e in ipairs(recent) do out[i] = e end return out end
+function M.contextNow() return context() end
+function M.infoOf(e) return {type = typeOfModel(e.model), mod = config ~= nil and config.mods[e.model] ~= nil} end
 function M.report() return p3.report() end
 
 function M.onExtensionLoaded()

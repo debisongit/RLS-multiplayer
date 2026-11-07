@@ -323,3 +323,41 @@ a car keeps its model once it exists, so road class and day or night only change
 - Not played. Everything about the car lists comes from reading RLS's code; the game's own spawner code is not visible to me.
 - Joins have stalled before during the save download; a big car mod makes joins heavier for everybody.
 
+## Live swapping (build 0.4.20)
+
+Traffic cars that nobody can see are swapped for a model that suits the road class and the time of day (see `docs/DESIGN_TRAFFIC_VARIETY.md`, step 2).
+Both switches are **off by default** and nothing is swapped with default weights, so first set some weights (see the traffic variety section).
+
+### Test steps
+1. Watch only first. In the server `config.json` set (use a Type name from the `probe:` line of the traffic variety test):
+   ```
+   "trafficVariety": {"night": {"Truck": 0}, "swap": {"enabled": true}}
+   ```
+   Restart, join, drive. Wait for night (or change the time). In the game log look for lines like:
+   ```
+   RLSMP-P3|swap would happen (watch only): car 123 pickup (Truck, weight 0.00) -> sunburst/c1 (Car, weight 1.00) zone=city night=true
+   ```
+   Send me the log. No car must change; if one does, tell me.
+2. Only after step 1 looks sensible: also set `"live": true`. Expected lines:
+   ```
+   RLSMP-P3|swap LIVE: car 123 pickup (...) -> sunburst/c1 (...)
+   RLSMP-P3|swap done: car 123 is now car 456 (sunburst/c1)
+   ```
+   Drive for 10 minutes. Does a car ever vanish or appear in front of you? Do swapped cars drive normally? Do other players see odd cars, black blobs, or lag spikes?
+3. If something looks wrong, set `"live": false` and restart the server. Live switches itself off after 3 failures.
+
+### Named failure modes
+| What you see | What it means |
+|---|---|
+| No `swap would happen` lines at night | Every car weighs the same, or no car has been hidden for 5 s, or the weights you set do not match the `Type` names. Send the log. |
+| `swap failed: the game's own replaceVehicle or the car is not available` | The fix for replacing a specific car is not active. Send the log. |
+| `swap failed: no new car appeared after the replace` | The game's replace did not create the car we expected. Send the log. |
+| `live swapping switched itself off after too many failures` | Expected safety net. Send the `swap failed` lines. |
+| A swapped car stands still, has no driver, or never moves | It was not put back into traffic properly. Send the `swap done` line and the car id. |
+| A car vanishes or appears in view | It should never happen (only invisible cars). Send the time and the log. |
+| Spawn hitches for other players, black blobs | The swap rate is too high for BeamMP. Lower `perMinute`, or turn `live` off. |
+
+### Known gaps
+- Never run in the game. Live swapping is the riskiest part of the traffic variety feature; keep it to a test session first.
+- The new car is created at the old car's place by the game's own replace; whether RLS keeps its traffic role, pooling and saved state for it is unverified.
+

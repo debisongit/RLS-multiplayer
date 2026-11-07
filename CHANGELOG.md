@@ -3,6 +3,9 @@
 Plain list of what changed in each build. The build number shows in the game log (`client loaded, build X`) and the server log.
 "Untested" means it passed the automatic tests but nobody has played it yet.
 
+## 0.4.20
+- Traffic variety, step 2 (live swapping), safe first version: a traffic car that nobody can see (not on your camera, not near or visible to another player, never police, taxis, pursuits or jobs) can be swapped for a model that suits the current road class and time of day better. Two switches in the server config under `trafficVariety.swap`, both OFF by default: `enabled` only watches and logs "swap would happen ..." (changes nothing), `live` really replaces the car (experimental, never tried in the game; it switches itself off after 3 failures). At most 2 swaps per minute. With default weights nothing is ever swapped, because every car weighs the same. Log tag `RLSMP-P3`. (untested)
+
 ## 0.4.19
 - Traffic variety, step 1: traffic and parked cars use more varied models and configs. Each game builds its groups from a bigger pool, no model fills more than 25% of a group, and the server can weight car Types, road classes (city, main, highway), day and night, and add cars from mods the server ships (`trafficVariety` in the server config). Nothing is excluded beyond what RLS already refuses. Cars keep their model once they exist, so area and time only apply to cars built from now on; live swapping while you drive is step 2. Log tag `RLSMP-P3`, design in `docs/DESIGN_TRAFFIC_VARIETY.md`. (untested)
 

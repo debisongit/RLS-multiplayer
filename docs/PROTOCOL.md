@@ -216,10 +216,10 @@ No new network events: it rides on the save upload and the profile download.
 
 | Direction | Event | Body |
 |---|---|---|
-| S→C | `rlsmpTrafficVariety` | `{enabled, typeWeights, mods, zones, day, night, oversample, maxShare, maxCandidates, applyToTraffic, applyToParked, zoneSpeedLimits}` sent once when a player finishes loading (also when `enabled` is false) |
+| S→C | `rlsmpTrafficVariety` | `{enabled, typeWeights, mods, zones, day, night, oversample, maxShare, maxCandidates, applyToTraffic, applyToParked, zoneSpeedLimits, swap}` sent once when a player finishes loading (also when `enabled` is false) |
 
 Weights are `{name = number >= 0}` (at most 64 entries, names up to 64 characters). `typeWeights`, `zones[zone]`, `day` and `night` are keyed by the model's `Type`;
-`mods` by model name. The client sanitizes everything again. Settings are forgotten when the player leaves the server.
+`mods` by model name. `swap` = `{enabled, live, perMinute, hiddenSeconds, checkSeconds, minRatio, maxFailures}` (live swapping; `enabled` only watches, `live` replaces cars). The client sanitizes everything again. Settings are forgotten when the player leaves the server.
 
 ## Reserved prefixes for later phases
 

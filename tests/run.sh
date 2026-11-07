@@ -48,6 +48,8 @@ luajit tests/join_protect_test.lua
 luajit tests/traffic_client_test.lua
 luajit tests/traffic_variety_lib_test.lua
 luajit tests/traffic_variety_client_test.lua
+luajit tests/traffic_swap_lib_test.lua
+luajit tests/traffic_swap_client_test.lua
 luajit tests/police_client_test.lua
 luajit tests/positions_client_test.lua
 luajit tests/personalities_client_test.lua
