@@ -35,7 +35,8 @@ function M.mustStay(carPos, players, canSee)
   local limit = BUBBLE * BUBBLE
   for _, p in ipairs(players) do
     if carPos:squaredDistance(p) < limit then return true end
-    if canSee and canSee(p, carPos) then return true end
+    -- line of sight only matters up to about a kilometre (a ray cast per player is not free)
+    if canSee and carPos:squaredDistance(p) < 1000 * 1000 and canSee(p, carPos) then return true end
   end
   return false
 end
@@ -66,7 +67,10 @@ function M.install()
   local original = class.tryRespawn
   local wrapper
   wrapper = function(self, ...)
-    if enabled and mp.isMPSession() and self.pos then
+    if enabled and self.rlsmpHold then return end   -- a police unit tied to the player's chase (rlsmp/police.lua) must not be recycled
+    -- RLS's own cheap gates first: nothing to decide unless RLS is about to recycle this car
+    local aboutToGo = self.enableRespawn and type(self.respawn) == "table" and self.focusDist and (tonumber(self.respawn.finalRadius) or math.huge) < self.focusDist
+    if enabled and aboutToGo and mp.isMPSession() and self.pos then
       local players = playerPositions()
       if #players > 0 and M.mustStay(self.pos, players, self.checkRayCast and function(a, b) return self:checkRayCast(a, b) end or nil) then
         return

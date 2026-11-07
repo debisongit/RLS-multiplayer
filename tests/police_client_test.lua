@@ -46,16 +46,16 @@ check(saw("RLSMP-P3|rlsmp_police loaded"), "loaded line")
 
 -- 1. No pursuit: nothing touched
 tick()
-check(traffic[10].enableRespawn == true and not police.isPursuit(), "no pursuit -> respawn untouched")
+check(traffic[10].rlsmpHold ~= true and not police.isPursuit(), "no pursuit -> respawn untouched")
 
 -- 2. Player chased (found by polling, the hook is only a fast start)
 traffic[1].pursuit.mode = 2
 tick()
 check(police.isPursuit(), "pursuit detected from traffic data")
-check(traffic[10].enableRespawn == false, "police unit within 300 m frozen")
-check(traffic[11].enableRespawn == true, "police unit 1000 m away and not in the pursuit data left alone")
+check(traffic[10].rlsmpHold == true, "police unit within 300 m frozen")
+check(traffic[11].rlsmpHold ~= true, "police unit 1000 m away and not in the pursuit data left alone")
 check(saw("RLSMP-P3|probe: player position known = true"), "probe: player position known")
-check(traffic[12].enableRespawn == true, "civilians untouched")
+check(traffic[12].rlsmpHold ~= true, "civilians untouched")
 
 check(saw("RLSMP-P3|probe: player vehicle in traffic data = true"), "probe: player in traffic data")
 check(saw("RLSMP-P3|pursuit START mode=2 antiTeleport=true blockRoadblocks=true"), "pursuit START line")
@@ -71,7 +71,7 @@ check(gameplay_traffic.forceTeleport(12) == true and teleports == 1, "civilian t
 -- 4. A new police unit appearing mid-chase is frozen too
 traffic[13] = cop(13, 50)
 tick()
-check(traffic[13].enableRespawn == false, "late police unit frozen")
+check(traffic[13].rlsmpHold == true, "late police unit frozen")
 
 -- 5. Respawn watch notices a unit that was re-placed anyway
 traffic[10].respawnCount = 1
@@ -87,51 +87,51 @@ tick()
 check(not police.isPursuit(), "pursuit end seen through traffic data")
 check(saw("RLSMP-P3|pursuit END after"), "pursuit END line")
 check(saw("RLSMP-P3|RELEASED police id=10"), "RELEASED line")
-check(traffic[10].enableRespawn == true and traffic[11].enableRespawn == true and traffic[13].enableRespawn == true, "respawn restored")
+check(traffic[10].rlsmpHold ~= true and traffic[11].rlsmpHold ~= true and traffic[13].rlsmpHold ~= true, "respawn restored")
 check(overhaul_integration_services_police.setupRoadblock() ~= nil and roadblocks == 1, "roadblocks work again")
 check(gameplay_traffic.forceTeleport(10) == true, "cop teleport allowed again")
 
 -- 7. Player switches vehicle mid-chase: the new player vehicle is chased, state follows
 traffic[1].pursuit.mode = 1
 police.onPursuitModeUpdate(1, {mode = 1}) -- hook gives a fast start
-check(police.isPursuit() and traffic[10].enableRespawn == false, "hook starts at once")
+check(police.isPursuit() and traffic[10].rlsmpHold == true, "hook starts at once")
 playerId = 2
 traffic[1].pursuit.mode = 0
 tick()
-check(not police.isPursuit() and traffic[10].enableRespawn == true, "switching away from the chased car ends it")
+check(not police.isPursuit() and traffic[10].rlsmpHold ~= true, "switching away from the chased car ends it")
 traffic[2].pursuit.mode = 3
 tick()
-check(police.isPursuit() and traffic[10].enableRespawn == false, "new player vehicle chased -> frozen again")
+check(police.isPursuit() and traffic[10].rlsmpHold == true, "new player vehicle chased -> frozen again")
 traffic[2].pursuit.mode = 0
 tick()
 playerId = 1
 
--- 8. A unit that already had respawn off keeps it off afterwards
+-- 8. A unit that already had respawn off keeps its own setting; we only add and remove our hold flag
 traffic[10].enableRespawn = false
 traffic[1].pursuit.mode = 1
 tick()
 traffic[1].pursuit.mode = 0
 tick()
-check(traffic[10].enableRespawn == false, "previous setting preserved")
+check(traffic[10].enableRespawn == false and traffic[10].rlsmpHold == nil, "a unit that already had respawn off keeps it off, and the hold flag is gone")
 traffic[10].enableRespawn = true
 
 -- 9. Server config
 handlers["rlsmpPoliceConfig"](json.encode({antiTeleport = false}))
 traffic[1].pursuit.mode = 2
 tick()
-check(traffic[10].enableRespawn == true, "antiTeleport=false -> nothing frozen")
+check(traffic[10].rlsmpHold ~= true, "antiTeleport=false -> nothing frozen")
 check(overhaul_integration_services_police.setupRoadblock() ~= nil, "antiTeleport=false -> roadblocks allowed")
 handlers["rlsmpPoliceConfig"](json.encode({antiTeleport = true, blockRoadblocks = false}))
 tick()
 check(overhaul_integration_services_police.setupRoadblock() ~= nil, "blockRoadblocks=false allows roadblocks")
-check(traffic[10].enableRespawn == false, "police frozen again")
+check(traffic[10].rlsmpHold == true, "police frozen again")
 
 -- 10. Leaving the server restores everything; outside multiplayer nothing happens
 police.onServerLeave()
-check(traffic[10].enableRespawn == true and not police.isPursuit(), "leave restores")
+check(traffic[10].rlsmpHold ~= true and not police.isPursuit(), "leave restores")
 mp = false
 tick()
-check(not police.isPursuit() and traffic[10].enableRespawn == true, "not in multiplayer -> ignored")
+check(not police.isPursuit() and traffic[10].rlsmpHold ~= true, "not in multiplayer -> ignored")
 mp = true
 career = false
 police.onOverhaulActive(false)
@@ -149,14 +149,14 @@ mp, career = true, true
 traffic[1] = nil
 logged = {}
 police.onPursuitModeUpdate(1, {mode = 2})
-check(police.isPursuit() and traffic[10].enableRespawn == false, "hook fallback starts the pursuit")
-check(traffic[11].enableRespawn == false, "no player position -> every police unit frozen (safe side)")
+check(police.isPursuit() and traffic[10].rlsmpHold == true, "hook fallback starts the pursuit")
+check(traffic[11].rlsmpHold == true, "no player position -> every police unit frozen (safe side)")
 check(saw("RLSMP-P3|probe: player position known = false"), "probe says the position is unknown")
 check(saw("RLSMP-P3|probe: player vehicle in traffic data = false"), "probe says the player is not in traffic data")
 tick()
 check(police.isPursuit(), "fallback keeps the pursuit on")
 police.onPursuitModeUpdate(1, {mode = 0})
-check(not police.isPursuit() and traffic[10].enableRespawn == true and traffic[11].enableRespawn == true, "hook ends it")
+check(not police.isPursuit() and traffic[10].rlsmpHold ~= true and traffic[11].rlsmpHold ~= true, "hook ends it")
 
 -- 13. Only units tied to the chase: pursuit data ids, distance, release gap, vanished units
 traffic[1] = {role = {name = "none"}, pursuit = {mode = 0, sight = {}, roadblockTargetId = 0}, pos = at(0)}
@@ -167,38 +167,38 @@ traffic[1].pursuit.sight.policeId = 11      -- RLS's nearest visible unit, far a
 traffic[1].pursuit.roadblockTargetId = 14   -- the roadblock unit, far away
 tick()
 check(police.isPursuit(), "pursuit on")
-check(traffic[11].enableRespawn == false, "sight.policeId unit frozen even when far")
-check(traffic[14].enableRespawn == false, "roadblockTargetId unit frozen even when far")
-check(traffic[10].enableRespawn == false and traffic[13].enableRespawn == false, "near units frozen")
+check(traffic[11].rlsmpHold == true, "sight.policeId unit frozen even when far")
+check(traffic[14].rlsmpHold == true, "roadblockTargetId unit frozen even when far")
+check(traffic[10].rlsmpHold == true and traffic[13].rlsmpHold == true, "near units frozen")
 traffic[1].pursuit.sight.policeId = nil
 traffic[1].pursuit.roadblockTargetId = 0
 tick()
-check(traffic[11].enableRespawn == true and traffic[14].enableRespawn == true, "units that leave the pursuit data and are far are released")
+check(traffic[11].rlsmpHold ~= true and traffic[14].rlsmpHold ~= true, "units that leave the pursuit data and are far are released")
 check(saw("RLSMP-P3|RELEASED police id=11"), "RELEASED line for a single unit")
 traffic[10].pos = at(320)                   -- past 300 m but inside the 350 m release gap
 tick()
-check(traffic[10].enableRespawn == false, "frozen unit inside the release gap stays frozen")
+check(traffic[10].rlsmpHold == true, "frozen unit inside the release gap stays frozen")
 traffic[10].pos = at(400)
 tick()
-check(traffic[10].enableRespawn == true and police.isPursuit(), "unit beyond 350 m released, pursuit goes on")
+check(traffic[10].rlsmpHold ~= true and police.isPursuit(), "unit beyond 350 m released, pursuit goes on")
 traffic[10].pos = at(320)
 tick()
-check(traffic[10].enableRespawn == true, "released unit at 320 m is not frozen again (needs <= 300 m)")
+check(traffic[10].rlsmpHold ~= true, "released unit at 320 m is not frozen again (needs <= 300 m)")
 traffic[10].pos = at(200)
 tick()
-check(traffic[10].enableRespawn == false, "unit coming back within 300 m frozen again")
+check(traffic[10].rlsmpHold == true, "unit coming back within 300 m frozen again")
 traffic[13] = nil                           -- a frozen unit leaves the traffic data
 tick()
 check(saw("RLSMP-P3|GONE police id=13"), "vanished unit forgotten")
 traffic[1].pos = nil                        -- player position from map.objects instead
 map = {objects = {[1] = {pos = at(1900)}}}
 tick()
-check(traffic[14].enableRespawn == false and traffic[10].enableRespawn == true, "map.objects position used when traffic data has none")
+check(traffic[14].rlsmpHold == true and traffic[10].rlsmpHold ~= true, "map.objects position used when traffic data has none")
 map = nil
 traffic[1].pos = at(0)
 traffic[1].pursuit.mode = 0
 tick()
-check(not police.isPursuit() and traffic[10].enableRespawn == true and traffic[14].enableRespawn == true, "all released at the end")
+check(not police.isPursuit() and traffic[10].rlsmpHold ~= true and traffic[14].rlsmpHold ~= true, "all released at the end")
 traffic[13] = cop(13, 50)
 
 -- 14. RLS (or vanilla) replaces a wrapped function: we wrap the new one, keep it as the original, once
