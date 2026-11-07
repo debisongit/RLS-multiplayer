@@ -33,6 +33,7 @@ local stateTime = 0
 local pending                 -- {profile, isNew, slot, opts}
 local isNewCareer = false
 local firstSaveTimer
+local staleCars, staleTimer   -- cars the server says already left (crash recovery), removed shortly after the career starts
 local watch = downloadWatch.new()   -- spots a download that stopped
 
 -- Lines tagged [rlsmp-timing] show where join time goes (send them with the log if joining feels slow).
@@ -117,6 +118,7 @@ local function onProfile(text, extra, problem)
   local slot = rlsmp_saveBridge.writeProfile(extra.profile, files, getCurrentLevelIdentifier())
   isNewCareer = extra.isNew == true or slot == nil
   pending = {profile = extra.profile, slot = slot, opts = extra.startingOptions}
+  staleCars = type(extra.drop) == "table" and extra.drop or nil
   startCareer()
 end
 
@@ -129,6 +131,7 @@ function M.onOverhaulActive(active)
     net.send("rlsmpLoaded", {ok = true})
     -- New careers get saved right away so the server has a copy from minute one.
     if isNewCareer then firstSaveTimer = 10 end
+    if staleCars and #staleCars > 0 then staleTimer = 8 end
   elseif not active and state == "active" then
     setModules(false)
     removeGuard.enable(false)
@@ -166,6 +169,14 @@ function M.onUpdate(dtReal)
   elseif state == "starting" and stateTime > START_TIMEOUT then
     fail("start_timeout")
   end
+  if staleTimer then
+    staleTimer = staleTimer - (dtReal or 0)
+    if staleTimer <= 0 then
+      staleTimer = nil
+      rlsmp_fleet.dropStale(staleCars)
+      staleCars = nil
+    end
+  end
   if firstSaveTimer then
     firstSaveTimer = firstSaveTimer - (dtReal or 0)
     if firstSaveTimer <= 0 then
@@ -179,7 +190,7 @@ function M.onServerLeave()
   removeGuard.enable(false)
   setModules(false)
   net.reset()
-  pending, firstSaveTimer = nil, nil
+  pending, firstSaveTimer, staleCars, staleTimer = nil, nil, nil, nil
   setState("idle")
 end
 

@@ -20,47 +20,40 @@ local function toast()
   end
 end
 
+-- RLS calls its local switchMap from resolveTravelBlockers, so both exported entry points are wrapped.
 local wrapped = setmetatable({}, {__mode = "k"})
+local function refuse(original)
+  return function(...)
+    if enabled then toast() return false, MESSAGE end
+    return original(...)
+  end
+end
+
 function M.install()
   local sm = overhaul_career_garage_switchMap
   if not sm or wrapped[sm] then return sm ~= nil end
   wrapped[sm] = true
-  local originalSwitch, originalBlockers = sm.switchMap, sm.getTravelBlockers
-  if originalSwitch then
-    sm.switchMap = function(...)
-      if enabled then toast() return false, MESSAGE end
-      return originalSwitch(...)
-    end
-  end
-  if originalBlockers then
-    sm.getTravelBlockers = function(...)
-      if enabled then return {MESSAGE} end
-      return originalBlockers(...)
-    end
-  end
+  if sm.switchMap then sm.switchMap = refuse(sm.switchMap) end
+  if sm.resolveTravelBlockers then sm.resolveTravelBlockers = refuse(sm.resolveTravelBlockers) end
   return true
 end
 
--- Step 2: event results. RLS freeroam events (races, derby, burnout...) all end in
--- overhaul_events_fre_race.onFreeroamRaceCompleted(payload). We only watch it and tell the server the time.
--- Payload fields (raceName, finishTime, resultMetrics.placement, invalidLap) come from reading RLS, not from a played run.
-local wrappedRace = setmetatable({}, {__mode = "k"})
-local function installRace()
-  local race = overhaul_events_fre_race
-  if not race or wrappedRace[race] or not race.onFreeroamRaceCompleted then return end
-  wrappedRace[race] = true
-  local original = race.onFreeroamRaceCompleted
-  race.onFreeroamRaceCompleted = function(payload, ...)
-    if enabled and type(payload) == "table" and not payload.invalidLap
-      and type(payload.raceName) == "string" and tonumber(payload.finishTime) then
-      local metrics = type(payload.resultMetrics) == "table" and payload.resultMetrics or {}
-      net.send("rlsmpEventDone", {race = payload.raceName, t = tonumber(payload.finishTime), place = tonumber(metrics.placement)})
-    end
-    return original(payload, ...)
+-- Step 2: event results. RLS announces every finished freeroam run with the game hook
+-- onRlsFreeroamRaceResultFinalized(payload) (seconds in finishTime). Only timed races count here: derby (demo),
+-- burnout and tractor pull are scored by points or distance, so lower is not better for them.
+local NOT_TIMED = {demo = true, burnout = true, tractorPull = true}
+
+function M.onRlsFreeroamRaceResultFinalized(payload)
+  if not enabled or type(payload) ~= "table" or payload.invalidLap then return end
+  if type(payload.raceName) ~= "string" or not tonumber(payload.finishTime) then return end
+  for _, kind in ipairs(type(payload.disciplineIds) == "table" and payload.disciplineIds or {}) do
+    if NOT_TIMED[kind] then return end
   end
+  local metrics = type(payload.resultMetrics) == "table" and payload.resultMetrics or {}
+  net.send("rlsmpEventDone", {race = payload.raceName, t = tonumber(payload.finishTime), place = tonumber(metrics.placement)})
 end
 
-function M.onUpdate() M.install() installRace() end
+function M.onUpdate() M.install() end
 
 M.onInit = function() setExtensionUnloadMode(M, "manual") end
 

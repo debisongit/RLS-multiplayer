@@ -127,12 +127,23 @@ pf["career/vehicles/3.json"] = json.encode({model = "etk800"})
 clientUpload(1, "f2", "fleetAdd", {inv = 3, rec = car})
 local ack = lastSent(1, "rlsmpFleetAck")
 check(ack.ok and ack.fid == "1" and ack.inv == 3, "car added to fleet")
-check(sessions.get(1).profile.fleetOut["3"] == "1", "slot remembered as out")
+check(sessions.get(1).profile.fleetOut["3"].ref == "1", "slot remembered as out")
 clientUpload(1, "f2c", "fleetAdd", {inv = 3, rec = car})
 check(lastSent(1, "rlsmpFleetAck").ok == false, "same slot cannot be added twice before the save drops it")
 pf["career/vehicles/3.json"] = nil
 require("rlsmp.server.profiles").applyUpload(sessions.get(1).profile, {all = {["info.json"] = require("rlsmp/lib/transfer").checksum(pf["info.json"] or "")}, files = {["info.json"] = pf["info.json"] or ""}})
 check(sessions.get(1).profile.fleetOut["3"] == nil, "slot forgotten once the save no longer has the car")
+-- stale list for the join handshake, and a different car in the same slot is never mistaken for the old one
+local profs = require("rlsmp.server.profiles")
+local pr = sessions.get(1).profile
+pr.save.files["career/vehicles/5.json"] = json.encode({model = "etk800"})
+profs.markOut(pr, 5, "9")
+check(#profs.staleCars(pr) == 1 and profs.staleCars(pr)[1] == 5, "stale car listed for the next join")
+pr.save.files["career/vehicles/5.json"] = json.encode({model = "pickup"})
+local newFiles = {}
+for rel, text in pairs(pr.save.files) do newFiles[rel] = require("rlsmp/lib/transfer").checksum(text) end
+profs.applyUpload(pr, {all = newFiles, files = {}})
+check(#profs.staleCars(pr) == 0, "a different car in the same slot clears the mark")
 say(2, "/biz fleet")
 check(last(2):find("#1 ETK 800 %- available"), "fleet list shows the car")
 

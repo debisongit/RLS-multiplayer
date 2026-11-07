@@ -135,6 +135,7 @@ local function onHello(pid, data)
     profile = identity.localProfileName(accountId),
     isNew = isNew,
     startingOptions = startingOptions(),
+    drop = profiles.staleCars(profile),
     money = profile.ledger.seeded and profile.ledger.money or nil,
   })
   util.info(string.format("Sending %s profile to %s (%d bytes)", isNew and "NEW" or "saved", s.name, #payload))

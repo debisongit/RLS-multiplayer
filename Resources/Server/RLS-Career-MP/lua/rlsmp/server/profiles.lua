@@ -109,6 +109,30 @@ local function readMoney(attributesText)
   return tonumber(attrs.money.value), attrs
 end
 
+local function vehicleFile(inv) return "career/vehicles/" .. tostring(inv) .. ".json" end
+
+-- Remember that the car in inventory slot `inv` was handed over (fleet, later pink slips) under `ref`.
+-- Its file text is fingerprinted, so a different car that later takes the same slot is never mistaken for it.
+function M.markOut(profile, inv, ref)
+  local text = profile.save.files[vehicleFile(inv)]
+  if not text then return false end
+  profile.fleetOut = profile.fleetOut or {}
+  profile.fleetOut[tostring(inv)] = {ref = ref, sum = transfer.checksum(text)}
+  return true
+end
+
+function M.isOut(profile, inv)
+  return profile.fleetOut ~= nil and profile.fleetOut[tostring(inv)] ~= nil
+end
+
+-- Slots the client must clear on join (a crash left the handed-over car in the save).
+function M.staleCars(profile)
+  local list = {}
+  for inv in pairs(profile.fleetOut or {}) do list[#list + 1] = tonumber(inv) end
+  table.sort(list)
+  return list
+end
+
 -- Apply an uploaded save. `upload` = { all = {rel = checksum, ...}, files = {rel = text, ...} }
 -- `all` lists every file in the client's slot; `files` only holds the ones that changed.
 -- Returns result table or nil + reason. reason "resync" means: please send everything.
@@ -167,10 +191,11 @@ function M.applyUpload(profile, upload)
     end
   end
 
-  -- A car that left for a fleet is forgotten once the client's save no longer lists it.
+  -- A car that left for a fleet is forgotten once the client's save no longer has that car in that slot.
   if profile.fleetOut then
-    for inv in pairs(profile.fleetOut) do
-      if nextFiles["career/vehicles/" .. inv .. ".json"] == nil then profile.fleetOut[inv] = nil end
+    for inv, mark in pairs(profile.fleetOut) do
+      local text = nextFiles[vehicleFile(inv)]
+      if text == nil or transfer.checksum(text) ~= mark.sum then profile.fleetOut[inv] = nil end
     end
   end
 

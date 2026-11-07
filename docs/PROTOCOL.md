@@ -130,8 +130,11 @@ Log lines use the tag `RLSMP-GUARD`.
 
 ## Phase 4: world
 
-- **Map travel** is refused online (client `world.lua` wraps `overhaul_career_garage_switchMap.switchMap` and `getTravelBlockers`). No messages.
-- `rlsmpEventDone` (client to server) `{race, t, place}`: a finished RLS freeroam event (from `overhaul_events_fre_race.onFreeroamRaceCompleted`).
+- Profile download `extra.drop` (list of inventory ids): cars the server already handed to a fleet (or later escrow) but that are still in the save after a crash. The client removes them ~8 s after the career starts (`fleet.dropStale`) and saves.
+  The server fingerprints the car file (`profiles.markOut`), so a different car in the same slot is never removed.
+
+- **Map travel** is refused online (client `world.lua` wraps `overhaul_career_garage_switchMap.switchMap` and `resolveTravelBlockers`). No messages.
+- `rlsmpEventDone` (client to server) `{race, t, place}`: a finished RLS freeroam event (from the RLS hook `onRlsFreeroamRaceResultFinalized`; only timed races, not derby/burnout/tractor pull).
   Server `events.lua` keeps the top 5 per event in `records.json`, announces records in chat, `/records [event]` lists them. Times are client-reported, no money depends on them.
 
 ## Reserved prefixes for later phases

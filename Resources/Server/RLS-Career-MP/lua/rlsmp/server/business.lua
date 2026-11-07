@@ -290,8 +290,7 @@ local function checkOwnCar(s, inv, rec)
   if type(stored) == "table" and type(stored.model) == "string" and stored.model ~= rec.model then
     return false, "That car does not match your saved car."
   end
-  local out = s.profile.fleetOut
-  if out and out[tostring(inv)] then
+  if profiles.isOut(s.profile, inv) then
     return false, "That car is already in a fleet. Remove the old copy first (sell or scrap it)."
   end
   return true
@@ -316,8 +315,7 @@ local function onFleetAdd(pid, s, data)
     save(b)
     ack.ok, ack.fid = true, fid
     -- Remember which inventory slot just left, so a crash before the next save can't let the same car be added twice.
-    s.profile.fleetOut = s.profile.fleetOut or {}
-    s.profile.fleetOut[tostring(data.inv)] = fid
+    profiles.markOut(s.profile, data.inv, fid)
     profiles.persist(s.profile)
     tell(b, s.name .. " added " .. b.fleet[fid].name .. " to the fleet (#" .. fid .. ").")
   else

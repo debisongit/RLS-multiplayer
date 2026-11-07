@@ -94,4 +94,10 @@ server("rlsmpFleetRetire", {fid = "1"})
 check(vehicles[10].fleetId == nil and dirty[1] == 10, "retired car loses its fleet tag")
 overhaul_career_garage_inventory.getVehicles = function() return vehicles end
 
+-- crash recovery: stale slots are cleared
+vehicles[20] = {model = "etk800"} vehicles[21] = {model = "pickup"}
+removed = {}
+fleet.dropStale({20, 99})
+check(#removed == 1 and removed[1] == 20 and vehicles[21] ~= nil, "only listed existing slots removed")
+
 print(string.format("fleet_client_test: %d checks passed", passed))

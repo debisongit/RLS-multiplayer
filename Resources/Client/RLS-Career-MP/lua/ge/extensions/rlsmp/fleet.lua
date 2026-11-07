@@ -105,6 +105,22 @@ local function onVehicle(text, extra, problem)
   toast("info", "Fleet car ready. Return it with /biz fleet return.")
 end
 
+-- Crash recovery: the server says these inventory slots already left for a fleet, but the save still has them.
+function M.dropStale(list)
+  if not enabled or type(list) ~= "table" then return end
+  local i, removed = inv(), 0
+  for _, id in ipairs(list) do
+    if i.getVehicle(id) and overhaul_career_logistics_general.canRemoveLogisticsVehicle(id) then
+      i.removeVehicle(id)
+      removed = removed + 1
+    end
+  end
+  if removed > 0 then
+    if rlsmp_saveBridge then rlsmp_saveBridge.requestSave("rlsmp_fleet") end
+    toast("info", "A car that was already moved to the business fleet was cleared from your garage.")
+  end
+end
+
 -- The owner retired this car from the fleet: it becomes a normal personal car (just drop the fleet tag).
 local function onRetire(msg)
   local i = inv()
