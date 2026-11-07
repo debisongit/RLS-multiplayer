@@ -22,7 +22,7 @@ local function check(c, m) if not c then error("FAIL: " .. m, 2) end passed = pa
 
 local cfg = RLSMP.config
 check(cfg.theft and cfg.theft.enabled == false, "theft is off by default")
-check(_G.rlsmp_handler_rlsmpTheftStart == nil, "off: no handlers registered")
+check(_G.rlsmp_handler_rlsmpTheftStart ~= nil, "off: the handlers are there anyway (the menu can switch theft on live)")
 
 -- A fake plateRecords (the real one is built elsewhere); the report must reach it.
 local flagged = {}
@@ -45,6 +45,28 @@ for pid = 1, 2 do
   fire("rlsmpHello", pid, json.encode({v = 1, build = require("rlsmp.shared.transfer").BUILD}))
   sessions.get(pid).stage = "loaded"
 end
+
+-- Switched off: every handler refuses, the games are told once, and switching on again needs no restart
+cfg.theft.enabled = false
+client(1, "rlsmpTheftStart", {value = 4000, year = 1988})
+check(last(1, "rlsmpTheftGo").ok == false and last(1, "rlsmpTheftGo").err:find("off"), "off: a start is refused")
+client(1, "rlsmpTheftCheck", {id = 5, value = 4000, year = 1988})
+check(last(1, "rlsmpTheftCan") == nil, "off: no prompt answers")
+theft.resend()
+theft.tick()
+check(last(1, "rlsmpTheftConfig") and last(1, "rlsmpTheftConfig").enabled == false, "off: the games are told it is off")
+local toldCount = 0
+for _, m in ipairs(sent[1]) do if m.name == "rlsmpTheftConfig" then toldCount = toldCount + 1 end end
+theft.tick() theft.tick()
+local toldAfter = 0
+for _, m in ipairs(sent[1]) do if m.name == "rlsmpTheftConfig" then toldAfter = toldAfter + 1 end end
+check(toldAfter == toldCount, "off: told once, not every second")
+cfg.theft.enabled = true
+theft.resend()
+theft.tick()
+check(last(1, "rlsmpTheftConfig").enabled == true, "switched on again: the games hear it at once")
+client(1, "rlsmpTheftStart", {value = 4000, year = 1988})
+check(last(1, "rlsmpTheftGo").ok == false and not tostring(last(1, "rlsmpTheftGo").err):find("off"), "on again: a start is judged by the tools, not refused as off")
 
 -- Difficulty table
 check(theft.tierFor(5000, 1985) == "old", "1985 car: old")

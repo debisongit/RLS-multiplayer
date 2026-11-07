@@ -15,6 +15,9 @@ M.SECTIONS = {
   {id = "swap", label = "Swapping"},
   {id = "weather", label = "Weather"},
   {id = "police", label = "Police"},
+  {id = "theft", label = "Theft"},
+  {id = "fence", label = "Fence"},
+  {id = "market", label = "Market"},
 }
 M.ZONES = {{id = "city", label = "City roads"}, {id = "main", label = "Main roads"}, {id = "highway", label = "Highways"}}
 M.TIMES = {{id = "any", label = "Any time"}, {id = "day", label = "Day"}, {id = "night", label = "Night"}}
@@ -201,6 +204,15 @@ function M.whereMap(st)
   if st.time == "day" then return {"trafficVariety", "day"} end
   if st.time == "night" then return {"trafficVariety", "night"} end
   return {"trafficVariety", "zones", st.zone}
+end
+
+-- The names under snap[a][b] (theft methods, market items), sorted. Empty when the server did not send them.
+function M.names(st, a, b)
+  local out = {}
+  local t = st.snap and type(st.snap[a]) == "table" and st.snap[a][b]
+  if type(t) == "table" then for name in pairs(t) do out[#out + 1] = name end end
+  table.sort(out)
+  return out
 end
 
 function M.child(path, name)

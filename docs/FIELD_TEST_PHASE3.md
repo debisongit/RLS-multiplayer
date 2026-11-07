@@ -505,3 +505,15 @@ Known gaps: police cannot ping a tracker or be sent after a car you stole with o
 - Never run in the game. The view itself is covered by an automatic test with a fake bridge (tests/phone_app, optional), and RLS's own manifest checks accept the manifest, but the real RLS phone UI has not loaded it.
 - The icon is a stock icon name (`shoppingCart`), not a picture.
 - Selling stolen cars is still chat only (`/fence`): it needs the car deleted in the game, so it stays a command.
+
+
+## Theft, fence and market pages in the menu (build 0.4.29)
+
+1. As an admin press `[`. The tab row now has ten tabs (five to a row): the last three are Theft, Fence, Market.
+2. Theft page: tick "Car theft on", press Apply. The status should say "1 setting applied and saved"; the server log shows `RLSMP-ADMIN ... theft.enabled=true`, and `config/config.json` has `"enabled": true` under `theft`. Walking up to a parked car should now give the theft prompt (if you own the tools), without a server restart. Untick it and Apply: the prompt stops.
+3. Fence page: change "Strip pays" to 0.5, Apply, then use `/fence` at the drop spot: the quote follows.
+4. Market page: change an item's price, Apply, then `/market list` shows the new price.
+5. Out-of-range values (typed into a number box beyond its range) are clamped by the menu and refused by the server with "out of range".
+6. Send me: the `traffic menu`, `RLSMP-ADMIN` and `RLSMP-THEFT` lines.
+
+Known gaps: never played. Drop spot places and the admin names are only in `config.json`. Changes made to `config.json` by hand while the server runs are overwritten by the next Apply.

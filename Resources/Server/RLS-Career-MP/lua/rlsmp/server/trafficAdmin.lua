@@ -1,7 +1,7 @@
 -- RLS-Career-MP server: the in-game traffic settings menu (Phase 3).
 -- SPDX-License-Identifier: AGPL-3.0-only
 --
--- A few players (config `trafficAdmin`: BeamMP account names, optionally account ids) can change the AI traffic settings from a menu in the game
+-- A few players (config `trafficAdmin`: BeamMP account names, optionally account ids) can change the AI traffic, car theft, fence and black market settings from a menu in the game
 -- (client rlsmp_trafficMenu: the [ key, or /trafficmenu). THIS FILE is what protects it: the client only asks, the server checks every time.
 --   * who: the sender's BeamMP name (not case sensitive) or account id must be listed, and guests never count;
 --   * what: only settings on the allowlist below, each with a type and a range (anything else, or a value out of range, is rejected);
@@ -57,6 +57,32 @@ local STATIC = {
 }
 for _, name in ipairs(PERSONALITIES) do STATIC["smartTraffic.mix." .. name] = {"number", 0, 100} end
 for _, name in ipairs(CONDITIONS) do STATIC["weather.mix." .. name] = {"number", 0, 100} end
+
+-- Car theft, the fence and the black market (all read live by their modules, except what is said in the comments).
+local function rules(prefix, list)
+  for field, rule in pairs(list) do STATIC[prefix .. field] = rule end
+end
+rules("theft.", {
+  enabled = {"bool"}, perMille = {"number", 0, 1000, true}, periodSeconds = {"number", 60, 86400, true}, radius = {"number", 1, 10},
+  retrySeconds = {"number", 0, 300, true}, jammerNoiseFactor = {"number", 0, 1},
+  baseWitnessChance = {"number", 0, 1}, perWitness = {"number", 0, 1}, noiseWitness = {"number", 0, 1}, maxWitnessChance = {"number", 0, 1},
+  witnessCap = {"number", 0, 20, true}, seenReportMin = {"number", 1, 3600, true}, seenReportMax = {"number", 1, 3600, true},
+  unseenReportSeconds = {"number", 1, 86400, true}, trackerReportSeconds = {"number", 1, 3600, true}, keepHours = {"number", 1, 720, true},
+  ["tiers.immobilizerYear"] = {"number", 1900, 2100, true}, ["tiers.keylessYear"] = {"number", 1900, 2100, true},
+  ["tiers.newestYear"] = {"number", 1900, 2100, true}, ["tiers.luxuryValue"] = {"number", 0, 100000000, true},
+})
+rules("fence.", {
+  enabled = {"bool"}, maxValue = {"number", 0, 100000000, true}, minValue = {"number", 0, 1000000, true},
+  stripRate = {"number", 0, 1}, resellRate = {"number", 0, 1}, gambleBase = {"number", 0, 1}, gamblePerPaper = {"number", 0, 0.5},
+  gambleMaxPapers = {"number", 1, 3, true}, gambleBust = {"number", 0, 1},
+  ["rep.strip"] = {"number", 0, 25, true}, ["rep.sell"] = {"number", 0, 25, true}, ["rep.resell"] = {"number", 0, 25, true}, ["rep.gamble"] = {"number", 0, 25, true},
+})
+rules("market.", {
+  enabled = {"bool"}, bustRep = {"number", 0, 100, true}, bustTakesPapers = {"bool"}, bustTakesTools = {"bool"},
+  minDelaySeconds = {"number", 0, 3600, true}, maxDelaySeconds = {"number", 0, 3600, true}, maxOpenOrders = {"number", 1, 10, true},
+  pickupRadius = {"number", 5, 200}, rotateMinutes = {"number", 1, 1440, true}, baseInvites = {"number", 0, 20, true},
+  repPerInvite = {"number", 1, 100, true}, maxInvites = {"number", 0, 50, true}, fenceCarRate = {"number", 0, 1}, fencePartRate = {"number", 0, 1},
+})
 
 -- Rules for maps with names chosen by the player (car Types and models): first segments -> rule, last segment is the name.
 local DYNAMIC_WEIGHT = {"number", 0, 20}
@@ -185,11 +211,54 @@ local function copyZones(src)
   return out
 end
 
+-- Rules that depend on the config: a theft method's numbers, and a black market item's price and rep.
+local function addDerivedRules()
+  for name, m in pairs(type(config.theft) == "table" and type(config.theft.methods) == "table" and config.theft.methods or {}) do
+    if goodKey(name) and type(m) == "table" then
+      local base = "theft.methods." .. name .. "."
+      STATIC[base .. "seconds"] = {"number", 1, 600, true}
+      STATIC[base .. "noise"] = {"number", 0, 1}
+      STATIC[base .. "failChance"] = {"number", 0, 1}
+      STATIC[base .. "enabled"] = {"bool"}
+    end
+  end
+  local itemsOk, items = pcall(require, "rlsmp.server.items")
+  for name, t in pairs(type(config.market) == "table" and type(config.market.tiers) == "table" and config.market.tiers or {}) do
+    if goodKey(name) and type(t) == "table" and itemsOk and items.known(name) then
+      local base = "market.tiers." .. name .. "."
+      STATIC[base .. "price"] = {"number", 1, 100000000, true}
+      STATIC[base .. "minRep"] = {"number", 0, 100, true}
+      STATIC[base .. "off"] = {"bool"}
+    end
+  end
+end
+
+-- The values of every rule under theft / fence / market that exists in the config, as nested tables.
+local function copyRuled(prefixes)
+  local out = {}
+  for dotted in pairs(STATIC) do
+    local segs = {}
+    for seg in dotted:gmatch("[^.]+") do segs[#segs + 1] = seg end
+    if prefixes[segs[1]] then
+      local src, dst = config, out
+      for i = 1, #segs - 1 do
+        src = type(src) == "table" and src[segs[i]] or nil
+        dst[segs[i]] = dst[segs[i]] or {}
+        dst = dst[segs[i]]
+      end
+      if type(src) == "table" then dst[segs[#segs]] = src[segs[#segs]] end
+    end
+  end
+  return out
+end
+
 function M.snapshot()
   local t, s, v, w, p = config.traffic or {}, config.smartTraffic or {}, config.trafficVariety or {}, config.weather or {}, config.police or {}
   local swap = type(v.swap) == "table" and v.swap or {}
   local limits = type(v.zoneSpeedLimits) == "table" and v.zoneSpeedLimits or {}
+  local extra = copyRuled({theft = true, fence = true, market = true})
   return {
+    theft = extra.theft, fence = extra.fence, market = extra.market,
     traffic = {enabled = t.enabled, totalBudget = t.totalBudget, baseBudget = t.baseBudget, perPlayerBudget = t.perPlayerBudget,
       minPerPlayer = t.minPerPlayer, maxPerPlayer = t.maxPerPlayer},
     smartTraffic = {enabled = s.enabled, policeReact = s.policeReact, mix = copyMap(s.mix)},
@@ -235,7 +304,7 @@ local function tooFast(pid)
 end
 
 local function modulesResend()
-  for _, name in ipairs({"smartTraffic", "trafficVariety", "trafficPolice"}) do
+  for _, name in ipairs({"smartTraffic", "trafficVariety", "trafficPolice", "theft"}) do
     local ok, mod = pcall(require, "rlsmp.server." .. name)
     if ok and type(mod) == "table" and mod.resend then mod.resend() end
   end
@@ -303,6 +372,7 @@ function M.init(cfg, pluginRoot)
   adminCfg = cfg.trafficAdmin or {}
   configPath = (pluginRoot or "") .. "config/config.json"
   seen = {}
+  addDerivedRules()
   net.onClient("rlsmpTrafficAdminGet", onGet)
   net.onClient("rlsmpTrafficAdminSet", onSet)
   net.onChat("trafficmenu", onMenuCommand)

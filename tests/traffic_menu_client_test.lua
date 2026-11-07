@@ -27,7 +27,8 @@ ui.FloatPtr = function(v) return {[0] = v} end
 ui.IntPtr = function(v) return {[0] = v} end
 ui.BoolPtr = function(v) return {[0] = v} end
 ui.ArrayChar = function() return {} end
-ui.Button = function(label) rec("Button") local base = label:gsub("^> ", "") if clicks[base] then clicks[base] = nil return true end return false end
+local seenButtons = {}
+ui.Button = function(label) rec("Button") seenButtons[label] = true local base = label:gsub("^> ", "") if clicks[base] then clicks[base] = nil return true end return false end
 ui.Checkbox = function(label, ptr) rec("Checkbox") if clicks[label] then clicks[label] = nil ptr[0] = not ptr[0] return true end return false end
 ui.SliderFloat = function(label, ptr) rec("SliderFloat") if sliders[label] ~= nil then ptr[0] = sliders[label] sliders[label] = nil return true end return false end
 ui.InputInt = function(label, ptr) rec("InputInt") if sliders[label] ~= nil then ptr[0] = sliders[label] sliders[label] = nil return true end return false end
@@ -42,7 +43,10 @@ local passed = 0
 local function check(c, m) if not c then error("FAIL: " .. m, 2) end passed = passed + 1 end
 local function server(name, tbl) handlers[name](json.encode(tbl)) end
 local SNAP = {trafficVariety = {typeWeights = {Truck = 0.5}, models = {}, mods = {}}, smartTraffic = {mix = {normal = 100}},
-  weather = {force = "", mix = {}}, traffic = {}, police = {}}
+  weather = {force = "", mix = {}}, traffic = {}, police = {},
+  theft = {enabled = false, perMille = 150, methods = {window_screwdriver = {enabled = true, seconds = 8, noise = 0.9, failChance = 0.05}}, tiers = {}},
+  fence = {enabled = true, stripRate = 0.3, rep = {strip = 1}},
+  market = {enabled = true, bustRep = 10, tiers = {screwdriver = {price = 400, minRep = 0, off = false}}}}
 
 -- 1. the key asks the server; a refusal opens nothing --------------------------------------------------------------------------
 M.toggle()
@@ -68,7 +72,7 @@ check(drawn.Begin == 1 and drawn.SliderFloat and drawn.SliderFloat >= 3, "window
 check(not saw("draw failed"), "no draw error")
 
 -- 3. every section draws without error --------------------------------------------------------------------------------------------
-for _, s in ipairs({"Where & when", "Behaviour", "Amount", "Swapping", "Weather", "Police", "Cars"}) do
+for _, s in ipairs({"Where & when", "Behaviour", "Amount", "Swapping", "Weather", "Police", "Theft", "Fence", "Market", "Cars"}) do
   clicks[s] = true
   M.onUpdate()
   M.onUpdate()
@@ -86,6 +90,37 @@ M.onUpdate()
 check(#sent == 1 and sent[1].name == "rlsmpTrafficAdminSet" and #sent[1].data.set == 1 and sent[1].data.set[1].v == 3, "Apply sends the patch")
 server("rlsmpTrafficAdminResult", {ok = true, applied = 1, rejected = {}, saved = true})
 check(M.getState().status:find("applied and saved", 1, true) and next(M.getState().pending) == nil, "result clears pending")
+
+-- 4b. the theft, fence and market pages: their numbers can be edited and sent, and have no "reset" (they cannot be removed)
+for _, page in ipairs({"Theft", "Fence", "Market"}) do clicks[page] = true M.onUpdate() end
+clicks["Theft"] = true
+M.onUpdate()
+seenButtons = {}
+M.onUpdate()
+local resets = 0
+for label in pairs(seenButtons) do if label:find("^reset##theft") then resets = resets + 1 end end
+check(resets == 0, "theft page: no reset buttons (these settings cannot be removed)")
+sliders["Stealable parked cars (per 1000)##theft.perMille"] = 400
+M.onUpdate()
+check(M.getState().pending["theft.perMille"] and M.getState().pending["theft.perMille"].value == 400, "theft slider edit is pending")
+sliders["  seconds##theft.methods.window_screwdriver.seconds"] = 20
+M.onUpdate()
+check(M.getState().pending["theft.methods.window_screwdriver.seconds"].value == 20, "a method's number can be edited")
+clicks["Market"] = true
+M.onUpdate()
+sliders["  price##market.tiers.screwdriver.price"] = 900
+M.onUpdate()
+check(M.getState().pending["market.tiers.screwdriver.price"].value == 900, "an item's price can be edited")
+sent = {}
+clicks["Apply"] = true
+M.onUpdate()
+local patch = sent[1].data
+local paths = {}
+for _, c in ipairs(patch.set) do paths[#paths + 1] = table.concat(c.p, ".") .. "=" .. tostring(c.v) end
+check(#patch.set == 3 and #patch.rm == 0 and table.concat(paths, ",") == "market.tiers.screwdriver.price=900,theft.methods.window_screwdriver.seconds=20,theft.perMille=400", "Apply sends the three changes and no removal: " .. table.concat(paths, ","))
+server("rlsmpTrafficAdminResult", {ok = true, applied = 3, rejected = {}, saved = true})
+clicks["Cars"] = true
+M.onUpdate()
 
 -- 5. revert, reset, nothing to apply ------------------------------------------------------------------------------------------------
 sliders["Truck (1)##trafficVariety.typeWeights.Truck"] = 4

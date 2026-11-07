@@ -232,4 +232,39 @@ take()
 _G[handlers["rlsmpWeatherTick"]]()
 check(find(take(), "rlsmpWeather") ~= nil, "...and on again")
 
+-- theft, fence and black market settings ---------------------------------------------------------------------------------------------------------------------------
+admin.init(cfg, tmp .. "/")
+take()
+set(0, {{p = {"theft", "perMille"}, v = 300}, {p = {"theft", "jammerNoiseFactor"}, v = 0.5}, {p = {"theft", "methods", "window_screwdriver", "seconds"}, v = 12},
+  {p = {"theft", "methods", "signal_cloner", "failChance"}, v = 0.5}, {p = {"fence", "stripRate"}, v = 0.4}, {p = {"fence", "rep", "resell"}, v = 5},
+  {p = {"market", "tiers", "screwdriver", "price"}, v = 999}, {p = {"market", "tiers", "jammer", "off"}, v = true}, {p = {"market", "fenceCarRate"}, v = 0.5},
+  {p = {"theft", "enabled"}, v = true}})
+r = lastResult()
+check(r.applied == 10 and #r.rejected == 0, "theft, fence and market settings are accepted")
+check(cfg.theft.perMille == 300 and cfg.theft.methods.window_screwdriver.seconds == 12 and cfg.theft.methods.signal_cloner.failChance == 0.5
+  and cfg.fence.stripRate == 0.4 and cfg.fence.rep.resell == 5 and cfg.market.tiers.screwdriver.price == 999 and cfg.market.tiers.jammer.off == true
+  and cfg.market.fenceCarRate == 0.5 and cfg.theft.enabled == true, "...and written into the live config tables")
+set(0, {{p = {"theft", "perMille"}, v = 5000}, {p = {"theft", "witnessCap"}, v = -1}, {p = {"theft", "tiers", "keylessYear"}, v = 1800},
+  {p = {"fence", "gambleBust"}, v = 2}, {p = {"fence", "gambleMaxPapers"}, v = 9}, {p = {"market", "pickupRadius"}, v = 1},
+  {p = {"market", "tiers", "screwdriver", "price"}, v = 0}, {p = {"theft", "methods", "window_screwdriver", "noise"}, v = 3}, {p = {"theft", "methods", "signal_cloner", "failChance"}, v = 2}})
+r = lastResult()
+check(r.applied == 0 and #r.rejected == 9, "every out-of-range value is refused (" .. tostring(#r.rejected) .. " of 9)")
+check(cfg.theft.perMille == 300 and cfg.market.tiers.screwdriver.price == 999, "...and nothing changed")
+set(0, {{p = {"theft", "methods", "made_up_method", "seconds"}, v = 5}, {p = {"market", "tiers", "made_up_item", "price"}, v = 5},
+  {p = {"theft", "methods", "window_screwdriver", "items"}, v = 5}, {p = {"market", "dropSpots"}, v = 5}, {p = {"fence", "enabled", "x"}, v = true},
+  {p = {"trafficAdmin", "names"}, v = "x"}, {p = {"theft", "methods", "window_screwdriver", "tier"}, v = "luxury"}})
+r = lastResult()
+check(r.applied == 0 and #r.rejected == 7, "unknown methods and items, item lists, drop spots, the admin list and tiers of methods cannot be set")
+set(0, {{p = {"theft", "perMille"}, v = 250.6}})
+lastResult()
+check(cfg.theft.perMille == 251, "whole-number settings are rounded")
+-- the snapshot carries the new sections for the menu
+local sn = admin.snapshot()
+check(sn.theft.perMille == 251 and sn.theft.methods.window_screwdriver.seconds == 12 and sn.theft.tiers.keylessYear == cfg.theft.tiers.keylessYear
+  and sn.fence.rep.resell == 5 and sn.market.tiers.screwdriver.price == 999 and sn.market.fenceCarRate == 0.5, "the snapshot has theft, fence and market values")
+check(sn.market.dropSpots == nil and sn.theft.methods.window_screwdriver.items == nil and sn.theft.methods.window_screwdriver.tier == nil, "...and only the editable ones")
+set(0, {{p = {"theft", "enabled"}, v = false}})
+take()
+check(cfg.theft.enabled == false and admin.snapshot().theft.enabled == false, "theft can be switched off again")
+
 print(string.format("traffic_admin_test: %d checks passed", passed))
