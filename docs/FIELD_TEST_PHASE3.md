@@ -495,7 +495,7 @@ Known gaps: police cannot ping a tracker or be sent after a car you stole with o
 |---|---|
 | No "Black Market" in the App Store | RLS did not accept the manifest, or did not read it from our mod. The game log has `Ignoring phone app manifest ...` with the reason. Send it. |
 | The app opens but is blank / "Could not load .../PhoneBlackMarket.vue" | The UI could not load our view file (a second UI mod folder may need an entry file). Send the log line. |
-| "No connection" | The view could not call `lua.rlsmp_market.uiGet()`. The client extension is not loaded or not named that. Send the log. |
+| "No connection" (first seen in game with build 0.4.28/0.4.29: the app opened, so the manifest and view load fine) | The view could not call the market extension. Since 0.4.30 the card shows the error text underneath: send a screenshot, plus the game log lines with `RLSMP-MARKET` (that line appears when the call DID reach Lua; no line = it never got there) and `Black Market could not reach the game`. |
 | "Not available" | The career is not active on the server yet (the market extension is switched off until it is). |
 | "Connecting..." forever | The server never answered `rlsmpMarketGet`: market disabled on the server, or you are not loaded. |
 | A tap does nothing | At most one action per second is accepted. Tap again. |
