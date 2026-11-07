@@ -3,6 +3,10 @@
 Plain list of what changed in each build. The build number shows in the game log (`client loaded, build X`) and the server log.
 "Untested" means it passed the automatic tests but nobody has played it yet.
 
+## 0.4.26
+- Black market (chat commands, a phone app comes later): `/market` help, `/market list`, `/market buy <item>`, `/market orders`, `/market pickup`, `/market invite <player>`, `/market accept`. Access is by invite plus reputation; the server owner makes the first member with the console command `rlsmp market grant <player>`. Orders are paid at once and delivered 1 to 2 minutes later to a drop spot (4 spots from RLS parking sites, one active at a time, changing every 30 minutes); `/market pickup` works when you stand within 20 m. Tools last forever, papers are used up. Prices and reputation tiers are in `config.json` under `market`. A bust costs reputation. The fence (buying stolen cars) opens with the next theft step. (untested)
+- Car theft core, OFF by default (`theft.enabled` in `config.json`): about 15% of parked cars are stealable (the server picks them, same for everyone, changing every hour). Walk up, `/steal`; the method depends on the car's year and value (old: window punch and screwdriver; immobilizer era: key programmer and blank key; keyless: relay box, signal cloner or connector injector; luxury: needs more tools and has a tracker). A timed action with noise and a failure chance; on success the parked car is replaced by a real driveable car and you can get in. Witnesses decide when it is reported; a reported theft flags the plate for the cops. You cannot yet strip, resell or sell stolen cars (next step). (untested)
+
 ## 0.4.25
 - Being arrested now flags your plate too (same 2 hours as after an escape, reason "arrested"). An arrest does not make cops read you more often, only an escape does. (untested)
 

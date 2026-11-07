@@ -25,6 +25,8 @@ local function onConsoleInput(line)
     local ok, result = sessions.resetCareer(arg)
     if ok then return "RLS-Career-MP: career reset. Old save archived to " .. tostring(result) end
     return "RLS-Career-MP: could not reset: " .. tostring(result)
+  elseif cmd == "market" then
+    return require("rlsmp.server.market").console(arg)
   elseif cmd == "status" then
     local lines = {"RLS-Career-MP " .. RLSMP.version}
     for pid, s in pairs(sessions.all()) do
@@ -33,7 +35,7 @@ local function onConsoleInput(line)
     end
     return table.concat(lines, "\n")
   end
-  return "RLS-Career-MP commands: rlsmp status | rlsmp save | rlsmp reset <player or account id>"
+  return "RLS-Career-MP commands: rlsmp status | rlsmp save | rlsmp reset <player or account id> | rlsmp market grant|revoke <player>"
 end
 
 -- RLS only has its garages, spawn point and jobs on its own map; warn loudly when the server is set to something else.

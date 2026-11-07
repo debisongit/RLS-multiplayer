@@ -216,6 +216,46 @@ M.defaults = {
     maxValueGapPercent = 0,
   },
 
+  -- Car theft (/steal next to a parked car). OFF until the owner has tried it in the game.
+  -- Each game marks about perMille/1000 of its parked cars stealable; the pick changes every periodSeconds (same for everyone).
+  -- A car's tier comes from its year and value (tiers); each method works on one tier, needs the listed items (see server
+  -- items.lua; durable tools stay, the rest is used up on success), takes `seconds`, makes `noise` (0-1, raises the witness
+  -- chance) and fails with `failChance` (nothing is used up then). Set a method's enabled = false to turn it off.
+  -- Reported stolen: seenReportMin-Max s after the theft if a witness saw it, unseenReportSeconds if not, trackerReportSeconds
+  -- for cars with a GPS tracker (luxury) unless the thief owns a tracker blocker. Reports flag the plate for the police.
+  theft = {
+    enabled = false,
+    perMille = 150,
+    periodSeconds = 3600,
+    radius = 3,
+    retrySeconds = 10,
+    tiers = {immobilizerYear = 1995, keylessYear = 2010, newestYear = 2021, luxuryValue = 120000, unknownYear = 2000},
+    methods = {
+      window_screwdriver = {tier = "old", order = 1, label = "Smash the window, screwdriver in the ignition",
+        items = {"window_punch", "screwdriver"}, seconds = 8, noise = 0.9, failChance = 0.05},
+      key_programmer = {tier = "immobilizer", order = 1, label = "Program a blank key at the diagnostic port",
+        items = {"key_programmer", "blank_key"}, seconds = 25, noise = 0.2, failChance = 0.15},
+      signal_cloner = {tier = "keyless", order = 1, label = "Clone the key fob signal",
+        items = {"signal_cloner"}, seconds = 15, noise = 0.1, failChance = 0.2},
+      relay_box = {tier = "keyless", order = 2, label = "Relay the owner's key signal",
+        items = {"relay_box"}, seconds = 8, noise = 0.1, failChance = 0.45},
+      injection = {tier = "keyless", order = 3, label = "Inject through a headlight connector, program a blank key",
+        items = {"can_injector", "blank_key"}, seconds = 30, noise = 0.3, failChance = 0.1},
+      luxury_injection = {tier = "luxury", order = 1, label = "Two steps: connector injection, then a programmed key (alarm, GPS tracker)",
+        items = {"can_injector", "key_programmer", "blank_key"}, seconds = 45, noise = 0.6, failChance = 0.25, tracker = true},
+    },
+    baseWitnessChance = 0.15,
+    perWitness = 0.12,
+    witnessCap = 5,
+    noiseWitness = 0.3,
+    maxWitnessChance = 0.95,
+    seenReportMin = 30,
+    seenReportMax = 120,
+    unseenReportSeconds = 600,
+    trackerReportSeconds = 20,
+    keepHours = 48,
+  },
+
   vehicles = {
     enabled = true,
     -- A player on foot may get into another player's car and ride along as a passenger (they cannot drive it).
@@ -254,6 +294,55 @@ M.defaults = {
   -- OFF until tested in-game. Only listings that exist when a player joins are shared; RLS still adds new ones per PC.
   shop = {
     shared = false,
+  },
+
+  -- Black market (server market.lua): invite + reputation, order with /market buy, collect at a drop spot.
+  -- Nobody is in until the server owner types `rlsmp market grant <player>` in the server console.
+  market = {
+    enabled = true,
+    founderRep = 10,          -- rep of a member made with the console command
+    startRep = 0,             -- rep of an invited member
+    maxRep = 100,
+    maxRepChange = 25,        -- the most one addRep/lossRep call may change
+    baseInvites = 2,          -- invites per member, plus one per `repPerInvite` rep, up to maxInvites
+    repPerInvite = 10,
+    maxInvites = 8,
+    inviteSeconds = 120,
+    bustRep = 10,             -- rep lost when caught; a bust you cannot pay in rep throws you out
+    bustTakesPapers = true,   -- a bust takes your used-up items (plates, VIN plates, part numbers, blank keys)
+    bustTakesTools = false,   -- and, if true, your tools too
+    minDelaySeconds = 60,     -- an order is at the drop spot this long after buying (random in between)
+    maxDelaySeconds = 120,
+    maxOpenOrders = 3,
+    pickupRadius = 20,        -- meters (horizontal) from the spot; the client hints at 15
+    positionMaxAge = 20,      -- seconds; an older position report does not count for a pickup
+    rotateMinutes = 30,       -- the active drop spot changes this often (same for everyone, from the server clock)
+    -- {name, x, y, z}. Defaults are parking spots from RLS's own rls_west_coast sites files, never visited in game.
+    -- Use /where in game to read a spot's position and put your own list in config.json.
+    dropSpots = {
+      {name = "Joe's Junkyard", x = 154.5, y = 763.3, z = 102.1},
+      {name = "Dockyards parking", x = -13.5, y = 579.7, z = 74.7},
+      {name = "Belasco Auto back lot", x = -698.6, y = 808.7, z = 74.9},
+      {name = "Jefferson parking", x = -393.4, y = 178.1, z = 100.7},
+    },
+    -- The fence pays this share of a stolen car's or part's value (legit sales pay more).
+    fenceCarRate = 0.35,
+    fencePartRate = 0.3,
+    -- item -> {price, minRep}; item names come from items.lua CATALOG. Set off = true to stop selling one.
+    tiers = {
+      screwdriver     = {price = 400, minRep = 0},
+      window_punch    = {price = 600, minRep = 0},
+      fake_plate      = {price = 1500, minRep = 0},
+      blank_key       = {price = 800, minRep = 10},
+      key_programmer  = {price = 12000, minRep = 10},
+      vin_plate       = {price = 4000, minRep = 10},
+      part_number     = {price = 3000, minRep = 10},
+      tracker_blocker = {price = 15000, minRep = 25},
+      signal_cloner   = {price = 25000, minRep = 25},
+      relay_box       = {price = 30000, minRep = 25},
+      jammer          = {price = 40000, minRep = 50},
+      can_injector    = {price = 45000, minRep = 50},
+    },
   },
 
   security = {
