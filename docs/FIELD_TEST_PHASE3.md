@@ -219,13 +219,16 @@ Log tag for both is `RLSMP-GUARD` (already included in the capture commands abov
    RLSMP-GUARD|ALLOWED id=123 jbeam=... beammp=own: taxi hailed for you (waitingForPickup)
    RLSMP-GUARD|switch 45(unicycle) -> 123(...): ok (hired cab), own walkers now: 0
    ```
+   `beammp=` may say `own` or `unregistered`, depending on whether BeamMP has registered the cab yet. Either is fine.
    After getting out you should be on foot next to the taxi.
 2. **Another taxi.** Try to get into a taxi you did not hail. You should get "You can't drive that vehicle" and a line
    `BLOCKED ... AI traffic (taxi state: ...)`.
 3. **Riding along (two players, passengers on).** Player A drives. Player B walks up on foot and gets into A's car.
    Expected on B: `ALLOWED ... passenger seat in another player's car`, then a passenger camera, and B cannot steer.
    Then B presses F (get out). B should stand beside the car.
-4. **Passengers off (default).** B tries to get into A's car: refused with `BLOCKED ... (passengers off)`.
+4. **Another player's taxi or parked car (passengers on).** B tries to get into one of A's AI cars, for example a taxi
+   driving past A. It must be refused: `BLOCKED ... another player's traffic or parked car`.
+5. **Passengers off (default).** B tries to get into A's car: refused with `BLOCKED ... (passengers off)`.
 
 ### Named failure modes
 | What you see | What it means |
@@ -241,4 +244,6 @@ Log tag for both is `RLSMP-GUARD` (already included in the capture commands abov
 - While you ride, RLS thinks the friend's car is your car: police pursuits, traffic around you and fuel or damage screens
   may act oddly. The server's claims ignore passenger reports, so crashes are still judged by the drivers.
 - A walking player is never allowed into another player's walking character, and nobody can drive someone else's car.
+- Another player's AI traffic is recognised by the name-tag flag that `trafficLabels` sets, which can take 2 to 4 seconds for a car
+  that has only just appeared. In that short window a new traffic car of A's could be entered by B by mistake. Tell me if it happens.
 

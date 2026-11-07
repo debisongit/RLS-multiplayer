@@ -16,6 +16,7 @@ MPVehicleGE = {getVehicles = function()
   for id in pairs(own) do t["0-" .. id] = {gameVehicleID = id, isLocal = true} end
   t["1-9"] = {gameVehicleID = 9, isLocal = false}
   t["1-10"] = {gameVehicleID = 10, isLocal = false}   -- another player's walking character
+  t["1-11"] = {gameVehicleID = 11, isLocal = false, hideNametag = true}   -- another player's AI traffic car (e.g. their taxi)
   return t
 end}
 local traffic = {[2] = {isAi = true}, [3] = {isAi = false}, [60] = {isAi = true}, [61] = {isAi = true}, [62] = {isAi = true}}  -- 3 = player-driven traffic-system car (RLS job)
@@ -132,6 +133,8 @@ check(g.getAllowPassengers() == true and saw("RLSMP-GUARD|config received allowP
 check(g.isBlocked(9) == false, "on foot: another player's car is a passenger seat")
 check(g.isBlocked(9, 50) == false, "...also when the vehicle we come from is given")
 check(g.isBlocked(10) == true, "another player's walking character is never enterable")
+check(g.isBlocked(11, 50) == true and g.isBlocked(11) == true, "another player's traffic or parked car is never a passenger seat, even on foot")
+check(saw("RLSMP-GUARD|BLOCKED id=11 jbeam=nil beammp=remote: another player's traffic or parked car"), "traffic block is logged")
 check(g.isBlocked(9, 1) == true, "from inside a car you cannot hop into someone else's")
 check(g.isBlocked(2) == true and g.isBlocked(5) == true, "AI traffic and parked cars stay blocked")
 check(saw("RLSMP-GUARD|ALLOWED id=9 jbeam=etk800 beammp=remote: passenger seat in another player's car"), "passenger decision is logged")

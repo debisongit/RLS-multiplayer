@@ -8,7 +8,7 @@
 -- If a switch still slips through (e.g. the vehicle menu), we put the player back in their old car, or on foot beside it.
 -- Two exceptions (see isBlocked): the taxi RLS hailed for YOU (RLS boards you through a normal vehicle switch), and, only when
 -- the server allows it (`vehicles.allowPassengers`), another player's car for a player who is ON FOOT (BeamMP itself supports
--- riding along: it gives the passenger camera). Every decision is logged with the tag RLSMP-GUARD.
+-- riding along: it gives the passenger camera). Their AI traffic and parked cars (hideNametag, see trafficLabels) stay refused. Every decision is logged with the tag RLSMP-GUARD.
 -- A future "steal a car" feature would add its exception in isBlocked().
 
 local M = {}
@@ -71,6 +71,9 @@ function M.isBlocked(id, fromId)
   -- Only vehicles BeamMP knows as another player's. A car RLS just spawned is not registered yet and stays allowed.
   if mp.isRemote(id) then
     if jbeamOf(id) == "unicycle" then note(id, true, "another player's walking character") return true, "remote walker" end
+    -- Another player's AI traffic and parked cars are synced to us too; trafficLabels marks them with hideNametag. Never a seat.
+    local _, entry = mp.serverIdOf(id)
+    if entry and entry.hideNametag == true then note(id, true, "another player's traffic or parked car") return true, "remote traffic" end
     if allowPassengers and onFoot(fromId) then note(id, false, "passenger seat in another player's car") return false, "passenger" end
     note(id, true, allowPassengers and "another player's car (you are not on foot)" or "another player's car (passengers off)")
     return true, "remote car"
