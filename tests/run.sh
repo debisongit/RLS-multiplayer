@@ -27,6 +27,7 @@ lua5.3 tests/shop_test.lua "$(mktemp -d -p "$tmp")"
 lua5.3 tests/traffic_test.lua
 lua5.3 tests/traffic_police_test.lua
 lua5.3 tests/traffic_variety_server_test.lua
+lua5.3 tests/weather_test.lua
 lua5.3 tests/smart_traffic_test.lua
 lua5.3 tests/vehicles_test.lua
 luajit tests/client_test.lua
@@ -50,6 +51,7 @@ luajit tests/traffic_variety_lib_test.lua
 luajit tests/traffic_variety_client_test.lua
 luajit tests/traffic_swap_lib_test.lua
 luajit tests/traffic_swap_client_test.lua
+luajit tests/weather_client_test.lua
 luajit tests/police_client_test.lua
 luajit tests/positions_client_test.lua
 luajit tests/personalities_client_test.lua
