@@ -24,6 +24,7 @@ lua5.3 tests/clock_test.lua "$(mktemp -d -p "$tmp")"
 lua5.3 tests/resend_test.lua "$(mktemp -d -p "$tmp")"
 lua5.3 tests/positions_test.lua "$(mktemp -d -p "$tmp")"
 lua5.3 tests/shop_test.lua "$(mktemp -d -p "$tmp")"
+lua5.3 tests/items_test.lua "$(mktemp -d -p "$tmp")"
 lua5.3 tests/traffic_test.lua
 lua5.3 tests/traffic_police_test.lua
 lua5.3 tests/traffic_variety_server_test.lua

@@ -25,5 +25,6 @@ return {
   "rlsmp.server.events",
   "rlsmp.server.duel",
   "rlsmp.server.clock",
+  "rlsmp.server.items",
   "rlsmp.server.shop",
 }
