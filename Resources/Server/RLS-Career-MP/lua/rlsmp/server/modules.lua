@@ -28,5 +28,6 @@ return {
   "rlsmp.server.duel",
   "rlsmp.server.clock",
   "rlsmp.server.items",
+  "rlsmp.server.market",
   "rlsmp.server.shop",
 }

@@ -226,6 +226,27 @@ Chat: `/duel <player>`, `/duel accept`, `/duel cancel`, `/duel claim` (re-send a
   `duel.maxValueGapPercent` (0 = off) refuses a duel when the cheaper car (server copy's `configBaseValue`, RLS's base price of the config, not the depreciated value) is more than that many percent cheaper.
 - See the safety rules at the top of `server/duel.lua`.
 
+## Black market (server `market.lua`, client `market.lua`)
+
+Custom (RLS has none). Chat commands, hidden from other players; the server owns membership, reputation, orders and money.
+
+`/market` (help, your rep, invites left) · `list` (items your rep allows, with prices) · `buy <item> [count]` · `orders` · `pickup` · `invite <player>` · `accept` · `fence` (stub: explains the fence, which opens with car theft)
+Console: `rlsmp market grant <player>` (online player becomes a member with `market.founderRep`) · `rlsmp market revoke <player>`.
+
+- Profile: `market = {member, rep, invites (used), invitedBy, joinedAt, nextOrder, orders = [{id, item, n, price, at, readyAt, spot = {name, x, y, z}}]}`. Items go to `profile.items` (`items.lua`).
+- Invites: `baseInvites` (2) + 1 per `repPerInvite` (10) rep, at most `maxInvites`. An invite is reserved and saved when sent; it comes back if it expires (`inviteSeconds`) or the invitee leaves while the inviter is online.
+- Buying: item must be in `items.CATALOG` and in `market.tiers` (`{price, minRep, off?}`), rep >= `minRep`, wallet seeded and money >= price (no debt). Tools (durable items) once only, also not while one is on order. At most `maxOpenOrders` open orders.
+  The debit and the order are written in the same profile save, then `rlsmpWalletSet {money, why = "market"}` goes out (server-side spending; the client applies it as a sync and does not report it back).
+- Delivery: ready `minDelaySeconds`..`maxDelaySeconds` after buying, at the spot that is active at that moment (`spotAt(readyAt)`; the spot rotates every `rotateMinutes`, picked from the clock period with a fixed hash, never the same spot twice in a row). The spot is copied into the order.
+- Pickup: the order must be ready, the player not chased, the latest `rlsmpPos` report (`positions.lua`) at most `positionMaxAge` s old and within `pickupRadius` m (horizontal) of the spot. The order is removed and the items given in the same save, so a second pickup finds nothing.
+- Reputation (for other modules): `market.addRep(pid, n, why)` / `market.lossRep(pid, n, why)`, whole numbers, at most `maxRepChange` per call, kept between 0 and `maxRep`. `market.bust(pid, opts)` costs `bustRep` (a member with less is thrown out, open orders stay theirs) and takes used-up items (and tools if `bustTakesTools` or `opts.takeTools`).
+- Fence: `market.fenceQuote(value | {value, kind = "car"|"part"})` = value x `fenceCarRate` / `fencePartRate`, whole dollars.
+
+| Direction | Event | Body |
+|---|---|---|
+| S→C | `rlsmpMarketDrop` | `{id, item, label, n, spot, x, y, z, readyIn}` a paid package; sent on buy and again once after each join for every open order. The client toasts, draws a marker at a ready spot within 300 m and, inside 15 m, says "type /market pickup" and asks `rlsmp_positions.reportNow()` |
+| S→C | `rlsmpMarketClear` | `{id}` package collected |
+
 ## Flow control
 
 - `rlsmpChunkProgress {id, got}` (client to server): sent every 8 chunks received, plus a heartbeat about once per second (from `rlsmp_core`)
@@ -299,3 +320,4 @@ Weights are `{name = number >= 0}` (at most 64 entries, names up to 64 character
 - `rlsmpBiz*` – Phase 2 business / syndicate (Claude A)
 - `rlsmpTraffic*`, `rlsmpPolice*` – Phase 3 (Claude B)
 - `rlsmpWorld*` – Phase 4
+- `rlsmpMarket*` – black market

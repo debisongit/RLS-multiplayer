@@ -256,6 +256,55 @@ M.defaults = {
     shared = false,
   },
 
+  -- Black market (server market.lua): invite + reputation, order with /market buy, collect at a drop spot.
+  -- Nobody is in until the server owner types `rlsmp market grant <player>` in the server console.
+  market = {
+    enabled = true,
+    founderRep = 10,          -- rep of a member made with the console command
+    startRep = 0,             -- rep of an invited member
+    maxRep = 100,
+    maxRepChange = 25,        -- the most one addRep/lossRep call may change
+    baseInvites = 2,          -- invites per member, plus one per `repPerInvite` rep, up to maxInvites
+    repPerInvite = 10,
+    maxInvites = 8,
+    inviteSeconds = 120,
+    bustRep = 10,             -- rep lost when caught; a bust you cannot pay in rep throws you out
+    bustTakesPapers = true,   -- a bust takes your used-up items (plates, VIN plates, part numbers, blank keys)
+    bustTakesTools = false,   -- and, if true, your tools too
+    minDelaySeconds = 60,     -- an order is at the drop spot this long after buying (random in between)
+    maxDelaySeconds = 120,
+    maxOpenOrders = 3,
+    pickupRadius = 20,        -- meters (horizontal) from the spot; the client hints at 15
+    positionMaxAge = 20,      -- seconds; an older position report does not count for a pickup
+    rotateMinutes = 30,       -- the active drop spot changes this often (same for everyone, from the server clock)
+    -- {name, x, y, z}. Defaults are parking spots from RLS's own rls_west_coast sites files, never visited in game.
+    -- Use /where in game to read a spot's position and put your own list in config.json.
+    dropSpots = {
+      {name = "Joe's Junkyard", x = 154.5, y = 763.3, z = 102.1},
+      {name = "Dockyards parking", x = -13.5, y = 579.7, z = 74.7},
+      {name = "Belasco Auto back lot", x = -698.6, y = 808.7, z = 74.9},
+      {name = "Jefferson parking", x = -393.4, y = 178.1, z = 100.7},
+    },
+    -- The fence pays this share of a stolen car's or part's value (legit sales pay more).
+    fenceCarRate = 0.35,
+    fencePartRate = 0.3,
+    -- item -> {price, minRep}; item names come from items.lua CATALOG. Set off = true to stop selling one.
+    tiers = {
+      screwdriver     = {price = 400, minRep = 0},
+      window_punch    = {price = 600, minRep = 0},
+      fake_plate      = {price = 1500, minRep = 0},
+      blank_key       = {price = 800, minRep = 10},
+      key_programmer  = {price = 12000, minRep = 10},
+      vin_plate       = {price = 4000, minRep = 10},
+      part_number     = {price = 3000, minRep = 10},
+      tracker_blocker = {price = 15000, minRep = 25},
+      signal_cloner   = {price = 25000, minRep = 25},
+      relay_box       = {price = 30000, minRep = 25},
+      jammer          = {price = 40000, minRep = 50},
+      can_injector    = {price = 45000, minRep = 50},
+    },
+  },
+
   security = {
     -- RLS "cheats mode" (and Freeroam+) gives free money and vehicles. Never accepted from a client save unless you turn this on.
     allowCheats = false,

@@ -22,6 +22,12 @@ function M.enable(on)
   timer, sinceSent, last = 0, math.huge, nil
 end
 
+-- Send a report on the next frame even when standing still (rlsmp_market calls this at a drop spot so the server's
+-- copy of our position is fresh for /market pickup).
+function M.reportNow()
+  if enabled then timer, last = EVERY, nil end
+end
+
 local function chased()
   return rlsmp_police ~= nil and rlsmp_police.isPursuit ~= nil and rlsmp_police.isPursuit() == true
 end

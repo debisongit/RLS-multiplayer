@@ -21,6 +21,7 @@ M.CATALOG = {
   signal_cloner   = {label = "Signal cloner", durable = true},
   can_injector    = {label = "Connector injector", durable = true},
   tracker_blocker = {label = "Tracker blocker", durable = true},
+  jammer          = {label = "Signal jammer", durable = true},
   fake_plate      = {label = "Fake plate", durable = false},
   vin_plate       = {label = "VIN plate", durable = false},
   part_number     = {label = "Part number kit", durable = false},
