@@ -25,10 +25,17 @@ local pending                 -- a live swap waiting for its new car: {oldId, be
 local liveOff = false         -- switched off after too many failures
 
 local function careerActive() return overhaul_career_career ~= nil and overhaul_career_career.isActive() end
-local function variety() return package.loaded["rlsmp/trafficVariety"] end
-local function personality() return package.loaded["rlsmp/lib/personality"] end
-local function personalities() return package.loaded["rlsmp/personalities"] end
-local function bubble() return package.loaded["rlsmp/bubble"] end
+-- Extensions are looked up by their global name first (how core.lua finds them), then by module path.
+local function ext(name) return rawget(_G, "rlsmp_" .. name) or package.loaded["rlsmp/" .. name] end
+local function variety() return ext("trafficVariety") end
+local function personality()
+  local P = package.loaded["rlsmp/lib/personality"]
+  if P then return P end
+  local ok, mod = pcall(require, "rlsmp/lib/personality")
+  return ok and mod or nil
+end
+local function personalities() return ext("personalities") end
+local function bubble() return ext("bubble") end
 
 local function settings()
   local v = variety()
@@ -175,6 +182,9 @@ function M.check()
 end
 
 function M.onUpdate(dtReal)
+  if mp.isMPSession() and careerActive() and not variety() then
+    p3.logOnChange("swap-novariety", true, "W", "rlsmp_trafficVariety was not found: live swapping cannot work")
+  end
   local cfg = settings()
   if not cfg then return end
   dtReal = dtReal or 0

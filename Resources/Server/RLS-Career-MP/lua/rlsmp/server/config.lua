@@ -150,6 +150,18 @@ M.defaults = {
     syncSeconds = 5,
   },
 
+  -- Shared weather: the server picks one of RLS's six conditions per period and every game shows it (like the shared time of day).
+  weather = {
+    enabled = true,
+    -- Real minutes per weather period (a game day is time.dayMinutes real minutes).
+    periodMinutes = 15,
+    syncSeconds = 10,
+    -- How common each condition is (weights). A period never jumps more than two steps from the one before.
+    mix = {clear = 35, partlyCloudy = 25, overcast = 20, drizzle = 8, rain = 9, storm = 3},
+    -- Pin one condition for everybody (clear, partlyCloudy, overcast, drizzle, rain, storm), "" = use the mix. Handy for testing.
+    force = "",
+  },
+
   -- Pink-slip duels (/duel <player>). OFF until you list at least one course and set enabled = true.
   -- A course is {name = "airport", start = {x, y, z}, finish = {x, y, z}} in map coordinates; both players must
   -- be near the start. The loser's car moves to the winner. Untested in-game: try with spare cars first.

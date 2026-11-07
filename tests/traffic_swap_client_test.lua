@@ -231,4 +231,18 @@ run(10)
 check(not saw("would happen"), "single player: nothing")
 MPCoreNetwork = {isMPSession = function() return true end}
 
+-- 12. extensions are found by their global name too (how core.lua finds them), and a missing one is said once --------------------------------------------------
+reset() addObject(1, "unicycle") addCar(10, "pickup") setConfig()
+local varietyStub, bubbleStub, personalitiesStub = package.loaded["rlsmp/trafficVariety"], package.loaded["rlsmp/bubble"], package.loaded["rlsmp/personalities"]
+package.loaded["rlsmp/trafficVariety"], package.loaded["rlsmp/bubble"], package.loaded["rlsmp/personalities"] = nil, nil, nil
+_G.rlsmp_trafficVariety, _G.rlsmp_bubble, _G.rlsmp_personalities = varietyStub, bubbleStub, personalitiesStub
+run(5)
+check(saw("swap would happen"), "found through the global names (rlsmp_trafficVariety, rlsmp_bubble, rlsmp_personalities)")
+_G.rlsmp_trafficVariety = nil
+reset()
+run(5)
+check(saw("rlsmp_trafficVariety was not found: live swapping cannot work"), "a missing rlsmp_trafficVariety is said, not silently ignored")
+_G.rlsmp_bubble, _G.rlsmp_personalities = nil, nil
+package.loaded["rlsmp/trafficVariety"], package.loaded["rlsmp/bubble"], package.loaded["rlsmp/personalities"] = varietyStub, bubbleStub, personalitiesStub
+
 print(string.format("traffic_swap_client_test: %d checks passed", passed))

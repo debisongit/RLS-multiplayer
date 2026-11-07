@@ -8,7 +8,7 @@ Plan for about 30 minutes, one player (a second player is optional, see the end)
 
 | Component | Version |
 |---|---|
-| RLS-Career-MP (this repo) | default branch `claude/amazing-sagan-kh6ecn`, code commit `b89caf2`, build `0.4.20` (everything on the default branch; later commits only change documents) |
+| RLS-Career-MP (this repo) | default branch `claude/amazing-sagan-kh6ecn`, code commit `5cc551f`, build `0.4.21` (everything on the default branch; later commits only change documents) |
 | RLS Career Overhaul source read | v2.8.0, commit `e701d9e2218ca12ff70ba4a09c0c91514e96e380` (29 Oct 2026) |
 | BeamNG.drive | **not pinned, write yours down** (docs target 0.38 / 0.39) |
 | BeamMP (server and client) | **not pinned, write yours down** |
@@ -25,7 +25,7 @@ Vanilla BeamNG's traffic code was never read; only RLS's code was.
    ```bash
    tools/install_to_server.sh /path/to/BeamMP-Server
    ```
-   It prints `Installed RLS-Career-MP build 0.4.20`. It is a bash script: on Windows run it from Git Bash or WSL.
+   It prints `Installed RLS-Career-MP build 0.4.21`. It is a bash script: on Windows run it from Git Bash or WSL.
 2. Put the RLS Career Overhaul zip in the server's `Resources/Client/` as well.
 3. On your own PC, delete any local `rls_career_overhaul_v2.8.0_hotfix.zip` (or any other copy of RLS) from your BeamNG
    mods folder, so RLS is not unloaded and rebuilt on every join.
@@ -39,8 +39,8 @@ Vanilla BeamNG's traffic code was never read; only RLS's code was.
    would never visibly act. Any `totalBudget` above 0 fixes the budget instead. Under `"police"`,
    leave `"antiTeleport": true` and `"blockRoadblocks": true`. Start the server again.
 7. Join with BeamNG. In BeamNG's own settings, set the **traffic amount to 15 or more** (the max is fine).
-8. **Check the build.** The server log must say `joined with client build 0.4.20 (server build 0.4.20)` and the game log must
-   say `client loaded, build 0.4.20`. If the two builds differ, you are running an old client zip (this has already wasted a test round): re-run the install
+8. **Check the build.** The server log must say `joined with client build 0.4.21 (server build 0.4.21)` and the game log must
+   say `client loaded, build 0.4.21`. If the two builds differ, you are running an old client zip (this has already wasted a test round): re-run the install
    command, restart the server and rejoin.
 
 Client-side settings are not stored in the server file, so nothing else needs changing. Do not rename the zip.
@@ -200,7 +200,7 @@ When the second player leaves, the first should get `active=6` again. Send both 
 4. Did traffic look thinner than usual with the settings above?
 5. Anything that looked broken outside a chase (police, traffic, money, saving)?
 
-## Taxis and riding along (build 0.4.20)
+## Taxis and riding along (build 0.4.21)
 
 Two things changed in the vehicle guard (it used to refuse every AI car and every other player's car):
 
@@ -247,7 +247,7 @@ Log tag for both is `RLSMP-GUARD` (already included in the capture commands abov
 - Another player's AI traffic is recognised by the name-tag flag that `trafficLabels` sets, which can take 2 to 4 seconds for a car
   that has only just appeared. In that short window a new traffic car of A's could be entered by B by mistake. Tell me if it happens.
 
-## Garage part shop (build 0.4.20)
+## Garage part shop (build 0.4.21)
 
 **The bug:** at the garage computer you shop for parts while standing on foot. RLS rebuilds the car with `replaceVehicle(model, options, theCar)`.
 BeamMP ignores `theCar` and replaces the car the PLAYER is in, which is the walking character. A new car appeared and took over,
@@ -284,13 +284,13 @@ RLSMP-REPLACE|replace etk800 target=123(etk800) but player is in 45(unicycle) (b
 - Not played in the game. The missing power steering could be a separate problem; this build only fixes which car is replaced.
 - Fixing it relies on the game's own `replaceVehicle` being captured before BeamMP swaps it (the warning line above says if it was not).
 
-## Traffic variety, step 1 (build 0.4.20)
+## Traffic variety, step 1 (build 0.4.21)
 
 More varied traffic and parked cars (see `docs/DESIGN_TRAFFIC_VARIETY.md`). **Live swapping while you drive is not in this build**:
 a car keeps its model once it exists, so road class and day or night only change cars built later (traffic start, refills, parked cars).
 
 ### Test steps
-1. Install `0.4.20` (check both logs say `0.4.20`), join, start your career and drive for a few minutes. Does the traffic look more varied (more different models,
+1. Install `0.4.21` (check both logs say `0.4.21`), join, start your career and drive for a few minutes. Does the traffic look more varied (more different models,
    no model repeated many times in a row)? Do the same on a second join.
 2. Look for these lines in the game log (tag `RLSMP-P3`):
    ```
@@ -323,7 +323,7 @@ a car keeps its model once it exists, so road class and day or night only change
 - Not played. Everything about the car lists comes from reading RLS's code; the game's own spawner code is not visible to me.
 - Joins have stalled before during the save download; a big car mod makes joins heavier for everybody.
 
-## Live swapping (build 0.4.20)
+## Live swapping (build 0.4.21)
 
 Traffic cars that nobody can see are swapped for a model that suits the road class and the time of day (see `docs/DESIGN_TRAFFIC_VARIETY.md`, step 2).
 Both switches are **off by default** and nothing is swapped with default weights, so first set some weights (see the traffic variety section).
@@ -367,4 +367,45 @@ Both switches are **off by default** and nothing is swapped with default weights
 ### Known gaps
 - Never run in the game. Live swapping is the riskiest part of the traffic variety feature; keep it to a test session first.
 - The new car is created at the old car's place by the game's own replace; whether RLS keeps its traffic role, pooling and saved state for it is unverified.
+
+## Shared weather (build 0.4.21)
+
+Before, every game ran its own RLS weather, so players saw different weather. Now the server picks one of RLS's six conditions (clear, partlyCloudy, overcast, drizzle, rain, storm) from its clock and every game
+shows it through RLS's own weather system, so rain, wet roads and tire grip match what you see. Time of day was already shared.
+
+### Test steps (two players)
+1. Install `0.4.21` (both logs say `0.4.21`). For a first quick test pin the weather: in the server `config.json` set `"weather": {"force": "rain"}` and restart. Both players join and load their career.
+   Both should see rain within about 10 seconds. Then set `"force": "clear"`, restart: both see clear sky and the **time of day is unchanged** (RLS's own "clear" jumps its clock to noon; we put it back).
+2. Remove `force` (set it to `""`) and play 30 minutes together. Look out the window at the same moment: same clouds, same rain? Try each condition if the server cycles through them
+   (`"periodMinutes": 2` makes it change fast; the server log has `RLSMP-P3 weather period N: <condition>` on every change).
+3. In the game log (tag `RLSMP-P3`):
+   ```
+   RLSMP-P3|rlsmp_weather loaded
+   RLSMP-P3|weather from the server: rain (period 123, 600 s left)
+   RLSMP-P3|weather: RLS's own forecast notifications switched off (they describe the local forecast, not the server's)
+   RLSMP-P3|weather: forced rain (RLS showed clear, now shows rain)
+   ```
+   Send me those lines. **Tell me if the sky or the rain flickers, or if the game stutters when the weather changes.**
+
+### Named failure modes
+| What you see | What it means |
+|---|---|
+| Players still see different weather | Send both game logs. Look for `weather: forced` and `weather: forceCondition(...) failed`. |
+| `W RLSMP-P3|another weather mod has priority` | RLS's "external override" (another weather mod) is on: shared weather does nothing. |
+| `W RLSMP-P3|RLS's weather module is not available` | RLS's weather is not loaded; nothing to sync. |
+| `weather: forceCondition(x) failed (refused)` | RLS refused (not ready, or an override). It retries every 30 s. |
+| Many `weather: forced` lines in a row for the same condition | RLS keeps changing it back (its own forecast). One line per RLS change is normal; a stream is not. Send the log. |
+| Phone pop-ups like "Rain approaching" that do not match the weather | They come from RLS's own local forecast. We switch them off (the log line above); if you still get them, tell me. |
+| RLS's weather app (phone) shows a different forecast | Expected: the app shows the player's local forecast, not the server's. |
+| The time of day jumps to noon when it turns clear | The clock restore did not work. Send the log. |
+| Rain but the roads are dry, or grip feels wrong | RLS applies wetness itself. Tell me what condition and for how long. |
+
+### Known gaps
+- Never played. Based on reading RLS's weather code; the engine's own code is not visible to me.
+- Still local to each game: RLS's morning fog, the temperature, and the timing of thunder sounds.
+- Changes snap (RLS applies a forced condition immediately) instead of fading.
+- When a game's own forecast moves into its next segment it can show its own weather for up to about 2 seconds before it is forced back. Tell me if you notice it.
+- On by default (unlike live swapping). Kill switch: `"weather": {"enabled": false}` in the server config. RLS saves "dynamic weather on", "rainy days allowed" and "forecast notifications off" in each player's career save; switching the feature off later does not undo that.
+- RLS saves the forced condition in the player's career save (its dynamic weather setting becomes on, rainy days allowed). That is expected.
+- The mix is followed roughly: the in-between conditions are a little more common than their weights say.
 
