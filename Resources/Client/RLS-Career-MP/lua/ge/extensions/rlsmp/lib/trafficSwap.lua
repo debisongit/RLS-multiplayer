@@ -12,7 +12,16 @@ local V = require("rlsmp/lib/trafficVariety")
 
 local M = {}
 
-function M.newTracker() return {hidden = {}, stamps = {}, failures = 0} end
+M.COOLDOWN = 600   -- seconds before the same car may be looked at again (a car swapped or judged once is left alone for a while)
+
+function M.newTracker() return {hidden = {}, stamps = {}, decided = {}, failures = 0} end
+
+-- One decision per car per COOLDOWN, so watch-only logs show different cars and a swapped car is not swapped again at once.
+function M.recentlyDecided(tr, id, now)
+  local at = tr.decided[id]
+  return at ~= nil and now - at < M.COOLDOWN
+end
+function M.markDecided(tr, id, now) tr.decided[id] = now end
 
 -- Records whether a car is hidden right now; returns for how many seconds it has been hidden without a break.
 function M.seeHidden(tr, id, hidden, now)
@@ -24,6 +33,7 @@ end
 -- Forgets cars that no longer exist. `alive` = set of ids.
 function M.forget(tr, alive)
   for id in pairs(tr.hidden) do if not alive[id] then tr.hidden[id] = nil end end
+  for id in pairs(tr.decided) do if not alive[id] then tr.decided[id] = nil end end
 end
 
 -- Rate limit: swaps in the last 60 seconds against `perMinute`.

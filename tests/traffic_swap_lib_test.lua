@@ -26,6 +26,15 @@ S.seeHidden(tr, 8, true, 16)
 S.forget(tr, {[8] = true})
 check(tr.hidden[7] == nil and tr.hidden[8] == 16, "cars that are gone are forgotten")
 
+-- cooldown per car --------------------------------------------------------------------------------------------------
+tr = S.newTracker()
+check(not S.recentlyDecided(tr, 5, 100), "a new car has not been decided")
+S.markDecided(tr, 5, 100)
+check(S.recentlyDecided(tr, 5, 150) and S.recentlyDecided(tr, 5, 699), "decided cars are left alone for 10 minutes")
+check(not S.recentlyDecided(tr, 5, 700) and not S.recentlyDecided(tr, 6, 150), "...then free again; other cars are unaffected")
+S.forget(tr, {[9] = true})
+check(tr.decided[5] == nil, "cars that are gone are forgotten (no growth)")
+
 -- rate limit ----------------------------------------------------------------------------------------------------------
 tr = S.newTracker()
 local sw = {perMinute = 2}

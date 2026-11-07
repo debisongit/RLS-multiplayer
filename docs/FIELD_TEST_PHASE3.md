@@ -333,7 +333,10 @@ Both switches are **off by default** and nothing is swapped with default weights
    ```
    "trafficVariety": {"night": {"Truck": 0}, "swap": {"enabled": true}}
    ```
-   Restart, join, drive. Wait for night (or change the time). In the game log look for lines like:
+   Restart and join **by day**, drive around, then wait for night (or change the time). Cars built during the day were allowed to be trucks; when night falls, a hidden
+   truck now weighs 0 and may be swapped. (Cars built from now on already follow the weights, so a swap only shows when the situation changes after a car was built.
+   Another way, if the traffic variety `probe:` said `road class source = speedLimit`: set `"zones": {"highway": {"Car": 0}}` and drive from a city road onto a highway.)
+   In the game log look for lines like:
    ```
    RLSMP-P3|swap would happen (watch only): car 123 pickup (Truck, weight 0.00) -> sunburst/c1 (Car, weight 1.00) zone=city night=true
    ```
@@ -341,8 +344,11 @@ Both switches are **off by default** and nothing is swapped with default weights
 2. Only after step 1 looks sensible: also set `"live": true`. Expected lines:
    ```
    RLSMP-P3|swap LIVE: car 123 pickup (...) -> sunburst/c1 (...)
-   RLSMP-P3|swap done: car 123 is now car 456 (sunburst/c1)
+   RLSMP-P3|swap done (new id): car 123 is now car 456 (sunburst/c1); traffic: inserted into traffic
+   or
+   RLSMP-P3|swap done (replaced in place, same id): car 123 is now car 123 (sunburst/c1); traffic: already in traffic
    ```
+   **Send me which of the two `swap done` lines you get.** It tells me how the game's replace really works.
    Drive for 10 minutes. Does a car ever vanish or appear in front of you? Do swapped cars drive normally? Do other players see odd cars, black blobs, or lag spikes?
 3. If something looks wrong, set `"live": false` and restart the server. Live switches itself off after 3 failures.
 
@@ -351,7 +357,8 @@ Both switches are **off by default** and nothing is swapped with default weights
 |---|---|
 | No `swap would happen` lines at night | Every car weighs the same, or no car has been hidden for 5 s, or the weights you set do not match the `Type` names. Send the log. |
 | `swap failed: the game's own replaceVehicle or the car is not available` | The fix for replacing a specific car is not active. Send the log. |
-| `swap failed: no new car appeared after the replace` | The game's replace did not create the car we expected. Send the log. |
+| `swap failed: no new car appeared after the replace` | Neither a new car nor a changed model was found within 3 s. Send the log. |
+| The same car appears again and again in the watch-only lines | It should not: a car is looked at once per 10 minutes. Send the log. |
 | `live swapping switched itself off after too many failures` | Expected safety net. Send the `swap failed` lines. |
 | A swapped car stands still, has no driver, or never moves | It was not put back into traffic properly. Send the `swap done` line and the car id. |
 | A car vanishes or appears in view | It should never happen (only invisible cars). Send the time and the log. |

@@ -53,10 +53,16 @@ local function idSet()
   return set
 end
 
-local function modelOf(id, veh)
-  if type(veh.model) == "string" and veh.model ~= "" then return veh.model end
-  local obj = objectOf(id)
+local function jbeamOf(obj)
   return obj and (obj.jbeam or obj.JBeam or (obj.getJBeamFilename and obj:getJBeamFilename())) or nil
+end
+
+-- The car's CURRENT model: the object first (traffic data may keep the old name after a swap in place), then the traffic data.
+local function modelOf(id, veh)
+  local fromObject = jbeamOf(objectOf(id))
+  if fromObject then return fromObject end
+  if type(veh.model) == "string" and veh.model ~= "" then return veh.model end
+  return nil
 end
 
 local function configOf(id)
@@ -75,22 +81,36 @@ local function fail(cfg, why)
   end
 end
 
--- A live swap spawned a new car: find it and give it to RLS's traffic.
+-- Gives a car to RLS's traffic unless the traffic system already knows it.
+local function toTraffic(id)
+  local known = gameplay_traffic and gameplay_traffic.getTrafficData and gameplay_traffic.getTrafficData()[id]
+  if known then return "already in traffic" end
+  if gameplay_traffic and gameplay_traffic.insertTraffic then
+    local ok, err = pcall(gameplay_traffic.insertTraffic, id)
+    if not ok then p3.log("W", "swap: insertTraffic failed for " .. tostring(id) .. ": " .. tostring(err)) return "insertTraffic failed" end
+    return "inserted into traffic"
+  end
+  return "no insertTraffic"
+end
+
+-- A live swap was asked for. The game may have made a NEW car (a new id) or changed the car IN PLACE (same id, new model): both are a success,
+-- and the log says which one it was (that is the most useful thing to learn from the first real swap).
 local function resolvePending(cfg)
   if not pending then return end
-  local now = idSet()
   local fresh = {}
-  for id in pairs(now) do if not pending.before[id] and id ~= pending.oldId then fresh[#fresh + 1] = id end end
-  if #fresh > 0 then
-    for _, id in ipairs(fresh) do
-      if gameplay_traffic and gameplay_traffic.insertTraffic then
-        local ok, err = pcall(gameplay_traffic.insertTraffic, id)
-        if not ok then p3.log("W", "swap: insertTraffic failed for " .. tostring(id) .. ": " .. tostring(err)) end
-      end
-    end
+  for id in pairs(idSet()) do if not pending.before[id] and id ~= pending.oldId then fresh[#fresh + 1] = id end end
+  local current = objectOf(pending.oldId)
+  local inPlace = current ~= nil and jbeamOf(current) == pending.entry.model and pending.oldModel ~= pending.entry.model
+  if #fresh > 0 or inPlace then
+    local how, ids = "new id", table.concat(fresh, ",")
+    if #fresh == 0 then how, ids = "replaced in place, same id", tostring(pending.oldId) end
+    local results = {}
+    if #fresh > 0 then for _, id in ipairs(fresh) do results[#results + 1] = toTraffic(id) end
+    else results[1] = toTraffic(pending.oldId) end
     p3.count("swap done")
-    p3.log("I", string.format("swap done: car %s is now car %s (%s/%s)", tostring(pending.oldId), table.concat(fresh, ","),
-      tostring(pending.entry.model), tostring(pending.entry.config)))
+    p3.count(#fresh > 0 and "swap done (new id)" or "swap done (in place)")
+    p3.log("I", string.format("swap done (%s): car %s is now car %s (%s/%s); traffic: %s", how, tostring(pending.oldId), ids,
+      tostring(pending.entry.model), tostring(pending.entry.config), table.concat(results, ",")))
     pending = nil
   elseif clock - pending.at > 3 then
     pending = nil
@@ -104,9 +124,10 @@ local function performSwap(cfg, id, entry)
   local obj = objectOf(id)
   if not (vanilla and obj) then return fail(cfg, "the game's own replaceVehicle or the car is not available") end
   local before = idSet()
+  local oldModel = jbeamOf(obj)
   local ok, err = pcall(vanilla, entry.model, {config = entry.config, autoEnterVehicle = false}, obj)
   if not ok then return fail(cfg, err) end
-  pending = {oldId = id, before = before, at = clock, entry = entry}
+  pending = {oldId = id, before = before, at = clock, entry = entry, oldModel = oldModel}
   resolvePending(cfg)
 end
 
@@ -128,7 +149,9 @@ function M.check()
       hidden = b ~= nil and veh.camVisible ~= true and not (b.stayFor and b.stayFor(veh))
     end
     local secs = S.seeHidden(tracker, id, hidden, clock)
-    if hidden and secs >= cfg.swap.hiddenSeconds and secs > bestSecs then best, bestSecs = {id = id, veh = veh}, secs end
+    if hidden and secs >= cfg.swap.hiddenSeconds and secs > bestSecs and not S.recentlyDecided(tracker, id, clock) then
+      best, bestSecs = {id = id, veh = veh}, secs
+    end
   end
   S.forget(tracker, alive)
   if not best then return nil end
@@ -138,6 +161,7 @@ function M.check()
   if not model then return nil end
   local current = {model = model, config = configOf(best.id)}
   local entry, wc, wr = S.decide(current, v.candidates(), v.contextNow(), cfg, v.infoOf, math.random)
+  S.markDecided(tracker, best.id, clock)                           -- looked at: not again for a while, swapped or not
   if not entry then return nil end
   S.record(tracker, clock)
   local live = cfg.swap.live and not liveOff

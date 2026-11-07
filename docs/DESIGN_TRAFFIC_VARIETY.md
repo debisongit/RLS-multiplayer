@@ -34,8 +34,9 @@ The owner chose "swap cars out of sight as you drive". It is built as a careful 
 - `enabled`: **watch only**. Every `checkSeconds` the client looks at the traffic cars; one that is hidden for `hiddenSeconds` in a row and that weighs clearly less than a
   different offered model for the current road class and time of day (`minRatio` 1.5) is logged as `swap would happen (watch only): car .. A (Type, weight) -> B/config (Type, weight)`.
   Nothing in the game changes. At most `perMinute` decisions per minute.
-- `live`: **really replaces the car** (experimental). It calls the game's own `replaceVehicle` (captured by `lib/replaceGuard.lua`) for that one car with a named config, finds
-  the new car and hands it to RLS's traffic with `gameplay_traffic.insertTraffic`. After `maxFailures` failures it switches itself off and only watches.
+- `live`: **really replaces the car** (experimental). It calls the game's own `replaceVehicle` (captured by `lib/replaceGuard.lua`) for that one car with a named config,
+  checks the result (a NEW car id, or the same id with the new model, both count as success and the log says which) and hands the car to RLS's traffic with
+  `gameplay_traffic.insertTraffic` only if the traffic system does not know it yet. After `maxFailures` failures it switches itself off and only watches.
 
 What counts as "out of sight": not visible on this camera (`camVisible`), not within 450 m of or visible to any other player (Claude A's `rlsmp_bubble`), and
 `personality.skipReason` is nil (standard civilian AI car, active, not in a pursuit, not crashed, not a job car, not the player's or another player's, not parked).

@@ -38,6 +38,11 @@ local function vanillaReplace(model, options, old)
   replaceCalls[#replaceCalls + 1] = {model = model, options = options, old = old}
   if replaceMode == "error" then error("replace blew up") end
   if replaceMode == "nothing" then return nil end
+  if replaceMode == "inplace" then   -- the game respawns the SAME object with the new model (same id); the traffic data keeps its old name
+    old.jbeam = model
+    old.partConfig = "vehicles/" .. model .. "/" .. tostring(options.config) .. ".pc"
+    return old
+  end
   objects[old:getID()] = nil
   td[old:getID()] = nil          -- the game forgets a deleted traffic car
   nextId = nextId + 1
@@ -144,6 +149,14 @@ run(60)
 count = 0
 for _, l in ipairs(logged) do if l:find("swap would happen", 1, true) then count = count + 1 end end
 check(count == 4, "a minute later two more (" .. count .. ")")
+local ids = {}
+for _, l in ipairs(logged) do
+  local id = l:match("swap would happen %(watch only%): car (%d+)")
+  if id then ids[id] = (ids[id] or 0) + 1 end
+end
+local distinct = 0
+for _, n in pairs(ids) do distinct = distinct + 1 check(n == 1, "a car is looked at once, not again and again") end
+check(distinct == 4, "four decisions, four different cars (" .. distinct .. ")")
 
 -- 7. LIVE (experimental): the car is replaced and the new one goes to RLS's traffic --------------------------------------------------------------------
 reset() addObject(1, "unicycle") addCar(10, "pickup") setConfig({swap = {live = true}})
@@ -153,9 +166,33 @@ check(replaceCalls[1].model ~= "pickup" and types[replaceCalls[1].model] == "Car
 check(replaceCalls[1].options.autoEnterVehicle == false and replaceCalls[1].options.config ~= nil, "named config, the player is not put into it")
 check(objects[10] == nil, "the old car is gone")
 check(#inserted == 1 and inserted[1] == nextId, "the new car was given to RLS's traffic (insertTraffic)")
-check(saw("swap LIVE: car 10 pickup") and saw("swap done: car 10 is now car " .. nextId), "attempt and result are logged")
+check(saw("swap LIVE: car 10 pickup") and saw("swap done (new id): car 10 is now car " .. nextId), "attempt and result are logged, and it says a new id was made")
+check(saw("traffic: inserted into traffic"), "the new car was not in RLS traffic yet, so it was inserted")
 run(10)
 check(#replaceCalls == 1, "no other car qualifies: no second swap")
+
+-- 7b. LIVE, the game changes the car IN PLACE (same id): also a success, nothing is inserted twice, and the car is not swapped again
+reset() addObject(1, "unicycle") addCar(10, "pickup") setConfig({swap = {live = true}})
+replaceMode = "inplace"
+run(3)
+check(#replaceCalls == 1 and objects[10].jbeam ~= "pickup" and types[objects[10].jbeam] == "Car", "in place: the same object now has a car model")
+check(saw("swap done (replaced in place, same id): car 10 is now car 10") and saw("traffic: already in traffic"), "success, and the log says it was in place")
+check(#inserted == 0, "the traffic system already knew the car: not inserted a second time")
+check(td[10].model == "pickup", "(the traffic data still has the old model name)")
+check(not T.isLiveOff(), "a successful in place swap is not a failure")
+run(200)
+check(#replaceCalls == 1, "the swapped car is not swapped again (current model read from the object, and a cooldown)")
+check(T.isLiveOff() == false, "...and live stays on")
+-- a car that was looked at once is left alone for 10 minutes, swapped or not
+reset() addObject(1, "unicycle") addCar(10, "pickup") setConfig({swap = {perMinute = 12}})
+run(3)
+local n1 = 0 for _, l in ipairs(logged) do if l:find("swap would happen", 1, true) then n1 = n1 + 1 end end
+run(300)
+local n2 = 0 for _, l in ipairs(logged) do if l:find("swap would happen", 1, true) then n2 = n2 + 1 end end
+check(n1 == 1 and n2 == 1, "watch only: the same car is not logged again within 10 minutes (" .. n1 .. "," .. n2 .. ")")
+run(400)
+n2 = 0 for _, l in ipairs(logged) do if l:find("swap would happen", 1, true) then n2 = n2 + 1 end end
+check(n2 == 2, "...after the cooldown it may be looked at again (" .. n2 .. ")")
 
 -- 8. LIVE failures switch it off -------------------------------------------------------------------------------------------------------------------
 reset() addObject(1, "unicycle") setConfig({swap = {live = true, perMinute = 12, hiddenSeconds = 1, maxFailures = 3}})
