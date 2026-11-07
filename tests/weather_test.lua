@@ -112,10 +112,17 @@ sent = {}
 W.tick()
 check(sent[1].data.c == "storm", "forced from the config")
 
--- disabled -------------------------------------------------------------------------------------------------------------------------------
+-- disabled: the timer exists (it can be switched on while the server runs) but nothing is sent ---------------------------------------------------------
 handlers = {}
 cfg.weather.enabled = false
+cfg.weather.force = ""
 W.init(cfg)
-check(handlers["rlsmpWeatherTick"] == nil, "disabled: no timer and no events")
+check(handlers["rlsmpWeatherTick"] ~= nil, "disabled: the timer is still registered, so enabling it later works")
+sent = {}
+_G[handlers["rlsmpWeatherTick"]]()
+check(#sent == 0, "disabled: tick sends nothing")
+cfg.weather.enabled = true
+_G[handlers["rlsmpWeatherTick"]]()
+check(#sent == 2, "switched on again while running: the weather is sent")
 
 print(string.format("weather_test: %d checks passed", passed))

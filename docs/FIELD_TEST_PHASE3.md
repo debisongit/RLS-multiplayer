@@ -409,3 +409,35 @@ shows it through RLS's own weather system, so rain, wet roads and tire grip matc
 - RLS saves the forced condition in the player's career save (its dynamic weather setting becomes on, rainy days allowed). That is expected.
 - The mix is followed roughly: the in-between conditions are a little more common than their weights say.
 
+
+
+## Traffic settings menu (build 0.4.23)
+
+**Who:** only `polakpls` and `sucuk21` (server config `trafficAdmin.names`). Others pressing `[` just get "You are not allowed".
+
+**Steps**
+1. Join the server as an admin. Press `[`. A window "RLS Traffic settings" should open. If nothing happens, type `/trafficmenu`.
+2. Cars: move a car type slider (for example Truck to 0), press Apply. The status line should say "1 setting applied and saved". Look at `config/config.json` on the server: `trafficVariety.typeWeights.Truck` is 0.
+3. Search a single car, set its slider, Apply. Same check under `trafficVariety.models`.
+4. Where & when: choose Highways, then Night, change a weight, Apply.
+5. Behaviour: change the personality mix; the percentages next to the sliders follow.
+6. Press `[` again (or Close): the window closes. Press `[` as a non-admin (second player): "not allowed" message, no window.
+7. Send me the lines tagged `traffic menu`, `probe: ui_imgui` and `RLSMP-ADMIN` from the game log and server log.
+
+### Named failure modes
+| What you see | What it means |
+|---|---|
+| `[` does nothing, `/trafficmenu` works | The key name `leftbracket` (taken from RLS's own code) or a binding conflict. Rebind under Controls > RLS Career MP and tell me the key. |
+| Window never appears, log `probe: ui_imgui is not available` | ImGui missing in this game; menu cannot be drawn. |
+| Window appears but the mouse does not click it | ImGui input vs game input. Send the `probe:` line (it lists mouse/visibility functions). |
+| Typing in the search box also drives the car | Known risk: keys reach the game while typing. Tell me. |
+| `W traffic menu draw failed` | A widget call failed; send the line. |
+| Status "N refused (path: why)" | The server refused a value (out of range or unknown setting). Send the text. |
+| "applied but NOT saved to config.json" | Server cannot write its config; check file permissions and the server log. |
+| A non-admin got the window | Serious: send the server log (`RLSMP-ADMIN`). |
+
+### Known gaps
+- Never played. Key name, mouse handling and typing while driving are unverified.
+- A car keeps its model once spawned; new weights apply to cars built from now on (and to swaps if Swapping is on).
+- Hand edits to `config.json` while the server runs are overwritten by the next Apply. Intervals read only at start (timer periods, weather period) are not editable here.
+- Admin names are plain BeamMP names; account ids are safer (`trafficAdmin.accountIds`).

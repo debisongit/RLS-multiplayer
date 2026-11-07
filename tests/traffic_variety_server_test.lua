@@ -27,7 +27,8 @@ local function take() local t = sent sent = {} return t end
 
 -- defaults
 check(cfg.trafficVariety.enabled == true and cfg.trafficVariety.maxShare == 0.25 and cfg.trafficVariety.oversample == 2, "defaults")
-check(next(cfg.trafficVariety.mods) == nil and next(cfg.trafficVariety.typeWeights) == nil, "no mods and no weights out of the box")
+check(next(cfg.trafficVariety.mods) == nil and next(cfg.trafficVariety.typeWeights) == nil and next(cfg.trafficVariety.models) == nil, "no mods and no weights out of the box")
+check(cfg.trafficAdmin.names[1] == "polakpls" and cfg.trafficAdmin.names[2] == "sucuk21", "the two admins out of the box")
 check(cfg.trafficVariety.zoneSpeedLimits.city == 17 and cfg.trafficVariety.zoneSpeedLimits.main == 27, "road class limits")
 check(cfg.trafficVariety.swap.enabled == false and cfg.trafficVariety.swap.live == false, "live swapping: both switches off out of the box")
 
@@ -63,6 +64,13 @@ local d = m[1].data
 check(d.typeWeights.Truck == 0.5 and d.typeWeights.Bad == nil and d.typeWeights.Neg == nil and d.typeWeights.Nan == nil, "bad weights dropped")
 check(d.typeWeights[1] == nil and d.typeWeights[string.rep("n", 90)] == nil, "bad names dropped")
 check(d.mods.mycar == 3 and d.mods["other car"] == nil, "mod weights kept, infinity dropped")
+cfg.trafficVariety.models = {pickup = 2, bad = "x"}
+tv.resend()
+stages[5] = "loaded"
+tick()
+m = take()
+check(m[1].data.models.pickup == 2 and m[1].data.models.bad == nil, "per-model weights are sent (and sanitized)")
+cfg.trafficVariety.models = {}
 check(d.zones.highway.Truck == 2 and d.zones[7] == nil, "zones sanitized")
 local n = 0
 for _ in pairs(d.night) do n = n + 1 end

@@ -1,0 +1,10 @@
+{
+  "rlsmpTrafficMenu": {
+    "cat": "rlsmp",
+    "order": 1,
+    "ctx": "tlua",
+    "onDown": "if extensions.rlsmp_trafficMenu then extensions.rlsmp_trafficMenu.toggle() end",
+    "title": "Traffic settings menu",
+    "desc": "Open or close the AI traffic settings menu (only for players the server lists as traffic admins)"
+  }
+}

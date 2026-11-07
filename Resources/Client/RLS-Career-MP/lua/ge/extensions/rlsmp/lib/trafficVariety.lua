@@ -3,8 +3,9 @@
 --
 -- A group is a list of {model = ..., config = ...} entries that RLS/the game spawns as traffic or parked cars.
 -- We take a bigger pool of candidates and pick the group from it with weights:
---   weight = typeWeights[Type] x zones[zone][Type] x (night or day)[Type] x (mods[model] for a modded model)
--- `Type` is the model's own "Type" in the game's model list. Missing weights count as 1, 0 means "never".
+--   weight = (models[model], else typeWeights[Type]) x zones[zone][model, else Type] x (night or day)[model, else Type] x (mods[model] for a modded model)
+-- `Type` is the model's own "Type" in the game's model list; a weight for the model itself always wins over the one for its Type.
+-- Missing weights count as 1, 0 means "never".
 -- No single model may fill more than `maxShare` of a group, so groups are varied even with all weights at 1.
 
 local M = {}
@@ -12,6 +13,7 @@ local M = {}
 M.DEFAULTS = {
   enabled = true,
   typeWeights = {},
+  models = {},
   mods = {},
   zones = {},
   day = {},
@@ -81,6 +83,7 @@ function M.sanitize(src)
   return {
     enabled = src.enabled ~= false,
     typeWeights = weightMap(src.typeWeights),
+    models = weightMap(src.models),
     mods = weightMap(src.mods),
     zones = zones,
     day = weightMap(src.day),
@@ -105,20 +108,26 @@ function M.zoneFromSpeed(limit, cfg)
   return "highway"
 end
 
+-- A model's own entry wins over the one for its Type.
+local function pick(map, model, t)
+  if not map then return nil end
+  local v = map[model]
+  if v ~= nil then return v end
+  if t then return map[t] end
+  return nil
+end
+
 -- entry = {model, config}; info = {type = "Car" | nil, mod = bool}; ctx = {zone = "city" | nil, night = bool}.
 function M.weight(entry, info, ctx, cfg)
   info = info or {}
   ctx = ctx or {}
-  local t = info.type
-  local w = 1
-  if t then
-    w = w * (cfg.typeWeights[t] or 1)
-    local zone = ctx.zone and cfg.zones[ctx.zone]
-    if zone then w = w * (zone[t] or 1) end
-    local phase = ctx.night and cfg.night or cfg.day
-    w = w * (phase[t] or 1)
-  end
-  if info.mod then w = w * (cfg.mods[entry.model] or 1) end
+  local t, model = info.type, entry.model
+  local w = pick(cfg.models, model, nil)
+  if w == nil then w = (t and cfg.typeWeights[t]) or 1 end
+  local zone = ctx.zone and cfg.zones[ctx.zone]
+  if zone then w = w * (pick(zone, model, t) or 1) end
+  w = w * (pick(ctx.night and cfg.night or cfg.day, model, t) or 1)
+  if info.mod then w = w * (cfg.mods[model] or 1) end
   if w ~= w or w < 0 then return 0 end
   return w
 end

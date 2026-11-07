@@ -212,6 +212,14 @@ Chat: `/duel <player>`, `/duel accept`, `/duel cancel`, `/duel claim` (re-send a
   Computed from the server wall clock (`server/clock.lua`), so restarts keep it consistent. Client `clock.lua` draws the sky 4x per second and
   moves RLS's weather forward every 10 s (`sleepTo`); RLS's own day cycle is paused while connected. Config `time = {enabled, dayMinutes = 45, syncSeconds = 5}`.
 
+## Traffic settings menu (admin channel)
+
+- `rlsmpTrafficAdminGet {}` (client to server): asks for the settings. Answer `rlsmpTrafficAdminState {ok, cfg}`; `ok = false` (no `cfg`) when the player is not an admin.
+- `rlsmpTrafficAdminSet {set = {{p = {"trafficVariety","typeWeights","Truck"}, v = 0.5}}, rm = {{"trafficVariety","models","pickup"}}}` (client to server): path arrays, never strings. Answer `rlsmpTrafficAdminResult {ok, applied, rejected = {{p, why}}, saved}`, then a fresh state to every admin online.
+- `rlsmpTrafficAdminOpen {}` (server to client): sent by the chat command `/trafficmenu` for admins; the client then asks for the state.
+- Server `server/trafficAdmin.lua` is the security boundary: admin = name in `trafficAdmin.names` (case insensitive) or account id in `trafficAdmin.accountIds`, never a guest; every path must match an allowlist rule with a type and range; weight maps accept names of plain characters (max 64, max 64 entries). Values change INSIDE the existing config tables, `config.json` is rewritten, modules `resend()`. At most 3 requests per second per player. Log lines `RLSMP-ADMIN`.
+- Client `trafficMenu.lua` (ImGui window) + `lib/trafficMenu.lua` (pending changes, patch). Action `rlsmpTrafficMenu` (`core/input/actions/rlsmp.json`), default key `leftbracket` (`settings/inputmaps/keyboard_rlsmp.json`).
+
 ## Shared weather
 
 - `rlsmpWeather {c, p, n}` (server to client, every `weather.syncSeconds`, loaded players only): the condition `c` (one of RLS's six: `clear`, `partlyCloudy`, `overcast`, `drizzle`, `rain`, `storm`),
