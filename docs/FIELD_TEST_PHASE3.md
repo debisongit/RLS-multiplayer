@@ -8,7 +8,7 @@ Plan for about 30 minutes, one player (a second player is optional, see the end)
 
 | Component | Version |
 |---|---|
-| RLS-Career-MP (this repo) | default branch `claude/amazing-sagan-kh6ecn`, code commit `9c14991`, build `0.4.3` (Phase 1-3 together; later commits only change documents) |
+| RLS-Career-MP (this repo) | default branch `claude/amazing-sagan-kh6ecn`, code commit `9c14991`, build `0.4.15` (everything on the default branch; later commits only change documents) |
 | RLS Career Overhaul source read | v2.8.0, commit `e701d9e2218ca12ff70ba4a09c0c91514e96e380` (29 Oct 2026) |
 | BeamNG.drive | **not pinned, write yours down** (docs target 0.38 / 0.39) |
 | BeamMP (server and client) | **not pinned, write yours down** |
@@ -25,7 +25,7 @@ Vanilla BeamNG's traffic code was never read; only RLS's code was.
    ```bash
    tools/install_to_server.sh /path/to/BeamMP-Server
    ```
-   It prints `Installed RLS-Career-MP build 0.4.3`. It is a bash script: on Windows run it from Git Bash or WSL.
+   It prints `Installed RLS-Career-MP build 0.4.15`. It is a bash script: on Windows run it from Git Bash or WSL.
 2. Put the RLS Career Overhaul zip in the server's `Resources/Client/` as well.
 3. On your own PC, delete any local `rls_career_overhaul_v2.8.0_hotfix.zip` (or any other copy of RLS) from your BeamNG
    mods folder, so RLS is not unloaded and rebuilt on every join.
@@ -39,8 +39,8 @@ Vanilla BeamNG's traffic code was never read; only RLS's code was.
    would never visibly act. Any `totalBudget` above 0 fixes the budget instead. Under `"police"`,
    leave `"antiTeleport": true` and `"blockRoadblocks": true`. Start the server again.
 7. Join with BeamNG. In BeamNG's own settings, set the **traffic amount to 15 or more** (the max is fine).
-8. **Check the build.** The server log must say `joined with client build 0.4.3 (server build 0.4.3)` and the game log must
-   say `client loaded, build 0.4.3`. If the two builds differ, you are running an old client zip (this has already wasted a test round): re-run the install
+8. **Check the build.** The server log must say `joined with client build 0.4.15 (server build 0.4.15)` and the game log must
+   say `client loaded, build 0.4.15`. If the two builds differ, you are running an old client zip (this has already wasted a test round): re-run the install
    command, restart the server and rejoin.
 
 Client-side settings are not stored in the server file, so nothing else needs changing. Do not rename the zip.
@@ -56,11 +56,11 @@ you relaunch the game.
    ```
 2. Pull out only our lines (replace the path with the one printed above):
    ```powershell
-   Select-String -Path "C:\path\printed\above\beamng.log" -SimpleMatch "RLSMP-P3","RLSMP-GUARD" | ForEach-Object { $_.Line } | Set-Content p3-client.txt
+   Select-String -Path "C:\path\printed\above\beamng.log" -SimpleMatch "RLSMP-P3","RLSMP-GUARD","RLSMP-REPLACE" | ForEach-Object { $_.Line } | Set-Content p3-client.txt
    ```
 3. Same for the server. Run this in the BeamMP server folder:
    ```powershell
-   Select-String -Path "Server.log" -SimpleMatch "RLSMP-P3","RLSMP-GUARD" | ForEach-Object { $_.Line } | Set-Content p3-server.txt
+   Select-String -Path "Server.log" -SimpleMatch "RLSMP-P3","RLSMP-GUARD","RLSMP-REPLACE" | ForEach-Object { $_.Line } | Set-Content p3-server.txt
    ```
 4. Send back `p3-client.txt` and `p3-server.txt`, plus the answers to the "What you saw" list at the bottom.
 
@@ -200,7 +200,7 @@ When the second player leaves, the first should get `active=6` again. Send both 
 4. Did traffic look thinner than usual with the settings above?
 5. Anything that looked broken outside a chase (police, traffic, money, saving)?
 
-## Taxis and riding along (build 0.4.3)
+## Taxis and riding along (build 0.4.15)
 
 Two things changed in the vehicle guard (it used to refuse every AI car and every other player's car):
 
@@ -246,4 +246,40 @@ Log tag for both is `RLSMP-GUARD` (already included in the capture commands abov
 - A walking player is never allowed into another player's walking character, and nobody can drive someone else's car.
 - Another player's AI traffic is recognised by the name-tag flag that `trafficLabels` sets, which can take 2 to 4 seconds for a car
   that has only just appeared. In that short window a new traffic car of A's could be entered by B by mistake. Tell me if it happens.
+
+## Garage part shop (build 0.4.15)
+
+**The bug:** at the garage computer you shop for parts while standing on foot. RLS rebuilds the car with `replaceVehicle(model, options, theCar)`.
+BeamMP ignores `theCar` and replaces the car the PLAYER is in, which is the walking character. A new car appeared and took over,
+and the shopped car stayed behind, still frozen by the shop. **The fix:** when RLS names a specific car, that car is replaced in place.
+Log tag `RLSMP-REPLACE` (already in the capture commands above).
+
+### Test steps
+1. Join, load your career, walk to your own garage computer and open the part shop for one of your cars.
+2. Add a part to the cart (for example power steering) and watch the car. It must change **in place**: no second car, you stay on foot.
+3. Buy it and leave the shop. Walk to the car, get in and drive. It must drive normally and have the part.
+4. Do it a second time with another part, and once with removing a part.
+5. If an old "fake car" is still around from before the fix, leave the server and rejoin. I have not confirmed that clears it.
+
+Expected log lines:
+```
+RLSMP-REPLACE|captured the game's own replaceVehicle                      (once, when the game starts)
+RLSMP-REPLACE|wrapped core_vehicles.replaceVehicle (beammp's version: true, game's own known: true)
+RLSMP-REPLACE|replace etk800 target=123(etk800) but player is in 45(unicycle) (beammp knows target: true): replacing the target itself
+```
+(The last line appears each time the cart changes.)
+
+### Named failure modes
+| What you see | What it means |
+|---|---|
+| `W RLSMP-REPLACE|the game's own replaceVehicle was not captured before BeamMP swapped it` | The fix is inactive: our mod loaded too late. Send the log. |
+| A second car still appears and there is no `replacing the target itself` line | RLS used a different path than I found. Send the whole log from the shop session. |
+| `... is the player's own car (passthrough)` and the bug still happens | The player was in the car, so another cause. Send the log. |
+| The car changes in place but is still frozen after you leave the shop | RLS's own unfreeze did not run. Send the log. |
+| The car changes in place but the part is missing | A separate problem from the replace. Send the log and the name of the part. |
+| Other players see the old version of your car | The change was not synced to them. Tell me. |
+
+### Known gaps
+- Not played in the game. The missing power steering could be a separate problem; this build only fixes which car is replaced.
+- Fixing it relies on the game's own `replaceVehicle` being captured before BeamMP swaps it (the warning line above says if it was not).
 

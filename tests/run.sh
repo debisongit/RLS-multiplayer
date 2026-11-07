@@ -31,6 +31,7 @@ luajit tests/client_test.lua
 luajit tests/download_watch_test.lua
 luajit tests/fleet_client_test.lua
 luajit tests/guard_test.lua
+luajit tests/replace_guard_test.lua
 luajit tests/claims_client_test.lua
 luajit tests/traffic_labels_client_test.lua
 luajit tests/unstuck_test.lua

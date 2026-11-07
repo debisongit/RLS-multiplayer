@@ -15,6 +15,7 @@ local M = {}
 
 local mp = require("rlsmp/lib/mp")
 local net = require("rlsmp/lib/net")
+local replaceGuard = require("rlsmp/lib/replaceGuard")
 
 local TAG = "RLSMP-GUARD"
 local enabled = false
@@ -155,6 +156,7 @@ end
 
 function M.onUpdate()
   M.install()
+  replaceGuard.install()   -- keep "replace this car" pointing at this car (RLS part shop; see lib/replaceGuard.lua)
 end
 
 -- Server settings (rlsmpVehicleConfig). Forgotten when we leave the server.
@@ -166,6 +168,7 @@ function M.onServerLeave() allowPassengers = false lastNote = {} end
 
 function M.onExtensionLoaded()
   net.on("rlsmpVehicleConfig", onConfig)
+  replaceGuard.install()   -- as early as possible: it must see the game's own function before BeamMP swaps it
 end
 M._onConfig = onConfig
 
