@@ -158,6 +158,12 @@ M.defaults = {
     fallbackDamagePerSpeedSq = 15,
   },
 
+  -- Shared dealership stock: everyone sees the same cars for sale (the first player's listings, kept in shop.json).
+  -- OFF until tested in-game. Only listings that exist when a player joins are shared; RLS still adds new ones per PC.
+  shop = {
+    shared = false,
+  },
+
   security = {
     -- RLS "cheats mode" (and Freeroam+) gives free money and vehicles. Never accepted from a client save unless you turn this on.
     allowCheats = false,

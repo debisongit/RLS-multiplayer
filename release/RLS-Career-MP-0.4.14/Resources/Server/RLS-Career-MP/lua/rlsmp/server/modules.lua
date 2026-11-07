@@ -15,10 +15,12 @@ return {
   "rlsmp.server.qol",
   "rlsmp.server.trafficLabels",
   "rlsmp.server.claims",
+  "rlsmp.server.positions",
   "rlsmp.server.traffic",
   "rlsmp.server.trafficPolice",
   "rlsmp.server.vehicles",
   "rlsmp.server.events",
   "rlsmp.server.duel",
   "rlsmp.server.clock",
+  "rlsmp.server.shop",
 }

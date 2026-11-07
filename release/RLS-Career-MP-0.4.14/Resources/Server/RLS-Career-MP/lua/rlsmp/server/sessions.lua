@@ -21,6 +21,15 @@ local cfg
 local sessions = {}   -- pid -> session
 local earnedHooks = {}  -- fn(pid, session, amount, category), called after the server accepted earned money
 local bigHandlers = {}  -- kind -> fn(pid, session, data); lets other modules receive big client uploads
+local savedHooks = {}     -- fn(pid, session, profile), after a save upload was stored
+local downloadHooks = {}  -- fn(pid, session, profile), right before the profile is encoded for a joining player
+
+local function runHooks(list, ...)
+  for _, fn in ipairs(list) do
+    local ok, problem = pcall(fn, ...)
+    if not ok then util.err("hook failed: " .. tostring(problem)) end
+  end
+end
 
 -- Console: archive and clear one career (by online player name or BeamMP account id). Online players are dropped.
 function M.resetCareer(who)
@@ -44,6 +53,9 @@ function M.get(pid) return sessions[pid] end
 function M.all() return sessions end
 -- Other modules: receive a big upload that the client labelled with `kind` (see client fleet.lua).
 function M.onBig(kind, fn) bigHandlers[kind] = fn end
+-- Other modules (shop): look at a save after it was stored, or change it before it goes down on join.
+function M.onSaved(fn) savedHooks[#savedHooks + 1] = fn end
+function M.beforeDownload(fn) downloadHooks[#downloadHooks + 1] = fn end
 function M.isLoaded(pid) return sessions[pid] ~= nil and sessions[pid].stage == "loaded" end
 
 local function startingOptions()
@@ -129,6 +141,7 @@ local function onHello(pid, data)
   s.profile = profile
   s.stage = "downloading"
 
+  runHooks(downloadHooks, pid, s, profile)
   local payload = profiles.encodeForDownload(profile)
   util.info(string.format("[rlsmp-timing] loaded and encoded %s's profile: %d bytes, %.2fs", tostring(s.name), #payload, os.clock() - t0))
   net.sendBig(pid, "profile", payload, {
@@ -175,6 +188,7 @@ local function finishUpload(pid, s, id, up)
   end
   if not s.guest then profiles.persist(s.profile) end
   s.ledgerDirty = false
+  runHooks(savedHooks, pid, s, s.profile)
   net.send(pid, "rlsmpUpAck", {id = id, ok = true, money = result.money, corrected = result.corrected, sums = result.sums})
   if result.corrected then
     net.send(pid, "rlsmpWalletSet", {money = result.money, why = "save_check"})
