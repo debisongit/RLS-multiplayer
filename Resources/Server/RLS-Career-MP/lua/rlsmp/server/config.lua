@@ -87,6 +87,30 @@ M.defaults = {
     antiTeleport = true,
     -- Refuse RLS roadblocks (they put police cars on the road ahead of you).
     blockRoadblocks = true,
+    -- Police records (server plateRecords.lua), shared by all cops on the server:
+    -- a flagged plate (plate text + car model) lasts this many real seconds; a new plate text clears it at once.
+    plateFlagSeconds = 7200,
+    -- Cops also remember the car (model + colour) of an escaped chase this long; a repaint clears it.
+    descriptionSeconds = 1200,
+    -- Police read the plate of a car near them. Untested in-game: set enabled = false if it misbehaves.
+    plateReading = {
+      enabled = true,
+      rangeMeters = 15,            -- the police car must be this close (and see you)
+      maxSpeedKmh = 50,            -- and you slower than this
+      minSeconds = 3,              -- a read takes minSeconds..maxSeconds (random each time)
+      maxSeconds = 6,
+      readChance = 0.35,           -- chance that a police car coming near bothers to read your plate
+      afterEscapeChance = 1.0,     -- the same, for afterEscapeSeconds after you escaped a chase
+      afterEscapeSeconds = 1200,
+      encounterSeconds = 60,       -- a police car decides this once per this many seconds
+      copCooldownSeconds = 300,    -- a police car that read your plate leaves you alone this long
+      skipChance = 0.2,            -- a flagged plate is let go 1 time in 5
+      retriggerSeconds = 120,      -- no new plate chase for the same plate within this time
+      offenseScore = 400,          -- RLS pursuit score of the "wantedPlate" offense (RLS x0.75; 150 = first level)
+      escapeCooldownSeconds = 60,  -- at most one escape report per player per this many seconds
+      escapeNeedsChaseSeconds = 300, -- escape reports count only if the player was seen chased this recently (0 = trust)
+      lookupsPerMinute = 20,
+    },
   },
 
   -- Phase 3: "smart traffic" driver personalities. Each game gives its AI traffic cars a personality, picked by

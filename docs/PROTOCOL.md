@@ -78,6 +78,33 @@ While the player is chased (their traffic-data `pursuit.mode` >= 1) and `antiTel
 from respawning (`enableRespawn = false`), refuses RLS roadblocks (if `blockRoadblocks`) and
 refuses `gameplay_traffic.forceTeleport` on police units. Everything is restored when the pursuit ends.
 
+## Plate reading and police records (Phase 3)
+
+| Direction | Event | Body |
+|---|---|---|
+| S→C | `rlsmpPlateConfig` | `{enabled, rangeMeters, maxSpeedKmh, minSeconds, maxSeconds, readChance, afterEscapeChance, afterEscapeSeconds, encounterSeconds, copCooldownSeconds, skipChance, retriggerSeconds, offenseScore}` sent once when a player finishes loading (also when `enabled` is false) |
+| C→S | `rlsmpPlateLookup` | `{plate, model, color}` a police unit finished reading the player's plate (`color` = colour name, may be missing) |
+| S→C | `rlsmpPlateResult` | `{plate, model, flagged, reason?, matchedBy?, limited?}` answer to a lookup; `plate`/`model` echo the normalised request, `matchedBy` = `"plate"` or `"description"`, `limited` = too many lookups (answered clean, not looked up) |
+| C→S | `rlsmpPlateEscaped` | `{plate, model, color}` the player escaped an RLS chase in this car |
+| C→S | `rlsmpPlateChanged` | `{model, oldPlate, plate, oldColor?, color?}` one of the player's garage cars got a new plate text or paint colour |
+
+Server `plateRecords.lua` owns `config.police.plateFlagSeconds` (7200), `config.police.descriptionSeconds` (1200) and `config.police.plateReading` (master switch `enabled`, default on).
+It keeps, shared by every player: **plate flags** keyed by plate text (trimmed, upper case, at most 16 characters) + model, valid `plateFlagSeconds`; **car descriptions** keyed by model + colour name, valid `descriptionSeconds`.
+A lookup matches a fresh flag first (`matchedBy = "plate"`), then a fresh description (`"description"`). Saved in `plates.json`, expired entries pruned every minute.
+- `rlsmpPlateEscaped` is accepted only from a loaded player, at most once per `escapeCooldownSeconds` (60), and only if `positions` saw that player chased within `escapeNeedsChaseSeconds` (300, 0 = trust the client). It flags the plate (reason `escaped`) and remembers the description when a colour is given.
+- `rlsmpPlateChanged`: at most one per 3 s per player. A different plate text deletes the flag of `oldPlate` + model; a different colour deletes the description `model` + `oldColor`.
+- Lookups: at most `lookupsPerMinute` (20) per player are looked up; every lookup gets an answer. While `enabled` is false lookups answer clean and escapes / changes are ignored.
+- Lua API for other server modules: `flag(plate, model, color, reason, by?)`, `lookup(plate, model, color)`, `clearPlate(plate, model)`, `clearDescription(model, color)`, `prune()`, `records()`.
+
+Client `plates.lua` (`rlsmp_plates`, pure rules in `lib/plateRead.lua`), only in a multiplayer session while the career is active, after the config arrived, every 0.5 s, for the local player's car only:
+- A reader is an AI police unit (RLS role `police`, not disabled, not chasing, object active) whose RLS data `role.validTargets[playerCar]` says `visible` and `dist` (squared) <= `rangeMeters`², while the player's traffic-data `speed` is under `maxSpeedKmh`. Skipped while the player is chased (`rlsmp_police.isPursuit()`, pursuit mode not 0 or a queued pursuit start), in an AI car (passenger), playing as a cop (`overhaul_career_police_playerDriving.getPlayerIsCop()`), or while a lookup / chase start is pending.
+- Each unit decides once per `encounterSeconds` whether it reads (`readChance`; `afterEscapeChance` for `afterEscapeSeconds` after an escape in this game). A read takes `minSeconds`..`maxSeconds` (random), shown with `ui_message` (category `rlsmpPlateRead`) as `Police reading your plate: 7AB____` (letters revealed = progress). Out of range, too fast or another unit: the read starts again from zero. A unit that finished a read leaves the player alone for `copCooldownSeconds`.
+- Flagged result: no new chase for that plate + model within `retriggerSeconds` (our own memory, RLS wipes its pursuit table when a chase ends), then the unit lets it go with `skipChance`, otherwise the player's traffic vehicle gets `triggerOffense({key = "wantedPlate", value = plate, score = offenseScore})` (RLS x0.75, first pursuit level at 150). If after 1.5 s no pursuit runs or is queued, `setPursuitMode(1, playerCar, unit)`.
+- Escape = RLS hook `onPursuitAction(vehId, "evade", pursuit)` for the player's car (or RLS's walk hand-off car). Ends where RLS's evade timer is still under 1 s (its "stalemate" end in `career/police/playerDriving.lua`) are not escapes.
+- Plate text and paint colour of the current garage car (by inventory id; paint jobs respawn the car) are watched; a change sends `rlsmpPlateChanged`. Empty plate text (RLS refreshing the plate) is ignored.
+- Colour name: from the spawn config `paints[1].baseColor`, else the live `obj.color` (linear, converted), one of black, white, silver, grey, red, orange, brown, yellow, green, teal, blue, purple, pink.
+Log lines: `RLSMP-P3 ... plates:` (client), `[plates]` (server).
+
 ## Smart traffic: driver personalities (Phase 3)
 
 | Direction | Event | Body |

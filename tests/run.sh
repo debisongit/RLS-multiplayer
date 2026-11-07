@@ -25,6 +25,7 @@ lua5.3 tests/resend_test.lua "$(mktemp -d -p "$tmp")"
 lua5.3 tests/positions_test.lua "$(mktemp -d -p "$tmp")"
 lua5.3 tests/shop_test.lua "$(mktemp -d -p "$tmp")"
 lua5.3 tests/items_test.lua "$(mktemp -d -p "$tmp")"
+lua5.3 tests/plate_records_test.lua "$(mktemp -d -p "$tmp")"
 lua5.3 tests/traffic_test.lua
 lua5.3 tests/traffic_police_test.lua
 lua5.3 tests/traffic_variety_server_test.lua
@@ -59,4 +60,6 @@ luajit tests/weather_client_test.lua
 luajit tests/police_client_test.lua
 luajit tests/positions_client_test.lua
 luajit tests/personalities_client_test.lua
+luajit tests/plate_read_lib_test.lua
+luajit tests/plates_client_test.lua
 echo "All tests passed."
