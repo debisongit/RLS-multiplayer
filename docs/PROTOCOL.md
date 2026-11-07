@@ -257,7 +257,7 @@ The screen has no rules: it shows what the server last sent and relays taps. Not
 | Direction | Event | Body |
 |---|---|---|
 | C→S | `rlsmpMarketGet` | `{}` at most one answer per player per second |
-| S→C | `rlsmpMarketState` | `{ready, member, money, spot, invite = {from, seconds}?}` plus, for members, `{rep, invitesLeft, items = [{name, label, price, minRep, durable, locked, have, onOrder}], orders = [{id, item, label, n, spot, readyIn, ready}]}` |
+| S→C | `rlsmpMarketState` | `{ready, member, money, spot, invite = {from, seconds}?}` plus, for members, `{rep, invitesLeft, items = [{name, label, price, minRep, durable, locked, have, onOrder}], orders = [{id, item, label, n, spot, readyIn, ready}] (orders also for players who were thrown out but still have paid orders)}` |
 | C→S | `rlsmpMarketAct` | `{a = "buy" \| "pickup" \| "invite" \| "accept", item?, n?, who?}`; at most one per player per second (a separate limit from Get). Runs the same command as the chat |
 | S→C | `rlsmpMarketResult` | `{text}` what the command would have said in chat (collected instead of sent to chat), then a fresh `rlsmpMarketState` |
 

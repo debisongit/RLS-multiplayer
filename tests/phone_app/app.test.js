@@ -104,6 +104,19 @@ describe('PhoneBlackMarket', () => {
     expect(w.text()).toContain('Reputation 10')
     w.unmount()
   })
+  it('copes with empty lists that arrive as {} from the game', async () => {
+    const w = await open({ enabled: true, state: member({ items: {}, orders: {} }) })
+    expect(w.text()).toContain('Reputation 10')
+    expect(w.text()).toContain('Nothing for you yet')
+  })
+  it('an ex-member with paid orders still sees and can collect them', async () => {
+    const w = await open({ enabled: true, state: { ready: true, member: false, money: 5,
+      orders: [{ id: 'o1', item: 'fake_plate', label: 'Fake plate', n: 1, spot: 'Joe', readyIn: 0, ready: true }] } })
+    expect(w.text()).toContain('You are not in')
+    expect(w.text()).toContain('Your orders')
+    await w.findAll('button').find(b => b.text() === 'Collect here').trigger('click'); await flushPromises()
+    expect(calls[0][0]).toBe('pickup')
+  })
   it('stops polling when closed', async () => {
     let n = 0
     fake.get = () => { n++; return { enabled: true, state: member() } }

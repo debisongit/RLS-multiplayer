@@ -108,9 +108,9 @@ end
 -- Phone app bridge -------------------------------------------------------------------------------------
 local appState, appResult, appResultSeq = nil, nil, 0
 local askedAt = -math.huge
-local ASK_EVERY = 1.5                   -- seconds between server requests while the app polls
+local ASK_EVERY = 1                     -- whole seconds between server requests while the app polls (os.time: real time, os.clock is CPU time)
 
-local function now() return os.clock() end
+local function now() return os.time() end
 
 local function onState(d)
   if type(d) == "table" then appState = d end

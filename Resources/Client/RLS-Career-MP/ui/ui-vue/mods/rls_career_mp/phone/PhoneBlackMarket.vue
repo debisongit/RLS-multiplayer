@@ -13,6 +13,19 @@
     <main bng-nav-scroll>
       <p v-if="message" class="note" role="status">{{ message }}</p>
 
+      <section v-if="!problem && orderList.length" class="card">
+        <h2>Your orders</h2>
+        <article v-for="o in orderList" :key="o.id" class="row">
+          <div>
+            <strong>{{ o.label }}<span v-if="o.n > 1"> × {{ o.n }}</span></strong>
+            <small>{{ o.ready ? 'Waiting at ' + o.spot : 'At ' + o.spot + ' in ' + Math.round(o.readyIn) + ' s' }}</small>
+          </div>
+          <span class="tag" :class="{ ready: o.ready }">{{ o.ready ? 'Ready' : 'On the way' }}</span>
+        </article>
+        <button type="button" class="primary" bng-nav-item :disabled="busy || !anyReady" @click="act('pickup')">Collect here</button>
+        <small class="hint">You have to stand within about 20 m of the drop spot (marked in the world) and not be chased.</small>
+      </section>
+
       <section v-if="problem" class="card center">
         <h2>{{ problem.title }}</h2>
         <p>{{ problem.text }}</p>
@@ -31,19 +44,6 @@
       </template>
 
       <template v-else-if="member">
-        <section v-if="state.orders && state.orders.length" class="card">
-          <h2>Your orders</h2>
-          <article v-for="o in state.orders" :key="o.id" class="row">
-            <div>
-              <strong>{{ o.label }}<span v-if="o.n > 1"> × {{ o.n }}</span></strong>
-              <small>{{ o.ready ? 'Waiting at ' + o.spot : 'At ' + o.spot + ' in ' + Math.round(o.readyIn) + ' s' }}</small>
-            </div>
-            <span class="tag" :class="{ ready: o.ready }">{{ o.ready ? 'Ready' : 'On the way' }}</span>
-          </article>
-          <button type="button" class="primary" bng-nav-item :disabled="busy || !anyReady" @click="act('pickup')">Collect here</button>
-          <small class="hint">You have to stand within about 20 m of the drop spot (marked in the world) and not be chased.</small>
-        </section>
-
         <section class="card">
           <h2>For sale</h2>
           <p v-if="state.spot" class="hint">Packages arrive at today's drop spot: {{ state.spot }}</p>
@@ -119,10 +119,13 @@ const problem = computed(() => {
   if (state.value && state.value.ready === false) return { title: 'Wait a moment', text: 'Your career is still loading.' }
   return null
 })
-const items = computed(() => (state.value && state.value.items) || [])
+// Lists can arrive as {} when empty (the game's Lua tables), so only real arrays count.
+const asList = v => (Array.isArray(v) ? v : [])
+const items = computed(() => asList(state.value && state.value.items))
+const orderList = computed(() => asList(state.value && state.value.orders))
 const available = computed(() => items.value.filter(it => !it.locked))
 const locked = computed(() => items.value.filter(it => it.locked))
-const anyReady = computed(() => !!(state.value && state.value.orders && state.value.orders.some(o => o.ready)))
+const anyReady = computed(() => orderList.value.some(o => o.ready))
 
 function money(n) {
   const v = Math.floor(Number(n) || 0)

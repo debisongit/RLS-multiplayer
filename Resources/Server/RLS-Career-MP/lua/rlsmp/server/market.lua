@@ -395,18 +395,21 @@ local function appState(pid)
   if inv and inv.s == s and inv.expires >= now then out.invite = {from = inv.byName, seconds = inv.expires - now} end
   local spot = M.spotAt(now)
   out.spot = spot and spot.name or nil
+  -- Paid orders stay a player's own, also after a bust threw them out (chat /market pickup still works), so everybody who has some sees them.
+  if m and #m.orders > 0 then
+    out.orders = {}
+    for _, o in ipairs(m.orders) do
+      local info = items.CATALOG[o.item]
+      out.orders[#out.orders + 1] = {id = o.id, item = o.item, label = info and info.label or o.item, n = o.n, spot = o.spot.name,
+        readyIn = math.max(0, o.readyAt - now), ready = o.readyAt <= now}
+    end
+  end
   if not out.member then return out end
   out.rep, out.invitesLeft = m.rep, invitesLeft(m)
   out.items = {}
   for _, o in ipairs(offers()) do
     out.items[#out.items + 1] = {name = o.name, label = o.label, price = o.price, minRep = o.minRep, durable = o.durable,
       locked = m.rep < o.minRep, have = items.count(pid, o.name), onOrder = hasOnOrder(m, o.name)}
-  end
-  out.orders = {}
-  for _, o in ipairs(m.orders) do
-    local info = items.CATALOG[o.item]
-    out.orders[#out.orders + 1] = {id = o.id, item = o.item, label = info and info.label or o.item, n = o.n, spot = o.spot.name,
-      readyIn = math.max(0, o.readyAt - now), ready = o.readyAt <= now}
   end
   return out
 end

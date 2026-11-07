@@ -331,7 +331,7 @@ check(st and st.ready and st.member == false and st.items == nil and st.money ==
 fire("onConsoleInput", "rlsmp market grant eve")
 app(5, "rlsmpMarketGet")
 st = lastSent(5, "rlsmpMarketState")
-check(st.member and st.rep == 10 and st.invitesLeft == 3 and #st.items >= 8 and st.spot ~= nil, "app: a member gets rep, invites, items, the active spot")
+check(st.orders == nil and st.member and st.rep == 10 and st.invitesLeft == 3 and #st.items >= 8 and st.spot ~= nil, "app: a member gets rep, invites, items, the active spot")
 local screw
 for _, it in ipairs(st.items) do if it.name == "screwdriver" then screw = it end end
 check(screw and screw.price == 400 and screw.locked == false and screw.durable == true and screw.have == 0, "app: item rows carry price, lock state, ownership")
@@ -372,6 +372,14 @@ check(lastSent(6, "rlsmpMarketResult").text:find("You are in") and lastSent(6, "
 -- pickup: not there yet, then at the spot
 app(5, "rlsmpMarketAct", {a = "pickup"})
 check(lastSent(5, "rlsmpMarketResult").text:find("not there yet") or lastSent(5, "rlsmpMarketResult").text:find("position"), "app: pickup too early")
+-- a player thrown out by a bust keeps seeing (and can collect) paid orders
+local ex = sessions.get(5).profile.market
+ex.member = false
+app(5, "rlsmpMarketGet")
+st = lastSent(5, "rlsmpMarketState")
+check(st.member == false and st.items == nil and st.orders and #st.orders == 1, "app: an ex-member still sees the orders they paid for")
+ex.member = true
+
 -- one request per second, a click is not eaten by a refresh in the same second
 now = now + 2
 fire("rlsmpMarketGet", 5, "{}")

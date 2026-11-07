@@ -489,7 +489,7 @@ Known gaps: police cannot ping a tracker or be sent after a car you stole with o
 3. Buy a Screwdriver: the money drops, an "Your orders" card appears, and a green note says "Paid ...". The in-game toast about the drop spot still shows.
 4. Wait for the order to read "Ready", drive to the spot, press "Collect here". The package should arrive (`/items` shows it).
 5. As a player who is NOT a member: the app says "You are not in". Have a member invite you from the app: an "<name> invited you" card with Accept appears within a couple of seconds.
-6. Send me: a screenshot of the app, and the game log lines with `rlsmp_market` or `PhoneBlackMarket`/`[Overhaul]` warnings (the browser console is `F12`-less; the log shows UI warnings).
+6. Send me: a screenshot of the app, and the game log lines that contain `Ignoring phone app manifest`, `PhoneBlackMarket`, `rlsmp_market` or `[Overhaul]`.
 
 ### Named failure modes
 | What you see | What it means |

@@ -90,20 +90,19 @@ server("rlsmpMarketClear", {})
 -- Phone app bridge ---------------------------------------------------------------------------------------------
 local sentApp, fakeClock = {}, 100
 TriggerServerEvent = function(name, data) sentApp[#sentApp + 1] = {name = name, data = json.decode(data)} end
-local realClock = os.clock
-os.clock = function() return fakeClock end
+local realTime = os.time
+os.time = function() return fakeClock end
 local function sentCount(name) local n = 0 for _, e in ipairs(sentApp) do if e.name == name then n = n + 1 end end return n end
 market.enable(false)
 check(market.uiGet().enabled == false and market.uiAct("buy", "screwdriver") == false and #sentApp == 0, "app: disabled, nothing sent")
 market.enable(true)
 local got = market.uiGet()
 check(got.enabled and got.state == nil and sentCount("rlsmpMarketGet") == 1, "app: first poll asks the server")
-fakeClock = fakeClock + 0.5
 market.uiGet()
-check(sentCount("rlsmpMarketGet") == 1, "app: polling faster than 1.5 s does not flood the server")
-fakeClock = fakeClock + 1.5
+check(sentCount("rlsmpMarketGet") == 1, "app: polling again in the same second does not flood the server")
+fakeClock = fakeClock + 1
 market.uiGet()
-check(sentCount("rlsmpMarketGet") == 2, "app: asks again after 1.5 s")
+check(sentCount("rlsmpMarketGet") == 2, "app: asks again after a second")
 server("rlsmpMarketState", {ready = true, member = true, rep = 12})
 check(market.uiGet().state.rep == 12, "app: the last state is handed over")
 server("rlsmpMarketResult", {text = "Paid $400."})
@@ -129,5 +128,5 @@ server("rlsmpMarketState", "garbage")
 check(market.uiGet().state.rep == 12, "app: a bad state message changes nothing")
 market.onServerLeave()
 check(market.uiGet().state == nil and market.uiGet().result == nil, "app: leaving the server forgets the state")
-os.clock = realClock
+os.time = realTime
 print("market_client_test: " .. passed .. " checks passed")
