@@ -54,6 +54,27 @@ check(active == 8, "new quota applies at once")
 server({active = -4})
 check(traffic.getQuota() == 8, "negative quota ignored")
 
+-- the quota grows again (a player left): traffic goes back up, never above the player's own amount
+active = 8
+server({active = 8})
+server({active = 20})
+check(active == 20, "quota rises, traffic follows")
+server({active = 99})
+check(active == 30, "never above the player's own original amount")
+active = 4 server({active = 99}) traffic.onUpdate(5)
+check(active == 4, "an amount RLS changed is left alone")
+-- no cutting during a chase
+active = 30 server({active = 99})
+rlsmp_police = {isPursuit = function() return true end}
+server({active = 10})
+check(active == 30, "traffic is not lowered during a pursuit")
+rlsmp_police = nil
+traffic.onUpdate(5)
+check(active == 10, "lowered once the chase is over")
+-- leaving restores the player's setting
+traffic.onServerLeave()
+check(active == 30, "own amount restored on leave")
+
 mp = false
 active = 30
 traffic.onUpdate(5)

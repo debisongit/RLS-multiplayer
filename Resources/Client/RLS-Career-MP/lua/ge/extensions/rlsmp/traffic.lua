@@ -12,6 +12,7 @@ local p3 = require("rlsmp/lib/p3")
 
 local CHECK_EVERY = 3     -- seconds between ceiling checks
 local quota               -- nil until the server sends one
+local original, setByUs   -- the player's own traffic amount before we lowered it, and the value we set (to tell our change from RLS's)
 local timer = 0
 
 local function isMP()
@@ -22,16 +23,33 @@ local function careerActive()
   return overhaul_career_career ~= nil and overhaul_career_career.isActive()
 end
 
--- Lower the active traffic amount to the quota if it is above it. Returns true if we changed it.
+local function chased()
+  return rlsmp_police ~= nil and rlsmp_police.isPursuit ~= nil and rlsmp_police.isPursuit() == true
+end
+
+-- Keep traffic within the quota. Lowers it when above; raises it back (never above the player's own amount)
+-- when the quota grew again, but only if the amount is still the one we set (RLS did not change it meanwhile).
+-- Returns true if we changed it.
 local function enforce()
   if not quota or not isMP() or not careerActive() then return false end
   if not gameplay_traffic or not gameplay_traffic.setActiveAmount or not gameplay_traffic.getTrafficVars then return false end
   local vars = gameplay_traffic.getTrafficVars()
   local current = vars and tonumber(vars.activeAmount)
-  if current and current > quota then
+  if not current then return false end
+  if current > quota then
+    if chased() then return false end   -- cutting traffic in the middle of a chase could deactivate the cops
+    original = math.max(original or 0, current)
     gameplay_traffic.setActiveAmount(quota)
+    setByUs = quota
     p3.count("traffic ceiling applied")
     p3.log("I", string.format("TRAFFIC ceiling lowered %s -> %s", tostring(current), tostring(quota)))
+    return true
+  end
+  if setByUs and current == setByUs and original and quota > current and original > current then
+    local raised = math.min(quota, original)
+    gameplay_traffic.setActiveAmount(raised)
+    setByUs = raised
+    p3.log("I", string.format("TRAFFIC ceiling raised %s -> %s", tostring(current), tostring(raised)))
     return true
   end
   p3.count("traffic checks (already within quota)")
@@ -59,7 +77,12 @@ function M.onUpdate(dtReal)
 end
 
 function M.onServerLeave()
-  quota, timer = nil, 0
+  -- Give the player their own traffic amount back (only if nothing else changed it since).
+  if original and setByUs and gameplay_traffic and gameplay_traffic.getTrafficVars and gameplay_traffic.setActiveAmount then
+    local vars = gameplay_traffic.getTrafficVars()
+    if vars and tonumber(vars.activeAmount) == setByUs then gameplay_traffic.setActiveAmount(original) end
+  end
+  quota, timer, original, setByUs = nil, 0, nil, nil
 end
 
 function M.report() return p3.report() end

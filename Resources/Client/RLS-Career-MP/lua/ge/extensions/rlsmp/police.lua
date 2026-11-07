@@ -27,7 +27,7 @@ local frozen = {}         -- police vehicle id -> its enableRespawn before we to
 local seenRespawns = {}   -- police vehicle id -> respawnCount when the pursuit started
 local leaks = 0           -- units re-placed during a pursuit despite the freeze
 local hookMode = 0        -- last pursuit mode the RLS hook reported for the player (fallback)
-local pursuitStart = 0    -- os.clock() when the current pursuit began
+local pursuitStart = 0    -- wall-clock time when the current pursuit began
 local patched = {}        -- name -> true once a wrapper is installed
 
 local function isMP()
@@ -148,7 +148,7 @@ local function setPursuit(on)
   pursuit = on
   timer = 0
   if on then
-    pursuitStart = os.clock()
+    pursuitStart = os.time()
     p3.count("pursuits started")
     p3.log("I", string.format("pursuit START mode=%s antiTeleport=%s blockRoadblocks=%s",
       tostring(playerPursuitMode()), tostring(settings.antiTeleport), tostring(settings.blockRoadblocks)))
@@ -157,7 +157,7 @@ local function setPursuit(on)
   else
     p3.count("pursuits ended")
     p3.log("I", string.format("pursuit END after %.0fs, units frozen at end=%d, leaks so far=%d",
-      os.clock() - pursuitStart, (function() local n = 0 for _ in pairs(frozen) do n = n + 1 end return n end)(), leaks))
+      os.time() - pursuitStart, (function() local n = 0 for _ in pairs(frozen) do n = n + 1 end return n end)(), leaks))
     releaseAll()
   end
 end
