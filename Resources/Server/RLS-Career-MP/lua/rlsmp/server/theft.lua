@@ -130,13 +130,23 @@ local function labelOf(name)
   return c and c.label or name
 end
 
-local function methodInfo(name)
+-- A signal jammer (owned, durable) silences the alarm of a method marked `alarm = true`.
+local function noiseFor(m, pid)
+  local noise = clamp(n(m.noise, 0.5), 0, 1)
+  if m.alarm == true and pid and items.has(pid, "jammer") then
+    noise = noise * clamp(n(cfg.jammerNoiseFactor, 0.25), 0, 1)
+  end
+  return noise
+end
+
+local function methodInfo(name, pid)
   local m = cfg.methods[name]
   return {
     method = name,
     label = type(m.label) == "string" and m.label or name,
     seconds = math.floor(clamp(n(m.seconds, 10), 1, 600)),
-    noise = clamp(n(m.noise, 0.5), 0, 1),
+    noise = noiseFor(m, pid),
+    jammed = m.alarm == true and pid ~= nil and items.has(pid, "jammer"),
     failChance = clamp(n(m.failChance, 0), 0, 1),
     tracker = m.tracker == true,
   }
@@ -158,7 +168,7 @@ function M.choose(pid, value, year, wanted)
   for _, name in ipairs(list) do
     local lack = M.missing(pid, name)
     if #lack == 0 then
-      local info = methodInfo(name)
+      local info = methodInfo(name, pid)
       info.tier = tier
       return info
     end
@@ -319,6 +329,7 @@ local function onDone(pid, d)
     return
   end
   local tracker = p.tracker and not items.has(pid, "tracker_blocker")
+  if p.tracker and not tracker then chat(pid, "Your tracker blocker killed the GPS tracker.") end
   local seen, chance = M.rollWitness(d.witnesses, p.noise)
   local delay = M.reportDelay(seen, tracker)
   local s = sessions.get(pid)

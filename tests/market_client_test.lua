@@ -86,4 +86,47 @@ check(true, "no debugDrawer: no error")
 market.enable(false)
 check(count(market._drops()) == 0, "disable forgets drops")
 server("rlsmpMarketClear", {})
+
+-- Phone app bridge ---------------------------------------------------------------------------------------------
+local sentApp, fakeClock = {}, 100
+TriggerServerEvent = function(name, data) sentApp[#sentApp + 1] = {name = name, data = json.decode(data)} end
+local realTime = os.time
+os.time = function() return fakeClock end
+local function sentCount(name) local n = 0 for _, e in ipairs(sentApp) do if e.name == name then n = n + 1 end end return n end
+market.enable(false)
+check(market.uiGet().enabled == false and market.uiAct("buy", "screwdriver") == false and #sentApp == 0, "app: disabled, nothing sent")
+market.enable(true)
+local got = market.uiGet()
+check(got.enabled and got.state == nil and sentCount("rlsmpMarketGet") == 1, "app: first poll asks the server")
+market.uiGet()
+check(sentCount("rlsmpMarketGet") == 1, "app: polling again in the same second does not flood the server")
+fakeClock = fakeClock + 1
+market.uiGet()
+check(sentCount("rlsmpMarketGet") == 2, "app: asks again after a second")
+server("rlsmpMarketState", {ready = true, member = true, rep = 12})
+check(market.uiGet().state.rep == 12, "app: the last state is handed over")
+server("rlsmpMarketResult", {text = "Paid $400."})
+local r1 = market.uiGet().result
+check(r1.text == "Paid $400." and r1.seq == 1, "app: the result text with a sequence number")
+server("rlsmpMarketResult", {text = "Paid $400."})
+check(market.uiGet().result.seq == 2, "app: the same text again is a new result (the app shows it again)")
+check(market.uiAct("buy", "screwdriver", 2) == true, "app: buy sent")
+local act = sentApp[#sentApp]
+check(act.name == "rlsmpMarketAct" and act.data.a == "buy" and act.data.item == "screwdriver" and act.data.n == 2, "app: buy carries item and count")
+local asks = sentCount("rlsmpMarketGet")
+market.uiGet()
+check(sentCount("rlsmpMarketGet") == asks + 1, "app: after an action the next poll refreshes at once")
+market.uiAct("invite", "fay")
+check(sentApp[#sentApp].data.a == "invite" and sentApp[#sentApp].data.who == "fay", "app: invite carries the name")
+local reportsBefore = reports
+market.uiAct("pickup")
+check(sentApp[#sentApp].data.a == "pickup" and reports == reportsBefore + 1, "app: pickup asks for a fresh position report")
+market.uiAct("accept")
+check(sentApp[#sentApp].data.a == "accept", "app: accept")
+check(market.uiAct(42) == false and market.uiAct(nil) == false, "app: a non-text action is refused here")
+server("rlsmpMarketState", "garbage")
+check(market.uiGet().state.rep == 12, "app: a bad state message changes nothing")
+market.onServerLeave()
+check(market.uiGet().state == nil and market.uiGet().result == nil, "app: leaving the server forgets the state")
+os.time = realTime
 print("market_client_test: " .. passed .. " checks passed")

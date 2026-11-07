@@ -248,6 +248,20 @@ Console: `rlsmp market grant <player>` (online player becomes a member with `mar
 | S→C | `rlsmpMarketDrop` | `{id, item, label, n, spot, x, y, z, readyIn}` a paid package; sent on buy and again once after each join for every open order. The client toasts, draws a marker at a ready spot within 300 m and, inside 15 m, says "type /market pickup" and asks `rlsmp_positions.reportNow()` |
 | S→C | `rlsmpMarketClear` | `{id}` package collected |
 
+### Phone app (RLS phone, "Black Market")
+
+Files: `gameplay/overhaul/phone/apps/black-market.json` (RLS phone app manifest with one `uiRoutes` row), `ui/ui-vue/mods/rls_career_mp/phone/PhoneBlackMarket.vue` (the screen),
+client `rlsmp/market.lua` (`M.uiGet()` every 1.5 s, `M.uiAct(action, a, b)`; reachable from the UI as `lua.rlsmp_market.uiGet()`), server `market.lua` ("Phone app channel").
+The screen has no rules: it shows what the server last sent and relays taps. Nothing in the view imports from the RLS mod's files.
+
+| Direction | Event | Body |
+|---|---|---|
+| C→S | `rlsmpMarketGet` | `{}` at most one answer per player per second |
+| S→C | `rlsmpMarketState` | `{ready, member, money, spot, invite = {from, seconds}?}` plus, for members, `{rep, invitesLeft, items = [{name, label, price, minRep, durable, locked, have, onOrder}], orders = [{id, item, label, n, spot, readyIn, ready}] (orders also for players who were thrown out but still have paid orders)}` |
+| C→S | `rlsmpMarketAct` | `{a = "buy" \| "pickup" \| "invite" \| "accept", item?, n?, who?}`; at most one per player per second (a separate limit from Get). Runs the same command as the chat |
+| S→C | `rlsmpMarketResult` | `{text}` what the command would have said in chat (collected instead of sent to chat), then a fresh `rlsmpMarketState` |
+
+
 ## Flow control
 
 - `rlsmpChunkProgress {id, got}` (client to server): sent every 8 chunks received, plus a heartbeat about once per second (from `rlsmp_core`)
@@ -342,6 +356,7 @@ Weights are `{name = number >= 0}` (at most 64 entries, names up to 64 character
   `seenReportMin`-`seenReportMax` s later; unseen: `unseenReportSeconds`; a method with `tracker` (luxury) reports within `trackerReportSeconds`
   unless the thief owns a `tracker_blocker`. Records live in `stolen.json` (`stolen[plate]`, plate cleaned like `plateRecords.cleanPlate`), pruned
   after `keepHours`. On the report the server calls `plateRecords.flag(plate, model, color, "stolen", accountId)` if that module exists (`theft.reportHook`).
+- Items that change a theft: immobilizer-era cars need `lockout_kit` + `key_programmer` + `blank_key` (the `key_programmer` method, tools kept, blank key used up). `jammer` (owned) multiplies the noise of methods marked `alarm = true` (luxury) by `theft.jammerNoiseFactor` (0.25) in `rlsmpTheftGo` and in the witness roll. `tracker_blocker` (owned) turns the fast tracker report off and the thief gets a chat line.
 - The stolen car is not added to the garage inventory. The client keeps it in `rlsmp_theft.stolenCars()`; `vehicleGuard` lets the player into exactly
   the converted vehicle ids (`lib/theft` converted set, removed when the car is destroyed). Log tag `RLSMP-THEFT`.
 

@@ -321,6 +321,80 @@ check(market.fenceQuote(-5) == 0 and market.fenceQuote("x") == 0 and market.fenc
 say(3, "/market fence")
 check(last(3):find("35%%") and last(3):find("car theft"), "fence stub explains")
 
+-- Phone app channel ------------------------------------------------------------------------------------------
+join(5, "eve") join(6, "fay")
+local function app(pid, ev, t) now = now + 2 fire(ev, pid, json.encode(t or {})) end
+local function chatCount() return #chat end
+app(5, "rlsmpMarketGet")
+local st = lastSent(5, "rlsmpMarketState")
+check(st and st.ready and st.member == false and st.items == nil and st.money == 100000, "app: a non-member gets no shop")
+fire("onConsoleInput", "rlsmp market grant eve")
+app(5, "rlsmpMarketGet")
+st = lastSent(5, "rlsmpMarketState")
+check(st.orders == nil and st.member and st.rep == 10 and st.invitesLeft == 3 and #st.items >= 8 and st.spot ~= nil, "app: a member gets rep, invites, items, the active spot")
+local screw
+for _, it in ipairs(st.items) do if it.name == "screwdriver" then screw = it end end
+check(screw and screw.price == 400 and screw.locked == false and screw.durable == true and screw.have == 0, "app: item rows carry price, lock state, ownership")
+local lockedRow
+for _, it in ipairs(st.items) do if it.name == "jammer" then lockedRow = it end end
+check(lockedRow and lockedRow.locked == true and lockedRow.minRep == 50, "app: a high tier item shows as locked")
+-- buying through the app: same rules, same money, the text comes back instead of chat
+local chats = chatCount()
+app(5, "rlsmpMarketAct", {a = "buy", item = "screwdriver", n = 1})
+local res = lastSent(5, "rlsmpMarketResult")
+check(res and res.text:find("Paid") and chatCount() == chats, "app: buy answers in the app, nothing goes to chat")
+check(profile(5).ledger.money == 100000 - 400 and #profile(5).market.orders == 1, "app: the money and the order are the normal ones")
+st = lastSent(5, "rlsmpMarketState")
+check(#st.orders == 1 and st.orders[1].item == "screwdriver" and st.orders[1].ready == false and st.money == 99600, "app: a fresh state follows the action")
+app(5, "rlsmpMarketAct", {a = "buy", item = "screwdriver", n = 1})
+check(lastSent(5, "rlsmpMarketResult").text:find("already have"), "app: refusals come back as text too")
+app(5, "rlsmpMarketAct", {a = "buy", item = "jammer", n = 1})
+check(lastSent(5, "rlsmpMarketResult").text:find("reputation"), "app: the rep gate holds")
+app(5, "rlsmpMarketAct", {a = "buy", item = "nonsense", n = 99999})
+check(lastSent(5, "rlsmpMarketResult").text:find("Usage"), "app: junk item is refused")
+check(profile(5).ledger.money == 99600, "app: junk charged nothing")
+app(5, "rlsmpMarketAct", {a = "teleport"})
+local before = lastSent(5, "rlsmpMarketResult")
+app(5, "rlsmpMarketAct", "not a table")
+app(5, "rlsmpMarketAct", {a = 5})
+check(lastSent(5, "rlsmpMarketResult") == before, "app: unknown actions and garbage are ignored")
+-- a non-member cannot buy through the app
+app(6, "rlsmpMarketAct", {a = "buy", item = "screwdriver", n = 1})
+check(lastSent(6, "rlsmpMarketResult").text:find("Members only") and profile(6).ledger.money == 100000, "app: non-member refused")
+-- invite and accept through the app
+app(5, "rlsmpMarketAct", {a = "invite", who = "fay"})
+check(lastSent(5, "rlsmpMarketResult").text:find("Invited fay"), "app: invite")
+app(6, "rlsmpMarketGet")
+st = lastSent(6, "rlsmpMarketState")
+check(st.member == false and st.invite and st.invite.from == "eve", "app: the invited player sees the invite")
+app(6, "rlsmpMarketAct", {a = "accept"})
+check(lastSent(6, "rlsmpMarketResult").text:find("You are in") and lastSent(6, "rlsmpMarketState").member == true, "app: accept")
+-- pickup: not there yet, then at the spot
+app(5, "rlsmpMarketAct", {a = "pickup"})
+check(lastSent(5, "rlsmpMarketResult").text:find("not there yet") or lastSent(5, "rlsmpMarketResult").text:find("position"), "app: pickup too early")
+-- a player thrown out by a bust keeps seeing (and can collect) paid orders
+local ex = sessions.get(5).profile.market
+ex.member = false
+app(5, "rlsmpMarketGet")
+st = lastSent(5, "rlsmpMarketState")
+check(st.member == false and st.items == nil and st.orders and #st.orders == 1, "app: an ex-member still sees the orders they paid for")
+ex.member = true
+
+-- one request per second, a click is not eaten by a refresh in the same second
+now = now + 2
+fire("rlsmpMarketGet", 5, "{}")
+local n0 = #sent
+fire("rlsmpMarketGet", 5, "{}")
+check(#sent == n0, "app: refresh flood answered once per second")
+fire("rlsmpMarketAct", 5, json.encode({a = "pickup"}))
+check(lastSent(5, "rlsmpMarketResult") ~= before and #sent > n0, "app: an action right after a refresh still works")
+cfg.market.enabled = false
+local n1 = #sent
+app(5, "rlsmpMarketGet")
+app(5, "rlsmpMarketAct", {a = "pickup"})
+check(#sent == n1, "app: closed market answers nothing")
+cfg.market.enabled = true
+
 -- Switched off ---------------------------------------------------------------------------------------
 cfg.market.enabled = false
 say(3, "/market list")

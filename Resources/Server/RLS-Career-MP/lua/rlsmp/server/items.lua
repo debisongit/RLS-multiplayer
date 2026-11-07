@@ -15,6 +15,7 @@ local M = {}
 M.CATALOG = {
   screwdriver     = {label = "Screwdriver", durable = true},
   window_punch    = {label = "Window punch", durable = true},
+  lockout_kit     = {label = "Lockout kit", durable = true},
   key_programmer  = {label = "Key programmer", durable = true},
   blank_key       = {label = "Blank key", durable = false},
   relay_box       = {label = "Relay box", durable = true},
