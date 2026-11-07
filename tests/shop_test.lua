@@ -80,6 +80,7 @@ join(1, "ann")
 upload(1, save(shopFile({1, 2, 3})))
 check(not exists(shopJson), "switch off: no shop.json")
 check(shop.state().sourceAccountId == nil, "switch off: no source")
+check(shop.markSold(1) == false and not exists(shopJson), "switch off: markSold does nothing")
 cfg.shop.shared = true
 
 -- A career that has not bought its starter car never becomes the source.

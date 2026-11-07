@@ -142,7 +142,7 @@ end
 
 -- Take a listing out of the shared stock (call it when a player buys it). Returns true if the master had it.
 function M.markSold(shopId)
-  if shopId == nil or not state then return false end
+  if shopId == nil or not enabled() then return false end
   local id = tostring(shopId)
   state.sold[id] = util.now()
   local had = false
