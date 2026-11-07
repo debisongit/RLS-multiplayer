@@ -118,8 +118,21 @@ check(lastSent(1, "rlsmpFleetDo").act == "add", "client asked to upload the car"
 clientUpload(1, "f1", "fleetAdd", {inv = 3, rec = {model = "x"}})
 check(lastSent(1, "rlsmpFleetAck").ok == false, "bad vehicle record refused")
 clientUpload(1, "f2", "fleetAdd", {inv = 3, rec = car})
+check(lastSent(1, "rlsmpFleetAck").ok == false, "car the server save does not have is refused")
+local pf = sessions.get(1).profile.save.files
+pf["career/vehicles/3.json"] = json.encode({model = "pickup"})
+clientUpload(1, "f2b", "fleetAdd", {inv = 3, rec = car})
+check(lastSent(1, "rlsmpFleetAck").ok == false, "car that does not match the saved model is refused")
+pf["career/vehicles/3.json"] = json.encode({model = "etk800"})
+clientUpload(1, "f2", "fleetAdd", {inv = 3, rec = car})
 local ack = lastSent(1, "rlsmpFleetAck")
 check(ack.ok and ack.fid == "1" and ack.inv == 3, "car added to fleet")
+check(sessions.get(1).profile.fleetOut["3"] == "1", "slot remembered as out")
+clientUpload(1, "f2c", "fleetAdd", {inv = 3, rec = car})
+check(lastSent(1, "rlsmpFleetAck").ok == false, "same slot cannot be added twice before the save drops it")
+pf["career/vehicles/3.json"] = nil
+require("rlsmp.server.profiles").applyUpload(sessions.get(1).profile, {all = {["info.json"] = require("rlsmp/lib/transfer").checksum(pf["info.json"] or "")}, files = {["info.json"] = pf["info.json"] or ""}})
+check(sessions.get(1).profile.fleetOut["3"] == nil, "slot forgotten once the save no longer has the car")
 say(2, "/biz fleet")
 check(last(2):find("#1 ETK 800 %- available"), "fleet list shows the car")
 

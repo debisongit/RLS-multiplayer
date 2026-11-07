@@ -167,6 +167,13 @@ function M.applyUpload(profile, upload)
     end
   end
 
+  -- A car that left for a fleet is forgotten once the client's save no longer lists it.
+  if profile.fleetOut then
+    for inv in pairs(profile.fleetOut) do
+      if nextFiles["career/vehicles/" .. inv .. ".json"] == nil then profile.fleetOut[inv] = nil end
+    end
+  end
+
   profile.save.files = nextFiles
   -- Tell the client the checksum of any file we changed, so its next delta is right.
   if result.corrected then

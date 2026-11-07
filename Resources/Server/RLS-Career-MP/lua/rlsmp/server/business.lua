@@ -280,12 +280,33 @@ local function validRecord(rec)
     and #util.jsonEncode(rec) <= cfg.business.maxRecordBytes
 end
 
+-- The car must exist in the save the SERVER holds (not just in what the client claims), and must not
+-- already be on its way into a fleet. Returns true, or false + a message for the player.
+local function checkOwnCar(s, inv, rec)
+  local files = s.profile and s.profile.save and s.profile.save.files or {}
+  local text = files["career/vehicles/" .. tostring(inv) .. ".json"]
+  if not text then return false, "The server save does not have that car yet. Wait for the next autosave and try again." end
+  local stored = util.jsonDecode(text)
+  if type(stored) == "table" and type(stored.model) == "string" and stored.model ~= rec.model then
+    return false, "That car does not match your saved car."
+  end
+  local out = s.profile.fleetOut
+  if out and out[tostring(inv)] then
+    return false, "That car is already in a fleet. Remove the old copy first (sell or scrap it)."
+  end
+  return true
+end
+
 local function onFleetAdd(pid, s, data)
   local b = myBusiness(s)
   local ack = {act = "add", ok = false, inv = data.inv}
   local count = 0
   if b then for _ in pairs(b.fleet) do count = count + 1 end end
-  if b and validRecord(data.rec) and count < cfg.business.maxFleet then
+  local carOk, why = true, nil
+  if b and validRecord(data.rec) then carOk, why = checkOwnCar(s, data.inv, data.rec) end
+  if b and validRecord(data.rec) and not carOk then
+    say(pid, why)
+  elseif b and validRecord(data.rec) and count < cfg.business.maxFleet then
     local fid = tostring(b.nextFleet)
     b.nextFleet = b.nextFleet + 1
     data.rec.fleetId = fid
@@ -294,6 +315,10 @@ local function onFleetAdd(pid, s, data)
     addLog(b, s.name, "fleet add", tonumber(fid))
     save(b)
     ack.ok, ack.fid = true, fid
+    -- Remember which inventory slot just left, so a crash before the next save can't let the same car be added twice.
+    s.profile.fleetOut = s.profile.fleetOut or {}
+    s.profile.fleetOut[tostring(data.inv)] = fid
+    profiles.persist(s.profile)
     tell(b, s.name .. " added " .. b.fleet[fid].name .. " to the fleet (#" .. fid .. ").")
   else
     say(pid, "Could not add that car to the fleet.")

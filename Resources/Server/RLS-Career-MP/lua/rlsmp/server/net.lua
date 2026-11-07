@@ -96,11 +96,9 @@ local function pump()
         job.next = job.next + 1
         budget = budget - 1
         if job.next > #job.chunks then
-          util.info(string.format("[rlsmp-timing] sent %s #%s to player %s: %d chunks in %.1fs",
-            tostring(job.header.kind), tostring(job.header.id), tostring(pid), #job.chunks, os.clock() - (job.startedAt or os.clock())))
+          util.info(string.format("[rlsmp-timing] sent %s #%s to player %s: %d bytes, %d chunks, %.1fs",
+            tostring(job.header.kind), tostring(job.header.id), tostring(pid), job.bytes, #job.chunks, os.clock() - job.t0))
           table.remove(queue, 1)
-          util.info(string.format("[rlsmp-timing] sent %s to player %d: %d bytes in %d chunks, %.2fs",
-            tostring(job.header.kind), pid, job.bytes, #job.chunks, os.clock() - job.t0))
         end
       end
     end
