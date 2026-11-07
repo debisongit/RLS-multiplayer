@@ -8,7 +8,7 @@ Plan for about 30 minutes, one player (a second player is optional, see the end)
 
 | Component | Version |
 |---|---|
-| RLS-Career-MP (this repo) | default branch `claude/amazing-sagan-kh6ecn`, code commit `643b8e9`, build `0.4.2` (Phase 1-3 together; later commits only change documents) |
+| RLS-Career-MP (this repo) | default branch `claude/amazing-sagan-kh6ecn`, code commit `9c14991`, build `0.4.3` (Phase 1-3 together; later commits only change documents) |
 | RLS Career Overhaul source read | v2.8.0, commit `e701d9e2218ca12ff70ba4a09c0c91514e96e380` (29 Oct 2026) |
 | BeamNG.drive | **not pinned, write yours down** (docs target 0.38 / 0.39) |
 | BeamMP (server and client) | **not pinned, write yours down** |
@@ -25,7 +25,7 @@ Vanilla BeamNG's traffic code was never read; only RLS's code was.
    ```bash
    tools/install_to_server.sh /path/to/BeamMP-Server
    ```
-   It prints `Installed RLS-Career-MP build 0.4.2`. It is a bash script: on Windows run it from Git Bash or WSL.
+   It prints `Installed RLS-Career-MP build 0.4.3`. It is a bash script: on Windows run it from Git Bash or WSL.
 2. Put the RLS Career Overhaul zip in the server's `Resources/Client/` as well.
 3. On your own PC, delete any local `rls_career_overhaul_v2.8.0_hotfix.zip` (or any other copy of RLS) from your BeamNG
    mods folder, so RLS is not unloaded and rebuilt on every join.
@@ -39,8 +39,8 @@ Vanilla BeamNG's traffic code was never read; only RLS's code was.
    would never visibly act. Any `totalBudget` above 0 fixes the budget instead. Under `"police"`,
    leave `"antiTeleport": true` and `"blockRoadblocks": true`. Start the server again.
 7. Join with BeamNG. In BeamNG's own settings, set the **traffic amount to 15 or more** (the max is fine).
-8. **Check the build.** The server log must say `joined with client build 0.4.2 (server build 0.4.2)` and the game log must
-   say `client loaded, build 0.4.2`. If the two builds differ, you are running an old client zip (this has already wasted a test round): re-run the install
+8. **Check the build.** The server log must say `joined with client build 0.4.3 (server build 0.4.3)` and the game log must
+   say `client loaded, build 0.4.3`. If the two builds differ, you are running an old client zip (this has already wasted a test round): re-run the install
    command, restart the server and rejoin.
 
 Client-side settings are not stored in the server file, so nothing else needs changing. Do not rename the zip.
@@ -56,11 +56,11 @@ you relaunch the game.
    ```
 2. Pull out only our lines (replace the path with the one printed above):
    ```powershell
-   Select-String -Path "C:\path\printed\above\beamng.log" -SimpleMatch "RLSMP-P3" | ForEach-Object { $_.Line } | Set-Content p3-client.txt
+   Select-String -Path "C:\path\printed\above\beamng.log" -SimpleMatch "RLSMP-P3","RLSMP-GUARD" | ForEach-Object { $_.Line } | Set-Content p3-client.txt
    ```
 3. Same for the server. Run this in the BeamMP server folder:
    ```powershell
-   Select-String -Path "Server.log" -SimpleMatch "RLSMP-P3" | ForEach-Object { $_.Line } | Set-Content p3-server.txt
+   Select-String -Path "Server.log" -SimpleMatch "RLSMP-P3","RLSMP-GUARD" | ForEach-Object { $_.Line } | Set-Content p3-server.txt
    ```
 4. Send back `p3-client.txt` and `p3-server.txt`, plus the answers to the "What you saw" list at the bottom.
 
@@ -199,3 +199,51 @@ When the second player leaves, the first should get `active=6` again. Send both 
 3. Did the chase end properly when you evaded and when you were arrested?
 4. Did traffic look thinner than usual with the settings above?
 5. Anything that looked broken outside a chase (police, traffic, money, saving)?
+
+## Taxis and riding along (build 0.4.3)
+
+Two things changed in the vehicle guard (it used to refuse every AI car and every other player's car):
+
+1. **Taxis.** The taxi RLS hailed for you can be entered again. RLS's own taxi state decides (`waitingForPickup`,
+   `pullingOverForPickup`, `occupied`, ...). Every other AI taxi is still refused.
+2. **Riding along in a friend's car.** Off by default. To try it, in the server's `config.json` set
+   `"vehicles": {"enabled": true, "allowPassengers": true}` and restart. A player **on foot** can then get into another
+   player's car as a passenger (BeamMP gives the passenger camera). You cannot drive it.
+
+Log tag for both is `RLSMP-GUARD` (already included in the capture commands above).
+
+### Test steps
+1. **Taxi.** On foot, hail a taxi the normal RLS way (phone or waving). Walk to it and get in. Ride a short way, then get out.
+   Expected log lines:
+   ```
+   RLSMP-GUARD|ALLOWED id=123 jbeam=... beammp=own: taxi hailed for you (waitingForPickup)
+   RLSMP-GUARD|switch 45(unicycle) -> 123(...): ok (hired cab), own walkers now: 0
+   ```
+   `beammp=` may say `own` or `unregistered`, depending on whether BeamMP has registered the cab yet. Either is fine.
+   After getting out you should be on foot next to the taxi.
+2. **Another taxi.** Try to get into a taxi you did not hail. You should get "You can't drive that vehicle" and a line
+   `BLOCKED ... AI traffic (taxi state: ...)`.
+3. **Riding along (two players, passengers on).** Player A drives. Player B walks up on foot and gets into A's car.
+   Expected on B: `ALLOWED ... passenger seat in another player's car`, then a passenger camera, and B cannot steer.
+   Then B presses F (get out). B should stand beside the car.
+4. **Another player's taxi or parked car (passengers on).** B tries to get into one of A's AI cars, for example a taxi
+   driving past A. It must be refused: `BLOCKED ... another player's traffic or parked car`.
+5. **Passengers off (default).** B tries to get into A's car: refused with `BLOCKED ... (passengers off)`.
+
+### Named failure modes
+| What you see | What it means |
+|---|---|
+| Hailed taxi still refused: `BLOCKED ... AI traffic (taxi state: X)` while the cab waits for you | The taxi state name `X` is not in my list. Send the log line. |
+| After entering a taxi or a friend's car you are teleported to some other car or stuck | BeamMP or RLS moved you. Send the lines `switch ...` and any `Found suitable vehicle` line from the game log. `own walkers now: 0` right after a switch is normal while inside a car. |
+| After getting out you stand at the default spawn or cannot get out | The walking character was not recreated. Send the log. Turn `allowPassengers` back off. |
+| Passenger sees the road but the car "teleports" or lags | Normal: you are not really in the car, you see what BeamMP shows. Tell me how bad it is. |
+| RLS screens (fuel, damage, phone) misbehave while riding | RLS treats the car you sit in as your car. Tell me which screen. |
+
+### Known gaps
+- Other players probably will not see the passenger sitting in the car.
+- While you ride, RLS thinks the friend's car is your car: police pursuits, traffic around you and fuel or damage screens
+  may act oddly. The server's claims ignore passenger reports, so crashes are still judged by the drivers.
+- A walking player is never allowed into another player's walking character, and nobody can drive someone else's car.
+- Another player's AI traffic is recognised by the name-tag flag that `trafficLabels` sets, which can take 2 to 4 seconds for a car
+  that has only just appeared. In that short window a new traffic car of A's could be entered by B by mistake. Tell me if it happens.
+

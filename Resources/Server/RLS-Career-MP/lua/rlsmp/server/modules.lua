@@ -17,4 +17,5 @@ return {
   "rlsmp.server.claims",
   "rlsmp.server.traffic",
   "rlsmp.server.trafficPolice",
+  "rlsmp.server.vehicles",
 }

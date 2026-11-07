@@ -117,6 +117,17 @@ Payout = damage of the other car x fault share x repeat multiplier (x1.5 per ext
 S->C `rlsmpClaimPenalty {damage}` makes the at-fault game file an RLS insurance claim (driver score drops).
 `claims.dryRun = true` (default) only tells players what would happen.
 
+## Vehicle rules
+
+| Direction | Event | Body |
+|---|---|---|
+| S→C | `rlsmpVehicleConfig` | `{allowPassengers}` sent once when a player finishes loading |
+
+The client vehicle guard refuses other players' cars, AI traffic and parked cars. Exceptions: the taxi RLS hailed for the player
+(decided by RLS's own taxi state: `pullingOverForPickup`, `waitingForPickup`, `occupied`, `pullingOverForDropoff`, `waitingForDropoff`),
+and, when `allowPassengers` is on, another player's car for a player who is on foot (a passenger; BeamMP gives the passenger camera).
+Log lines use the tag `RLSMP-GUARD`.
+
 ## Reserved prefixes for later phases
 
 - `rlsmpBiz*` – Phase 2 business / syndicate (Claude A)
