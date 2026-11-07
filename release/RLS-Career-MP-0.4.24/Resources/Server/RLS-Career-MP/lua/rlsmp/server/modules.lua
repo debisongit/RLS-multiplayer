@@ -18,6 +18,7 @@ return {
   "rlsmp.server.positions",
   "rlsmp.server.traffic",
   "rlsmp.server.trafficPolice",
+  "rlsmp.server.plateRecords",
   "rlsmp.server.trafficVariety",
   "rlsmp.server.weather",
   "rlsmp.server.trafficAdmin",
