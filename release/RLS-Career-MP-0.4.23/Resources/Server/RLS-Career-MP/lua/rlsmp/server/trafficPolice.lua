@@ -40,6 +40,9 @@ function M.push()
   end
 end
 
+-- Settings changed (by the traffic menu): send everybody the new ones.
+function M.resend() told = {} end
+
 function M.init(config)
   cfg = config.police
   told = {}

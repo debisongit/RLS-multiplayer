@@ -101,6 +101,8 @@ M.defaults = {
     -- Weight per car Type of the game's own model list ("Car", "Truck", ...; the game log lists the Types it saw).
     -- Missing = 1, 0 = never. Example: typeWeights = {Truck = 0.5}
     typeWeights = {},
+    -- Weight per single car model (the game's model name, for example "pickup"); wins over the weight of its Type. 0 = never.
+    models = {},
     -- Models from mods this server ships (zip in Resources/Client): model name -> weight. Games without the model skip it.
     -- Example: mods = {mycar = 3}. Every player downloads every mod zip when joining, so keep big car mods to a few.
     mods = {},
@@ -121,6 +123,13 @@ M.defaults = {
     -- Live swapping: a traffic car that nobody can see is replaced by a model that fits the road class and day or night better.
     -- enabled = only watch and log what would happen (changes nothing). live = really replace the cars (EXPERIMENTAL, never tried in the game).
     swap = {enabled = false, live = false, perMinute = 2, hiddenSeconds = 5, checkSeconds = 2, minRatio = 1.5, maxFailures = 3},
+  },
+
+  -- Who may change the traffic settings in the game (the menu on the [ key or /trafficmenu). Checked on the server, by BeamMP account name
+  -- (not case sensitive; guests never count) and, if you like, by BeamMP account id.
+  trafficAdmin = {
+    names = {"polakpls", "sucuk21"},
+    accountIds = {},
   },
 
   smartTraffic = {
@@ -163,7 +172,8 @@ M.defaults = {
   },
 
   -- Pink-slip duels (/duel <player>). OFF until you list at least one course and set enabled = true.
-  -- A course is {name = "airport", start = {x, y, z}, finish = {x, y, z}} in map coordinates; both players must
+  -- A course is {name = "airport", start = {x, y, z}, finish = {x, y, z}} in map coordinates
+  -- ({x = .., y = .., z = ..} works too); both players must
   -- be near the start. The loser's car moves to the winner. Untested in-game: try with spare cars first.
   duel = {
     enabled = false,
@@ -174,6 +184,12 @@ M.defaults = {
     raceTimeoutSeconds = 600,
     minRaceSeconds = 8,
     retrySeconds = 30,
+    -- Anti-cheat plausibility (positions are client-reported): fastest believable speed in m/s between pings and
+    -- from start to finish, and the fewest position pings (1 per second) a finisher must have sent during the race.
+    maxSpeed = 120,
+    minPings = 5,
+    -- Refuse a duel when the cheaper car is more than this many percent cheaper than the other one (0 = off).
+    maxValueGapPercent = 0,
   },
 
   vehicles = {

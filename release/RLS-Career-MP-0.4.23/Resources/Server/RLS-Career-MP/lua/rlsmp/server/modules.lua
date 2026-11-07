@@ -20,10 +20,12 @@ return {
   "rlsmp.server.trafficPolice",
   "rlsmp.server.trafficVariety",
   "rlsmp.server.weather",
+  "rlsmp.server.trafficAdmin",
   "rlsmp.server.smartTraffic",
   "rlsmp.server.vehicles",
   "rlsmp.server.events",
   "rlsmp.server.duel",
   "rlsmp.server.clock",
+  "rlsmp.server.items",
   "rlsmp.server.shop",
 }
