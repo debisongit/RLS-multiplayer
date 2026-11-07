@@ -1,0 +1,32 @@
+# Publishes a GitHub Release when a version tag (v0.4.13) is pushed.
+# The release has a ready-to-copy zip (server plugin + client mod) and the changelog entry for that version.
+name: Release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the release folder
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq lua5.3 luajit
+          tools/make_release.sh
+          build="${GITHUB_REF_NAME#v}"
+          (cd release && zip -qr "RLS-Career-MP-$build.zip" "RLS-Career-MP-$build")
+      - name: Notes for this version
+        run: |
+          build="${GITHUB_REF_NAME#v}"
+          awk -v v="## $build" '$0==v{p=1;next} /^## /{p=0} p' CHANGELOG.md > notes.md
+          echo "" >> notes.md
+          echo "Install: unzip, copy the Resources folder into your BeamMP server folder (see INSTALL.txt inside). Full history: CHANGELOG.md." >> notes.md
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          build="${GITHUB_REF_NAME#v}"
+          gh release create "$GITHUB_REF_NAME" "release/RLS-Career-MP-$build.zip" \
+            --title "RLS-Career-MP $build" --notes-file notes.md --prerelease
