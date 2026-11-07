@@ -2,8 +2,14 @@
 -- SPDX-License-Identifier: AGPL-3.0-only
 --
 -- While the player is being chased (their traffic-data pursuit.mode >= 1):
---  * EVERY police unit has its respawn switched off (RLS's per-vehicle `enableRespawn` flag), so it
---    cannot be faded out and re-placed along the route ahead of you;
+--  * police units tied to the chase have their respawn switched off (RLS's per-vehicle `enableRespawn`
+--    flag), so they cannot be faded out and re-placed along the route ahead of you. "Tied" means: the
+--    unit RLS sees as nearest (`pursuit.sight.policeId`), the unit of the current roadblock
+--    (`pursuit.roadblockTargetId`), or any police car within FREEZE_RADIUS of the player's car. A unit is
+--    released again once it is none of these and further than RELEASE_RADIUS (a little gap so a unit on
+--    the edge does not flip every check). RLS sets `role.targetId` on EVERY unit when a pursuit starts
+--    (setPursuitMode is always called without a police list), so we cannot use that to pick units.
+--    If the player's position is unknown, every police unit is frozen (the old behaviour, safe side);
 --  * roadblocks (RLS places police cars on the road ahead) are refused;
 --  * `gameplay_traffic.forceTeleport` on a police unit is refused.
 -- Everything is restored when the pursuit ends. Outside multiplayer RLS runs untouched.
@@ -19,6 +25,8 @@ local net = require("rlsmp/lib/net")
 local p3 = require("rlsmp/lib/p3")
 
 local CHECK_EVERY = 0.5   -- seconds between pursuit checks
+local FREEZE_RADIUS = 300 -- metres: police this close to the player's car are frozen
+local RELEASE_RADIUS = 350 -- metres: frozen units further than this (and not in the pursuit data) are released
 
 local settings = {antiTeleport = true, blockRoadblocks = true}
 local pursuit = false
@@ -28,7 +36,7 @@ local seenRespawns = {}   -- police vehicle id -> respawnCount when the pursuit 
 local leaks = 0           -- units re-placed during a pursuit despite the freeze
 local hookMode = 0        -- last pursuit mode the RLS hook reported for the player (fallback)
 local pursuitStart = 0    -- wall-clock time when the current pursuit began
-local patched = {}        -- name -> true once a wrapper is installed
+local patched = {}        -- name -> true once a wrapper is installed (log once)
 
 local function isMP()
   return MPCoreNetwork ~= nil and MPCoreNetwork.isMPSession ~= nil and MPCoreNetwork.isMPSession()
@@ -64,28 +72,85 @@ local function playerTraffic()
   return playerId, gameplay_traffic.getTrafficData()
 end
 
--- Freeze respawn for every police unit and watch for units that get re-placed anyway.
+-- Works for BeamNG vec3 and plain {x, y, z} tables alike.
+local function hasXYZ(p)
+  local t = type(p)
+  return (t == "table" or t == "cdata" or t == "userdata") and tonumber(p.x) ~= nil and tonumber(p.y) ~= nil
+end
+
+local function distance(a, b)
+  local dx, dy, dz = a.x - b.x, a.y - b.y, (a.z or 0) - (b.z or 0)
+  return math.sqrt(dx * dx + dy * dy + dz * dz)
+end
+
+-- The player's car position: traffic data first, then map.objects (also works for cars RLS does not track).
+local function playerPos(playerId, traffic)
+  local veh = traffic and traffic[playerId]
+  if veh and hasXYZ(veh.pos) then return veh.pos end
+  local obj = map and map.objects and map.objects[playerId]
+  if obj and hasXYZ(obj.pos) then return obj.pos end
+  return nil
+end
+
+-- Units named in the player's pursuit data (RLS keeps no list of chasing units there).
+local function pursuitIds(playerId, traffic)
+  local ids = {}
+  local veh = traffic and traffic[playerId]
+  local pursuit = veh and type(veh.pursuit) == "table" and veh.pursuit
+  if pursuit then
+    if type(pursuit.sight) == "table" and pursuit.sight.policeId then ids[pursuit.sight.policeId] = true end
+    if pursuit.roadblockTargetId and pursuit.roadblockTargetId ~= 0 then ids[pursuit.roadblockTargetId] = true end
+  end
+  return ids
+end
+
+-- Should this police unit be frozen right now? `wasFrozen` widens the radius (release gap).
+local function tied(id, veh, named, pos, wasFrozen)
+  if named[id] then return true end
+  if not pos then return true end            -- no position known: freeze all (safe side)
+  if not hasXYZ(veh.pos) then return wasFrozen end
+  return distance(veh.pos, pos) <= (wasFrozen and RELEASE_RADIUS or FREEZE_RADIUS)
+end
+
+-- Freeze respawn for police tied to the chase, release the rest, watch for units re-placed anyway.
 local function freezePolice()
   local playerId, traffic = playerTraffic()
   if not traffic then return end
+  local named, pos = pursuitIds(playerId, traffic), playerPos(playerId, traffic)
+  p3.logOnChange("playerPosKnown", pos ~= nil, "I", "probe: player position known = " .. tostring(pos ~= nil))
+  -- Units that left the traffic data: forget them (nothing to restore).
+  for id in pairs(frozen) do
+    if traffic[id] == nil then
+      p3.log("I", string.format("GONE police id=%s left the traffic data while frozen", tostring(id)))
+      frozen[id], seenRespawns[id] = nil, nil
+    end
+  end
   local policeNow = 0
   for id, veh in pairs(traffic) do
     if id ~= playerId and isPolice(veh) then
       policeNow = policeNow + 1
-      if frozen[id] == nil then
-        frozen[id] = veh.enableRespawn ~= false
-        seenRespawns[id] = veh.respawnCount
-        p3.count("units frozen")
-        p3.log("I", string.format("FROZE police id=%s respawnCount=%s was enableRespawn=%s",
-          tostring(id), tostring(veh.respawnCount), tostring(frozen[id])))
-      end
-      veh.enableRespawn = false
-      local count = veh.respawnCount
-      if type(count) == "number" and type(seenRespawns[id]) == "number" and count > seenRespawns[id] then
-        leaks = leaks + 1
-        seenRespawns[id] = count
-        p3.count("LEAKS (re-placed while frozen)")
-        p3.log("W", string.format("LEAK police id=%s was re-placed during the pursuit (respawnCount %s)", tostring(id), tostring(count)))
+      local isTied = tied(id, veh, named, pos, frozen[id] ~= nil)
+      if not isTied then
+        if frozen[id] ~= nil then
+          release(id, veh)
+          seenRespawns[id] = nil
+        end
+      else
+        if frozen[id] == nil then
+          frozen[id] = veh.enableRespawn ~= false
+          seenRespawns[id] = veh.respawnCount
+          p3.count("units frozen")
+          p3.log("I", string.format("FROZE police id=%s respawnCount=%s was enableRespawn=%s",
+            tostring(id), tostring(veh.respawnCount), tostring(frozen[id])))
+        end
+        veh.enableRespawn = false
+        local count = veh.respawnCount
+        if type(count) == "number" and type(seenRespawns[id]) == "number" and count > seenRespawns[id] then
+          leaks = leaks + 1
+          seenRespawns[id] = count
+          p3.count("LEAKS (re-placed while frozen)")
+          p3.log("W", string.format("LEAK police id=%s was re-placed during the pursuit (respawnCount %s)", tostring(id), tostring(count)))
+        end
       end
     end
   end
@@ -93,13 +158,20 @@ local function freezePolice()
   if policeNow > most then p3.count("most police at once", policeNow - most) end
 end
 
--- Wrap table[name] once; `refuse(...)` returning true means "block this call".
+-- Wrap table[name]; `refuse(...)` returning true means "block this call".
+-- The wrapper itself is kept in tbl["__rlsmp_"..name]. If RLS or vanilla later puts a new function in
+-- tbl[name], the identity check fails and we wrap the new one (it becomes the original we call).
 local function wrap(tbl, name, label, refuse, refusedValue)
   if type(tbl) ~= "table" then return false end
   if type(tbl[name]) ~= "function" then return false end
-  if tbl["__rlsmp_" .. name] then return true end
+  local mine = tbl["__rlsmp_" .. name]
+  if mine ~= nil and tbl[name] == mine then return true end
+  if mine ~= nil then
+    p3.count("rewrapped " .. label)
+    p3.log("W", "rewrapped " .. label .. " (the function was replaced after we wrapped it)")
+  end
   local original = tbl[name]
-  tbl[name] = function(...)
+  local wrapper = function(...)
     if active() and refuse(...) then
       local site = p3.caller()
       p3.count(label .. " BLOCKED")
@@ -111,7 +183,8 @@ local function wrap(tbl, name, label, refuse, refusedValue)
     p3.countCaller(label .. " allowed", p3.caller())
     return original(...)
   end
-  tbl["__rlsmp_" .. name] = true
+  tbl[name] = wrapper
+  tbl["__rlsmp_" .. name] = wrapper
   return true
 end
 
