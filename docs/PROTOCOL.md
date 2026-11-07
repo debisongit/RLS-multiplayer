@@ -148,9 +148,9 @@ Chat: `/duel <player>`, `/duel accept`, `/duel cancel`, `/duel claim`. Needs at 
 
 ## Shared time of day
 
-- `rlsmpTime {m, dm}` (server to client, every `time.syncSeconds`, loaded players only): game minute of the day (0 = midnight) and real minutes per full day.
+- `rlsmpTime {m, r, dm}` (server to client, every `time.syncSeconds`, loaded players only): game minute of the day (0 = midnight) game minutes per real second right now, and real minutes per full day (RLS day shape).
   Computed from the server wall clock (`server/clock.lua`), so restarts keep it consistent. Client `clock.lua` draws the sky 4x per second and
-  moves RLS's weather forward every 10 s (`sleepTo`); RLS's own day cycle is paused while connected. Config `time = {enabled, dayMinutes = 20, syncSeconds = 5}`.
+  moves RLS's weather forward every 10 s (`sleepTo`); RLS's own day cycle is paused while connected. Config `time = {enabled, dayMinutes = 45, syncSeconds = 5}`.
 
 ## Reserved prefixes for later phases
 

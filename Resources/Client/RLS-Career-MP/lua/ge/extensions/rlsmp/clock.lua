@@ -1,7 +1,7 @@
 -- RLS-Career-MP client extension "rlsmp_clock": the server's time of day.
 -- SPDX-License-Identifier: AGPL-3.0-only
 --
--- The server sends the game minute (rlsmpTime {m, dm}). We run the sky from it:
+-- The server sends the game minute (rlsmpTime {m, r, dm}). We run the sky from it:
 --   * 4 times a second: write the time to the game's environment (smooth, no RLS state touched)
 --   * every 10 seconds: tell RLS's weather system the new minute (sleepTo moves its forecast forward, so weather days keep passing)
 -- RLS's own day/night cycle is paused while connected (RLS would otherwise run its own, different speed) and resumed on leave.
@@ -38,7 +38,8 @@ end
 local function onTime(msg)
   local m, dm = tonumber(msg.m), tonumber(msg.dm)
   if not m or not dm or dm < 1 or m < 0 or m >= 1441 then return end
-  anchorMinute, anchorAt, rate = m, clockNow, 1440 / (dm * 60)
+  local r = tonumber(msg.r)
+  anchorMinute, anchorAt, rate = m, clockNow, (r and r > 0) and r or 1440 / (dm * 60)
 end
 
 local function draw(minute)

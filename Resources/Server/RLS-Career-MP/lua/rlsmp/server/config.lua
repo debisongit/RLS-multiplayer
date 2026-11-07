@@ -106,7 +106,7 @@ M.defaults = {
   -- Shared time of day. The server owns the clock: everyone sees the same time, one full day takes `dayMinutes` real minutes.
   time = {
     enabled = true,
-    dayMinutes = 20,
+    dayMinutes = 45,
     syncSeconds = 5,
   },
 
