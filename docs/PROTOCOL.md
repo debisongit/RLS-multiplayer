@@ -93,12 +93,12 @@ settings: `ai.setAggression`, `ai.setSpeedMode("limit")` + `ai.setSpeed` (cap wo
 `normal` is left to RLS. Settings are re-sent every ~20 s (+-4 s), at once after RLS respawns the car or gives it the standard role back,
 when the road limit changes, and on each drunk event (lane keeping off for 1-2.5 s every 8-20 s, a new speed every 4-8 s, 15% of those a
 hard brake). Skipped: anything but RLS's `standard` role, cars in or about to start a pursuit, the player's car, other players' cars,
-parked cars, the player's garage cars, cars RLS's vehicle policy marks `roleLocked` / `pursuitImmune`, inactive cars. Cars handed back for any
-reason but a pursuit or role change, and every car when the feature turns off or the career closes, get RLS's traffic values back
+parked cars, the player's garage cars, crashed cars (until RLS respawns them), cars RLS's vehicle policy marks `roleLocked` / `pursuitImmune`, inactive cars. Cars handed back for any
+reason but a pursuit, role change or crash, and every car when the feature turns off or the career closes, get RLS's traffic values back
 (`baseAggression`, `"legal"`, lane keeping on). No horn, lights or markers.
 
 `policeReact`: a racer or drunk that is fast (over max(16.7 m/s, 1.2 x limit + 2 m/s)) or weaving, on two checks in a row, within 80 m of an
-AI police car that has no target, gets `setPursuitMode(1, carId, policeId)` (RLS's police service). At most one per 60 s per game, never
+AI police car that is free (no target, no pursuit mode, not on cooldown or disabled), gets `setPursuitMode(1, carId, policeId)` (RLS's police service). At most one per 60 s per game, never
 while the player is chased (`rlsmp_police.isPursuit()`) or another pursuit runs. Not a network event. Log lines: `RLSMP-P3 ... smart:`.
 
 ## Business (chat commands, server-side)

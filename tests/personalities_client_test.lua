@@ -84,6 +84,8 @@ check(P.skipReason(10, car({queuedFuncs = {pursuitStart = {}}}), ctx) == "pursui
 check(P.skipReason(10, car({state = "fadeIn"}), ctx) == "notActive", "fading car skipped")
 check(P.skipReason(10, car({isPerson = true}), ctx) == "person", "walking people skipped")
 check(P.skipReason(10, "junk", ctx) == "noData", "junk data skipped")
+check(P.skipReason(10, car({activeData = {tCrash = 123}}), ctx) == "crashed", "crashed car left to RLS's crash reaction")
+check(P.rlsTakesOver("crashed"), "no restore sent to a crashed car")
 check(P.rlsTakesOver("pursuit") and P.rlsTakesOver("role") and not P.rlsTakesOver("locked"), "who resets the AI after a skip")
 
 ---------------------------------------------------------------------------------------------------
@@ -241,6 +243,30 @@ check(not smart.getCars()[12] and not smart.getCars()[playerId] and not smart.ge
 traffic[12], traffic[13], traffic[playerId], traffic[14], traffic[15] = nil, nil, nil, nil, nil
 mpVehicles, parked = {}, {}
 
+-- RLS's vehicle policy loads after us: a car it locks (taxi in service) is still skipped
+traffic[16] = car()
+run(0.5)
+take()
+check(smart.getCars()[16] ~= nil, "car 16 is ours while nothing locks it")
+package.loaded["overhaul/lib/vehicles/policy"] = {query = function(domain, id) return domain == "roleLocked" and id == 16 end}
+run(0.5)
+s = take()
+check(#s == 1 and s[1].id == 16 and s[1].cmd == P.restoreCommand(0.35), "policy that appears later is honoured, car handed back")
+run(25)
+for _, c in ipairs(take()) do check(c.id ~= 16, "locked car gets nothing more") end
+package.loaded["overhaul/lib/vehicles/policy"] = nil
+traffic[16] = nil
+
+-- a crash: RLS reacts, we stay quiet until it respawns
+traffic[10].activeData = {tCrash = 1}
+run(25)
+for _, c in ipairs(take()) do check(c.id ~= 10, "crashed car gets no command") end
+traffic[10].activeData = {}
+traffic[10].respawnCount = 2
+run(0.5)
+s = take()
+check(#s == 1 and s[1].id == 10, "respawned after the crash: settings back")
+
 -- gone cars are dropped from the cache
 traffic[11] = nil
 run(0.5)
@@ -320,6 +346,14 @@ traffic[31].role.targetId = 99
 run(5)
 check(#pursuits == before, "busy police unit is not used")
 traffic[31].role.targetId = nil
+traffic[31].role.flags = {cooldown = 1}
+run(5)
+check(#pursuits == before, "police unit on cooldown is not used")
+traffic[31].role.flags = {}
+traffic[31].role.targetPursuitMode = 2
+run(5)
+check(#pursuits == before, "police unit still in a pursuit mode is not used")
+traffic[31].role.targetPursuitMode = 0
 traffic[32] = car({pursuit = {mode = 2}, role = {name = "suspect"}})
 run(5)
 check(#pursuits == before, "no new AI pursuit while another one runs")

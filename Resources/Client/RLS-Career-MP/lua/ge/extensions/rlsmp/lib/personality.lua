@@ -140,6 +140,7 @@ function M.skipReason(id, veh, ctx)
   local pursuit = veh.pursuit
   if type(pursuit) == "table" and (tonumber(pursuit.mode) or 0) ~= 0 then return "pursuit" end
   if type(veh.queuedFuncs) == "table" and veh.queuedFuncs.pursuitStart then return "pursuit" end
+  if type(veh.activeData) == "table" and veh.activeData.tCrash then return "crashed" end   -- RLS's crash reaction owns it until respawn
   if veh.state ~= "active" then return "notActive" end
   if ctx.objectActive and not ctx.objectActive(id) then return "notActive" end
   if ctx.owned and ctx.owned(id) then return "owned" end
@@ -147,8 +148,8 @@ function M.skipReason(id, veh, ctx)
   return nil
 end
 
--- RLS changes the AI itself in these cases (pursuit / new role sets a new AI mode): do not send anything.
-function M.rlsTakesOver(reason) return reason == "pursuit" or reason == "role" end
+-- RLS changes the AI itself in these cases (pursuit / new role sets a new AI mode, crash reaction): send nothing.
+function M.rlsTakesOver(reason) return reason == "pursuit" or reason == "role" or reason == "crashed" end
 
 ---------------------------------------------------------------------------------------------------
 -- Drunk driver: a small state machine driven by the clock.

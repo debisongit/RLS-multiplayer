@@ -9,7 +9,7 @@
 -- players have to spot bad drivers by how they drive. BeamMP syncs the result to the other players.
 --
 -- Left alone: police, suspects and any role but RLS's "standard" civilian, cars in a pursuit, the
--- player's car, other players' cars, parked cars, the player's own garage cars, cars RLS locks for a
+-- player's car, other players' cars, parked cars, the player's own garage cars, crashed cars, cars RLS locks for a
 -- job (vehicle policy "roleLocked") and cars that are not active. When a car stops being ours for a
 -- reason other than a pursuit / role change (RLS then sets its AI itself), we put RLS's traffic
 -- values back. Turning the feature off (or leaving the career / server) puts every car back.
@@ -35,7 +35,7 @@ local now, timer = 0, 0
 local cars = {}             -- vehicle id -> cache entry (lib/personality newEntry)
 local limiter = P.newLimiter()
 local rnd = math.random
-local policyModule          -- RLS overhaul/lib/vehicles/policy, if it can be loaded
+local POLICY = "overhaul/lib/vehicles/policy"   -- RLS's vehicle policy module (trafficVehicle.lua requires it)
 
 -- Sends one AI command string to a vehicle (BeamNG obj:queueLuaCommand). Swapped out by tests.
 local function defaultSend(id, cmd)
@@ -65,12 +65,11 @@ local function baseAggression()
   return vars and tonumber(vars.baseAggression) or nil
 end
 
+-- Read fresh on every check: never cache a missing or an old copy (the game reloads modules).
 local function policy()
-  if policyModule == nil then
-    local ok, mod = pcall(require, "overhaul/lib/vehicles/policy")
-    policyModule = (ok and type(mod) == "table" and type(mod.query) == "function") and mod or false
-  end
-  return policyModule or nil
+  local mod = package.loaded[POLICY]
+  if type(mod) == "table" and type(mod.query) == "function" then return mod end
+  return nil
 end
 
 -- The facts skipReason needs, gathered once per check.
@@ -147,8 +146,11 @@ local function policeUnits(traffic, ctx)
   local units = {}
   for id, veh in pairs(traffic) do
     if type(veh) == "table" and type(veh.role) == "table" and veh.role.name == "police" then
-      local usable = veh.isAi == true and id ~= ctx.playerId and veh.role.state ~= "disabled"
-        and (veh.role.targetId == nil or veh.role.targetId == 0)
+      local role = veh.role
+      local flags = type(role.flags) == "table" and role.flags or {}
+      local usable = veh.isAi == true and id ~= ctx.playerId and role.state ~= "disabled"
+        and (role.targetId == nil or role.targetId == 0) and (tonumber(role.targetPursuitMode) or 0) <= 0
+        and not flags.pursuit and not flags.cooldown and not flags.busy
         and (not ctx.objectActive or ctx.objectActive(id))
       units[#units + 1] = {id = id, pos = veh.pos, usable = usable}
     end
@@ -294,7 +296,7 @@ function M.onExtensionLoaded()
   p3.log("I", "rlsmp_personalities loaded")
   p3.probe("smart: RLS police setPursuitMode is a function",
     overhaul_integration_services_police ~= nil and type(overhaul_integration_services_police.setPursuitMode) == "function")
-  p3.probe("smart: RLS vehicle policy loadable", policy() ~= nil)
+  p3.probe("smart: RLS vehicle policy loaded (now)", policy() ~= nil)
 end
 
 -- Test hooks.
