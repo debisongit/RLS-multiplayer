@@ -9,13 +9,15 @@
 -- Two exceptions (see isBlocked): the taxi RLS hailed for YOU (RLS boards you through a normal vehicle switch), and, only when
 -- the server allows it (`vehicles.allowPassengers`), another player's car for a player who is ON FOOT (BeamMP itself supports
 -- riding along: it gives the passenger camera). Their AI traffic and parked cars (hideNametag, see trafficLabels) stay refused. Every decision is logged with the tag RLSMP-GUARD.
--- A future "steal a car" feature would add its exception in isBlocked().
+-- Car theft (rlsmp/theft.lua): a parked car we turned into a driveable car is in lib/theft's converted set and may be entered;
+-- that set holds exactly the converted ids (removed when the car is destroyed), nothing else.
 
 local M = {}
 
 local mp = require("rlsmp/lib/mp")
 local net = require("rlsmp/lib/net")
 local replaceGuard = require("rlsmp/lib/replaceGuard")
+local theftLib = require("rlsmp/lib/theft")
 
 local TAG = "RLSMP-GUARD"
 local enabled = false
@@ -79,6 +81,8 @@ function M.isBlocked(id, fromId)
     note(id, true, allowPassengers and "another player's car (you are not on foot)" or "another player's car (passengers off)")
     return true, "remote car"
   end
+  -- A parked car we stole and turned into a real car (never another player's: those are handled above).
+  if theftLib.isConverted(id) then note(id, false, "stolen car (converted by theft)") return false, "stolen" end
   if gameplay_traffic and gameplay_traffic.getTrafficData then
     local td = gameplay_traffic.getTrafficData()[id]
     if td and td.isAi == true then

@@ -189,6 +189,7 @@ S->C `rlsmpClaimPenalty {damage}` makes the at-fault game file an RLS insurance 
 The client vehicle guard refuses other players' cars, AI traffic and parked cars. Exceptions: the taxi RLS hailed for the player
 (decided by RLS's own taxi state: `pullingOverForPickup`, `waitingForPickup`, `occupied`, `pullingOverForDropoff`, `waitingForDropoff`),
 and, when `allowPassengers` is on, another player's car for a player who is on foot (a passenger; BeamMP gives the passenger camera).
+A parked car the player stole (car theft, below) may be entered: exactly the vehicle ids `rlsmp_theft` converted.
 Log lines use the tag `RLSMP-GUARD`.
 
 ## Phase 4: world
@@ -314,6 +315,35 @@ No new network events: it rides on the save upload and the profile download.
 
 Weights are `{name = number >= 0}` (at most 64 entries, names up to 64 characters). `typeWeights`, `zones[zone]`, `day` and `night` are keyed by the model's `Type`;
 `mods` by model name. `swap` = `{enabled, live, perMinute, hiddenSeconds, checkSeconds, minRatio, maxFailures}` (live swapping; `enabled` only watches, `live` replaces cars). The client sanitizes everything again. Settings are forgotten when the player leaves the server.
+
+## Car theft (server `theft.lua`, client `theft.lua` + `lib/theft.lua`; off by default: `theft.enabled`)
+
+| Direction | Event | Body |
+|---|---|---|
+| S→C | `rlsmpTheftConfig` | `{enabled, seed, period, perMille, periodSeconds, radius}` sent when a player is loaded and again when the period changes |
+| C→S | `rlsmpTheftCheck` | `{id, value, year}` the player stands within `radius` m of a stealable parked car (`id` = local game id, only echoed back) |
+| S→C | `rlsmpTheftCan` | `{ok, id, method, label, seconds, noise}` or `{ok = false, id, err}`; the prompt is shown only on `ok` (at most one answer per second per player) |
+| S→C | `rlsmpTheftSteal` | `{method?}` from chat `/steal [method]`; `{stop = true}` from `/steal stop` |
+| C→S | `rlsmpTheftStart` | `{method?, value, year}` |
+| S→C | `rlsmpTheftGo` | `{ok, method, label, seconds, noise}` or `{ok = false, err}` |
+| C→S | `rlsmpTheftCancel` | `{}` the player walked away |
+| C→S | `rlsmpTheftFinish` | `{}` the timer ran out |
+| S→C | `rlsmpTheftResult` | `{ok}` or `{ok = false, err}` (failure roll; non-durable items are used up only on `ok`) |
+| C→S | `rlsmpTheftDone` | `{plate, model, color, value, year, x, y, z, witnesses}` after the parked car was turned into a real car |
+| S→C | `rlsmpTheftReported` | `{plate}` the car was reported stolen (the client only marks it; police find it by the plate) |
+
+- Stealable pick: every client hashes (`seed`, `period`, x and y of the parked car rounded down to a 4 m grid) with FNV-1a and takes the car when
+  `hash % 1000 < perMille`. The seed comes from the server tag and the period (`floor(serverTime / periodSeconds)`), so it is the same for everyone and
+  no client uses its own clock. Two games only agree about a car when their cars stand on the same spot (each game spawns its own parked cars).
+- The server derives the tier from the (cleaned) `value` and `year` (`theft.tiers`: before `immobilizerYear` = old, before `keylessYear` = immobilizer,
+  `luxuryValue` or more, or `newestYear` and later = luxury, else keyless; unknown year = `unknownYear`). A method works only on its own tier and needs
+  all its items (`items.has`). One action per player, `retrySeconds` after a failure or a theft. `Finish` earlier than `seconds - 1` after the start fails.
+- Witness chance = `baseWitnessChance + perWitness x min(witnesses, witnessCap) + noiseWitness x noise`, at most `maxWitnessChance`. Seen: reported
+  `seenReportMin`-`seenReportMax` s later; unseen: `unseenReportSeconds`; a method with `tracker` (luxury) reports within `trackerReportSeconds`
+  unless the thief owns a `tracker_blocker`. Records live in `stolen.json` (`stolen[plate]`, plate cleaned like `plateRecords.cleanPlate`), pruned
+  after `keepHours`. On the report the server calls `plateRecords.flag(plate, model, color, "stolen", accountId)` if that module exists (`theft.reportHook`).
+- The stolen car is not added to the garage inventory. The client keeps it in `rlsmp_theft.stolenCars()`; `vehicleGuard` lets the player into exactly
+  the converted vehicle ids (`lib/theft` converted set, removed when the car is destroyed). Log tag `RLSMP-THEFT`.
 
 ## Reserved prefixes for later phases
 

@@ -1,0 +1,410 @@
+-- RLS-Career-MP server: car theft (off by default: config theft.enabled).
+-- SPDX-License-Identifier: AGPL-3.0-only
+--
+-- The server does not know anybody's parked cars (each game spawns its own), so it only hands out a seed per period
+-- (`rlsmpTheftConfig {enabled, seed, period, perMille, periodSeconds}`); each game hashes (seed, period, rounded position) of
+-- its parked cars and marks about perMille/1000 of them stealable. Every game picks the same way, so two players standing at
+-- the same parking spot agree. The seed comes from the server tag and the period number (server clock), so it changes every
+-- `periodSeconds` and is the same for everyone. It is re-sent when the period changes.
+--
+-- What the server owns:
+--   * the method table (config theft.methods): which tier a car is in (by year and value), which items each method needs,
+--     time, noise and failure chance. A method only works on cars of its own tier.
+--   * the item check (items.has) before a start, the failure roll at the end, using up non-durable items on success (items.use).
+--   * the witness roll, the report time (30-120 s if seen, ~10 min if not, faster with a GPS tracker), stolen[plate] records
+--     in stolen.json, and the plate flag when a car is reported (plateRecords.flag through M.reportHook).
+--
+-- Flow (all documented in docs/PROTOCOL.md "Car theft"):
+--   client rlsmpTheftCheck {value, year}            -> rlsmpTheftCan {ok, method, label, seconds, noise} (used for the prompt)
+--   chat /steal [method]                            -> rlsmpTheftSteal {method} (the client starts at the car it stands at)
+--   client rlsmpTheftStart {method, value, year}    -> rlsmpTheftGo {ok, method, seconds, noise} or {ok = false, err}
+--   client rlsmpTheftFinish {}  (timer ran out)     -> rlsmpTheftResult {ok} or {ok = false, err} (failure roll, items used)
+--   client rlsmpTheftDone {plate, model, color, value, year, x, y, z, witnesses}   (after the car was converted)
+--   client rlsmpTheftCancel {}                       (walked away)
+--   server rlsmpTheftReported {plate}                (the car was reported stolen; nothing else to do on the client)
+
+local util = require("rlsmp.server.util")
+local net = require("rlsmp.server.net")
+local sessions = require("rlsmp.server.sessions")
+local storage = require("rlsmp.server.storage")
+local items = require("rlsmp.server.items")
+
+local M = {}
+
+local cfg            -- config.theft
+local serverTag = ""
+local file
+local stolen = {}    -- plate -> record
+local pending = {}   -- pid -> {accountId, method, seconds, noise, tier, value, year, started, state = "running" | "open", openedAt}
+local cooldown = {}  -- pid -> time before which no new start is accepted
+local told = {}      -- pid -> period the config was sent for
+local lastCheck = {} -- pid -> time of the last answered check (rate limit)
+
+local random = math.random
+function M.setRandom(fn) random = fn or math.random end
+
+local TIER_ORDER = {"old", "immobilizer", "keyless", "luxury"}
+
+local function n(v, default)
+  v = tonumber(v)
+  if v == nil or v ~= v or v == math.huge or v == -math.huge then return default end
+  return v
+end
+
+local function clamp(v, lo, hi) return math.max(lo, math.min(hi, v)) end
+
+local function enabled() return cfg ~= nil and cfg.enabled == true end
+
+-- Same rules as plateRecords.cleanPlate (both modules must agree on what a plate is).
+function M.cleanPlate(s)
+  if type(s) ~= "string" then return nil end
+  s = s:gsub("%s+", " "):gsub("^ ", ""):gsub(" $", ""):upper()
+  if #s == 0 or #s > 16 or s:find("[%c|]") then return nil end
+  return s
+end
+local function cleanModel(s)
+  if type(s) ~= "string" or #s == 0 or #s > 64 or s:find("[^%w_%-%.]") then return nil end
+  return s
+end
+local function cleanColor(s)
+  if type(s) ~= "string" then return nil end
+  s = s:lower()
+  if #s == 0 or #s > 24 or s:find("[^%a ]") then return nil end
+  return s
+end
+
+-- Client-reported car value and year, made sane.
+function M.cleanValue(v) return clamp(math.floor(n(v, 0)), 0, 100000000) end
+function M.cleanYear(y)
+  y = math.floor(n(y, 0))
+  if y < 1900 or y > 2100 then return nil end
+  return y
+end
+
+-- Tier of a car by year and value (config theft.tiers). Unknown year counts as the immobilizer era.
+function M.tierFor(value, year)
+  local t = cfg.tiers
+  year = M.cleanYear(year) or n(t.unknownYear, 2000)
+  value = M.cleanValue(value)
+  if year < n(t.immobilizerYear, 1995) then return "old" end
+  if year < n(t.keylessYear, 2010) then return "immobilizer" end
+  if value >= n(t.luxuryValue, 120000) or year >= n(t.newestYear, 2021) then return "luxury" end
+  return "keyless"
+end
+
+-- Methods of a tier, sorted by name (stable order for picking the first usable one).
+function M.methodsFor(tier)
+  local out = {}
+  for name, m in pairs(cfg.methods) do
+    if type(m) == "table" and m.tier == tier and m.enabled ~= false then out[#out + 1] = name end
+  end
+  table.sort(out, function(a, b)
+    local ma, mb = cfg.methods[a], cfg.methods[b]
+    local oa, ob = n(ma.order, 99), n(mb.order, 99)
+    if oa ~= ob then return oa < ob end
+    return a < b
+  end)
+  return out
+end
+
+local function itemList(m)
+  local out = {}
+  for _, it in ipairs(type(m.items) == "table" and m.items or {}) do
+    if type(it) == "string" then out[#out + 1] = it end
+  end
+  return out
+end
+
+-- Items the player lacks for a method (empty = they have everything).
+function M.missing(pid, method)
+  local m = cfg.methods[method]
+  local out = {}
+  for _, it in ipairs(m and itemList(m) or {}) do
+    if not items.has(pid, it) then out[#out + 1] = it end
+  end
+  return out
+end
+
+local function labelOf(name)
+  local c = items.CATALOG[name]
+  return c and c.label or name
+end
+
+local function methodInfo(name)
+  local m = cfg.methods[name]
+  return {
+    method = name,
+    label = type(m.label) == "string" and m.label or name,
+    seconds = clamp(n(m.seconds, 10), 1, 600),
+    noise = clamp(n(m.noise, 0.5), 0, 1),
+    failChance = clamp(n(m.failChance, 0), 0, 1),
+    tracker = m.tracker == true,
+  }
+end
+
+-- The method a player would use on a car: the requested one (must fit the car's tier and be owned), or the first usable one.
+-- Returns info table, or nil + error text.
+function M.choose(pid, value, year, wanted)
+  local tier = M.tierFor(value, year)
+  local list = M.methodsFor(tier)
+  if #list == 0 then return nil, "Nothing you know works on this car." end
+  if type(wanted) == "string" and wanted ~= "" then
+    local m = cfg.methods[wanted]
+    if type(m) ~= "table" or m.enabled == false then return nil, "Unknown method: " .. wanted end
+    if m.tier ~= tier then return nil, "That method does not work on this car (" .. tier .. ")." end
+    list = {wanted}
+  end
+  local firstMissing
+  for _, name in ipairs(list) do
+    local lack = M.missing(pid, name)
+    if #lack == 0 then
+      local info = methodInfo(name)
+      info.tier = tier
+      return info
+    end
+    firstMissing = firstMissing or lack
+  end
+  local labels = {}
+  for _, it in ipairs(firstMissing) do labels[#labels + 1] = labelOf(it) end
+  return nil, "You need: " .. table.concat(labels, ", ")
+end
+
+-- Witness roll: chance grows with nearby witnesses and noise. Returns seen (bool), chance.
+function M.witnessChance(witnesses, noise)
+  local w = clamp(math.floor(n(witnesses, 0)), 0, math.max(0, math.floor(n(cfg.witnessCap, 5))))
+  local chance = n(cfg.baseWitnessChance, 0.15) + n(cfg.perWitness, 0.12) * w + n(cfg.noiseWitness, 0.3) * clamp(n(noise, 0), 0, 1)
+  return clamp(chance, 0, n(cfg.maxWitnessChance, 0.95))
+end
+
+function M.rollWitness(witnesses, noise)
+  local chance = M.witnessChance(witnesses, noise)
+  return random() < chance, chance
+end
+
+-- Seconds until the car is reported. seen: 30-120 s (config), not seen: about 10 minutes. A tracker reports quickly unless blocked.
+function M.reportDelay(seen, tracker)
+  local d
+  if seen then
+    local lo = math.max(1, math.floor(n(cfg.seenReportMin, 30)))
+    local hi = math.max(lo, math.floor(n(cfg.seenReportMax, 120)))
+    d = lo + math.floor(random() * (hi - lo + 1))
+    if d > hi then d = hi end
+  else
+    d = math.max(1, math.floor(n(cfg.unseenReportSeconds, 600)))
+  end
+  if tracker then d = math.min(d, math.max(1, math.floor(n(cfg.trackerReportSeconds, 20)))) end
+  return d
+end
+
+-- The seed for a period: small integer, the same for every player (from the server tag), different every period.
+local function tagSeed(tag)
+  local s = 0
+  for i = 1, #(tag or "") do s = (s * 31 + tag:byte(i)) % 1000003 end
+  return s
+end
+function M.periodSeconds() return math.max(60, math.floor(n(cfg.periodSeconds, 3600))) end
+function M.periodAt(epoch) return math.floor(epoch / M.periodSeconds()) end
+function M.seedFor(period) return (tagSeed(serverTag) * 7919 + period * 104729) % 1000003 end
+
+function M.payload()
+  local period = M.periodAt(util.now())
+  return {enabled = enabled(), seed = M.seedFor(period), period = period,
+    perMille = clamp(math.floor(n(cfg.perMille, 150)), 0, 1000), periodSeconds = M.periodSeconds(),
+    radius = clamp(n(cfg.radius, 3), 1, 10)}
+end
+
+local function save() if file then storage.writeJson(file, {stolen = stolen}) end end
+
+function M.records() return stolen end
+function M.pendingOf(pid) return pending[pid] end
+
+-- Called when a stolen car is reported. Replaceable (tests, later modules). Default: flag the plate in plateRecords if present.
+local function defaultReportHook(rec)
+  local ok, plates = pcall(require, "rlsmp.server.plateRecords")
+  if ok and type(plates) == "table" and type(plates.flag) == "function" then
+    local fine, err = pcall(plates.flag, rec.plate, rec.model, rec.color, "stolen", rec.by)
+    if not fine then util.warn("[theft] plateRecords.flag failed: " .. tostring(err)) end
+    return fine
+  end
+  return false
+end
+M.reportHook = defaultReportHook
+
+local function accountOf(pid)
+  local s = sessions.get(pid)
+  return s and s.accountId or nil
+end
+
+local function chat(pid, msg) if MP and MP.SendChatMessage then MP.SendChatMessage(pid, "[Theft] " .. msg) end end
+
+-- Handlers -----------------------------------------------------------------------------------------
+
+local function onCheck(pid, d)
+  if not enabled() or not sessions.isLoaded(pid) then return end
+  local now = util.now()
+  if lastCheck[pid] == now then return end   -- at most one answer per second
+  lastCheck[pid] = now
+  local info, err = M.choose(pid, d.value, d.year, nil)
+  if info then
+    net.send(pid, "rlsmpTheftCan", {ok = true, id = n(d.id, nil), method = info.method, label = info.label, seconds = info.seconds, noise = info.noise})
+  else
+    net.send(pid, "rlsmpTheftCan", {ok = false, id = n(d.id, nil), err = err})
+  end
+end
+
+local function goFail(pid, err) net.send(pid, "rlsmpTheftGo", {ok = false, err = err}) end
+
+local function onStart(pid, d)
+  if not enabled() then return goFail(pid, "Car theft is off on this server.") end
+  if not sessions.isLoaded(pid) then return goFail(pid, "Not in career.") end
+  local now = util.now()
+  local p = pending[pid]
+  if p and p.accountId == accountOf(pid) and now - p.started < p.seconds + 60 then return goFail(pid, "You are already busy.") end
+  if cooldown[pid] and now < cooldown[pid] then return goFail(pid, "Wait a moment before trying again.") end
+  local info, err = M.choose(pid, d.value, d.year, d.method)
+  if not info then return goFail(pid, err) end
+  pending[pid] = {accountId = accountOf(pid), method = info.method, seconds = info.seconds, noise = info.noise,
+    failChance = info.failChance, tracker = info.tracker, tier = info.tier, value = M.cleanValue(d.value),
+    year = M.cleanYear(d.year), started = now, state = "running"}
+  util.info(string.format("[theft] %s starts %s on a %s car (%ds)", tostring(pid), info.method, info.tier, info.seconds))
+  net.send(pid, "rlsmpTheftGo", {ok = true, method = info.method, label = info.label, seconds = info.seconds, noise = info.noise})
+end
+
+local function onCancel(pid)
+  if pending[pid] and pending[pid].state == "running" then pending[pid] = nil end
+end
+
+local function resultFail(pid, err)
+  pending[pid] = nil
+  cooldown[pid] = util.now() + math.max(0, math.floor(n(cfg.retrySeconds, 10)))
+  net.send(pid, "rlsmpTheftResult", {ok = false, err = err})
+end
+
+local function onFinish(pid)
+  local p = pending[pid]
+  if not p or p.state ~= "running" or p.accountId ~= accountOf(pid) then return end
+  local now = util.now()
+  if now - p.started < p.seconds - 1 then return resultFail(pid, "Too fast.") end
+  -- The tools must still be there (a check now, so nothing is used up when one is missing).
+  if #M.missing(pid, p.method) > 0 then return resultFail(pid, "You no longer have the tools.") end
+  if random() < p.failChance then
+    util.info(string.format("[theft] %s: %s failed", tostring(pid), p.method))
+    return resultFail(pid, "It did not work. Try again or walk away.")
+  end
+  for _, it in ipairs(itemList(cfg.methods[p.method])) do items.use(pid, it) end
+  p.state, p.openedAt = "open", now
+  net.send(pid, "rlsmpTheftResult", {ok = true})
+end
+
+local function onDone(pid, d)
+  local p = pending[pid]
+  if not p or p.state ~= "open" or p.accountId ~= accountOf(pid) then return end
+  local now = util.now()
+  pending[pid] = nil
+  cooldown[pid] = now + math.max(0, math.floor(n(cfg.retrySeconds, 10)))
+  if now - p.openedAt > 120 then return end
+  local plate, model = M.cleanPlate(d.plate), cleanModel(d.model)
+  if not plate or not model then
+    util.warn("[theft] done without a usable plate/model from " .. tostring(pid))
+    return
+  end
+  local tracker = p.tracker and not items.has(pid, "tracker_blocker")
+  local seen, chance = M.rollWitness(d.witnesses, p.noise)
+  local delay = M.reportDelay(seen, tracker)
+  local s = sessions.get(pid)
+  stolen[plate] = {
+    plate = plate, model = model, color = cleanColor(d.color), value = p.value, year = p.year,
+    pos = {x = n(d.x, 0), y = n(d.y, 0), z = n(d.z, 0)}, method = p.method, tier = p.tier,
+    by = p.accountId, name = s and s.name or nil, t = now, seen = seen, tracker = tracker == true,
+    reportAt = now + delay, reported = false,
+  }
+  save()
+  util.info(string.format("[theft] %s stole %s %s (%s, %s), seen=%s (%.0f%%), report in %ds",
+    tostring(s and s.name or pid), model, plate, p.tier, p.method, tostring(seen), chance * 100, delay))
+  chat(pid, "You are in. Drive away and keep a low profile.")
+end
+
+-- Report due cars, prune old ones. Returns the reported records (for tests and logs).
+function M.reportDue()
+  local now, out = util.now(), {}
+  local keep = math.max(1, n(cfg.keepHours, 48)) * 3600
+  local changed = false
+  for plate, rec in pairs(stolen) do
+    if not rec.reported and n(rec.reportAt, 0) <= now then
+      rec.reported, rec.reportedAt = true, now
+      changed = true
+      out[#out + 1] = rec
+      util.info(string.format("[theft] %s %s reported stolen (%s)", tostring(rec.model), plate, rec.seen and "seen" or "found missing"))
+      local ok, err = pcall(M.reportHook, rec)
+      if not ok then util.warn("[theft] report hook failed: " .. tostring(err)) end
+      for pid in pairs(sessions.all()) do
+        if accountOf(pid) == rec.by and sessions.isLoaded(pid) then net.send(pid, "rlsmpTheftReported", {plate = plate}) end
+      end
+    elseif now - n(rec.t, now) > keep then
+      stolen[plate] = nil
+      changed = true
+    end
+  end
+  if changed then save() end
+  return out
+end
+
+function M.pushConfig()
+  local live = {}
+  local payload
+  for pid in pairs(sessions.all()) do
+    if sessions.isLoaded(pid) then
+      live[pid] = true
+      payload = payload or M.payload()
+      if told[pid] ~= payload.period then
+        told[pid] = payload.period
+        net.send(pid, "rlsmpTheftConfig", payload)
+      end
+    end
+  end
+  for pid in pairs(told) do if not live[pid] then told[pid], pending[pid], cooldown[pid], lastCheck[pid] = nil, nil, nil, nil end end
+end
+
+function M.tick()
+  if not enabled() then return end
+  M.pushConfig()
+  M.reportDue()
+end
+
+local function onSteal(pid, rest)
+  if not enabled() then return chat(pid, "Car theft is off on this server.") end
+  if not sessions.isLoaded(pid) then return end
+  rest = tostring(rest or "")
+  if rest == "stop" or rest == "cancel" then
+    onCancel(pid)
+    net.send(pid, "rlsmpTheftSteal", {stop = true})
+    return
+  end
+  net.send(pid, "rlsmpTheftSteal", {method = rest ~= "" and rest or nil})
+end
+
+function M.init(config, pluginRoot)
+  cfg = config.theft
+  serverTag = tostring(config.serverTag or "")
+  stolen, pending, cooldown, told, lastCheck = {}, {}, {}, {}, {}
+  file = pluginRoot and (pluginRoot .. "stolen.json") or nil
+  if not enabled() then return end
+  local saved = file and storage.readJson(file)
+  if type(saved) == "table" and type(saved.stolen) == "table" then
+    for plate, rec in pairs(saved.stolen) do
+      if type(rec) == "table" and M.cleanPlate(plate) == plate then stolen[plate] = rec end
+    end
+  end
+  net.onClient("rlsmpTheftCheck", onCheck)
+  net.onClient("rlsmpTheftStart", onStart)
+  net.onClient("rlsmpTheftFinish", onFinish)
+  net.onClient("rlsmpTheftDone", onDone)
+  net.onClient("rlsmpTheftCancel", onCancel)
+  net.onChat("steal", onSteal)
+  net.on("rlsmpTheftTick", M.tick)
+  MP.CreateEventTimer("rlsmpTheftTick", 1000)
+  util.info(string.format("Car theft on: %d per mille of parked cars, new pick every %d min", M.payload().perMille, M.periodSeconds() // 60))
+end
+
+M.TIER_ORDER = TIER_ORDER
+return M

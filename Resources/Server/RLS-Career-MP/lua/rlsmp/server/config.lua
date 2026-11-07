@@ -216,6 +216,46 @@ M.defaults = {
     maxValueGapPercent = 0,
   },
 
+  -- Car theft (/steal next to a parked car). OFF until the owner has tried it in the game.
+  -- Each game marks about perMille/1000 of its parked cars stealable; the pick changes every periodSeconds (same for everyone).
+  -- A car's tier comes from its year and value (tiers); each method works on one tier, needs the listed items (see server
+  -- items.lua; durable tools stay, the rest is used up on success), takes `seconds`, makes `noise` (0-1, raises the witness
+  -- chance) and fails with `failChance` (nothing is used up then). Set a method's enabled = false to turn it off.
+  -- Reported stolen: seenReportMin-Max s after the theft if a witness saw it, unseenReportSeconds if not, trackerReportSeconds
+  -- for cars with a GPS tracker (luxury) unless the thief owns a tracker blocker. Reports flag the plate for the police.
+  theft = {
+    enabled = false,
+    perMille = 150,
+    periodSeconds = 3600,
+    radius = 3,
+    retrySeconds = 10,
+    tiers = {immobilizerYear = 1995, keylessYear = 2010, newestYear = 2021, luxuryValue = 120000, unknownYear = 2000},
+    methods = {
+      window_screwdriver = {tier = "old", order = 1, label = "Smash the window, screwdriver in the ignition",
+        items = {"window_punch", "screwdriver"}, seconds = 8, noise = 0.9, failChance = 0.05},
+      key_programmer = {tier = "immobilizer", order = 1, label = "Program a blank key at the diagnostic port",
+        items = {"key_programmer", "blank_key"}, seconds = 25, noise = 0.2, failChance = 0.15},
+      signal_cloner = {tier = "keyless", order = 1, label = "Clone the key fob signal",
+        items = {"signal_cloner"}, seconds = 15, noise = 0.1, failChance = 0.2},
+      relay_box = {tier = "keyless", order = 2, label = "Relay the owner's key signal",
+        items = {"relay_box"}, seconds = 8, noise = 0.1, failChance = 0.45},
+      injection = {tier = "keyless", order = 3, label = "Inject through a headlight connector, program a blank key",
+        items = {"can_injector", "blank_key"}, seconds = 30, noise = 0.3, failChance = 0.1},
+      luxury_injection = {tier = "luxury", order = 1, label = "Two steps: connector injection, then a programmed key (alarm, GPS tracker)",
+        items = {"can_injector", "key_programmer", "blank_key"}, seconds = 45, noise = 0.6, failChance = 0.25, tracker = true},
+    },
+    baseWitnessChance = 0.15,
+    perWitness = 0.12,
+    witnessCap = 5,
+    noiseWitness = 0.3,
+    maxWitnessChance = 0.95,
+    seenReportMin = 30,
+    seenReportMax = 120,
+    unseenReportSeconds = 600,
+    trackerReportSeconds = 20,
+    keepHours = 48,
+  },
+
   vehicles = {
     enabled = true,
     -- A player on foot may get into another player's car and ride along as a passenger (they cannot drive it).
