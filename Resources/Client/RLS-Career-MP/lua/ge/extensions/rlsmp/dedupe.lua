@@ -3,7 +3,7 @@
 --
 -- Seen in a log: after changing parts on a car (RLS replaces the car), the old car object was never deleted, so two
 -- identical cars stood in the garage. RLS keeps only the newest one bound to the inventory slot.
--- Rule: a local car that is NOT the bound car of an inventory slot, but has the same model and the same license plate as
+-- Rule: a local car that is NOT bound to any inventory slot, but has the same model and the same license plate as
 -- that slot's record, is a stale copy. If it stays that way for 4 seconds in a row (RLS is not in the middle of
 -- swapping), it is deleted. Never the car the player is in, never another player's car.
 
@@ -48,7 +48,9 @@ function M.check()
     if id and not remote[id] and id ~= playerId then
       local plate = plateOf(obj)
       local slot = plate and bySlot[plate]
-      if slot and slot.id ~= id and (obj.jbeam or obj.JBeam) == slot.model and be:getObjectByID(slot.id) then
+      -- A car bound to ANY inventory slot is a real car (two owned cars can share a plate text), never a stale copy.
+      local bound = inv.getInventoryIdFromVehicleId and inv.getInventoryIdFromVehicleId(id) ~= nil
+      if slot and not bound and slot.id ~= id and (obj.jbeam or obj.JBeam) == slot.model and be:getObjectByID(slot.id) then
         stillDuplicate[id] = true
         firstSeen[id] = firstSeen[id] or clock
         if clock - firstSeen[id] >= WAIT then

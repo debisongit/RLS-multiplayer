@@ -19,7 +19,8 @@ be = {getObjectCount = function() return #objs end, getObject = function(_, i) r
 MPVehicleGE = {getVehicles = function() return {["1-1"] = {gameVehicleID = 7, isLocal = false}} end}
 local slots = {[1] = {model = "sunburst2", config = {licenseName = "8DHS272"}}, [2] = {model = "etk800", config = {licenseName = "ABC123"}}}
 local boundTo = {[1] = 182628, [2] = 50}
-overhaul_career_garage_inventory = {getVehicles = function() return slots end, getVehicleIdFromInventoryId = function(i) return boundTo[i] end}
+overhaul_career_garage_inventory = {getVehicles = function() return slots end, getVehicleIdFromInventoryId = function(i) return boundTo[i] end,
+  getInventoryIdFromVehicleId = function(id) for i, v in pairs(boundTo) do if v == id then return i end end end}
 local d = require("rlsmp/dedupe")
 local passed = 0
 local function check(c, m) if not c then error("FAIL: " .. m, 2) end passed = passed + 1 end
@@ -46,4 +47,10 @@ check(#deleted == 1, "a copy that vanished by itself is not touched")
 obj(300, "pickup", "ABC123")
 for _ = 1, 5 do d.onUpdate(2) end
 check(#deleted == 1, "different model with the same plate text is left alone")
+-- two owned cars with the same model and plate text: both are bound to a slot, neither is a copy
+slots[3] = {model = "sunburst2", config = {licenseName = "8DHS272"}}
+boundTo[3] = 400
+obj(400, "sunburst2", "8DHS272")
+for _ = 1, 5 do d.onUpdate(2) end
+check(#deleted == 1, "a second owned car with the same plate is never deleted")
 print("dedupe_test: " .. passed .. " checks passed")

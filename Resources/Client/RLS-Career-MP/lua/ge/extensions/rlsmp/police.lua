@@ -53,7 +53,7 @@ end
 
 local function release(id, veh)
   if frozen[id] ~= nil then
-    if veh then veh.enableRespawn = frozen[id] end
+    if veh then veh.rlsmpHold = nil end   -- see rlsmp/bubble.lua: its tryRespawn wrapper honours this flag
     p3.count("units released")
     p3.log("I", string.format("RELEASED police id=%s enableRespawn back to %s", tostring(id), tostring(frozen[id])))
     frozen[id] = nil
@@ -143,7 +143,9 @@ local function freezePolice()
           p3.log("I", string.format("FROZE police id=%s respawnCount=%s was enableRespawn=%s",
             tostring(id), tostring(veh.respawnCount), tostring(frozen[id])))
         end
-        veh.enableRespawn = false
+        -- NOT enableRespawn=false: RLS turns such a car into state 'locked', and then its pursuit logic (lane rules, wreck handling) stops running.
+        -- Instead the tryRespawn wrapper in rlsmp/bubble.lua refuses to recycle a car with this flag.
+        veh.rlsmpHold = true
         local count = veh.respawnCount
         if type(count) == "number" and type(seenRespawns[id]) == "number" and count > seenRespawns[id] then
           leaks = leaks + 1

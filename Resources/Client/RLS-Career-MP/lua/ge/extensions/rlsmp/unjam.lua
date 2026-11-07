@@ -19,8 +19,9 @@ function M.enable(on)
   if not enabled then tracker = U.new() end
 end
 
-local function personalities() return package.loaded["rlsmp/personalities"] end
-local function bubble() return package.loaded["rlsmp/bubble"] end
+-- Extensions are found by their global name first (as core.lua does), then by module path.
+local function personalities() return rawget(_G, "rlsmp_personalities") or package.loaded["rlsmp/personalities"] end
+local function bubble() return rawget(_G, "rlsmp_bubble") or package.loaded["rlsmp/bubble"] end
 local function personality() return package.loaded["rlsmp/lib/personality"] end
 
 local function recycle(veh)
@@ -41,7 +42,9 @@ function M.check()
   local b = bubble()
   local candidates = {}
   for id, veh in pairs(gameplay_traffic.getTrafficData()) do
-    if veh.pos and P.skipReason(id, veh, ctx) == nil then
+    -- only cars RLS itself would recycle: respawn allowed (a car with respawn off would fade out and stay invisible)
+    local respawnOk = veh.enableRespawn ~= false and (type(veh.respawn) ~= "table" or (tonumber(veh.respawn.spawnValue) or 1) > 0)
+    if veh.pos and respawnOk and P.skipReason(id, veh, ctx) == nil then
       local stuck = U.seen(tracker, id, veh.pos.x, veh.pos.y, tonumber(veh.speed) or 0, clock)
       if stuck >= U.STUCK_SECONDS then
         local bubbleOff = b and b.isEnabled and not b.isEnabled()   -- without the bubble we do not know where the other players are
