@@ -112,17 +112,37 @@ local function spots()
   return list
 end
 
+-- Every spot once per cycle of n periods, in an order shuffled from the cycle number (Fisher-Yates, fixed LCG).
+local function shuffled(k, n)
+  local order = {}
+  for i = 1, n do order[i] = i end
+  local seed = (k * 2654435761 + 12345) % 4294967296
+  for i = n, 2, -1 do
+    seed = (seed * 1103515245 + 12345) % 2147483648
+    local j = math.floor(seed / 65536) % i + 1
+    order[i], order[j] = order[j], order[i]
+  end
+  return order
+end
+
+local function spotIndex(period, n)
+  if n == 1 then return 1 end
+  if n == 2 then return period % 2 + 1 end
+  local k = math.floor(period / n)
+  local order = shuffled(k, n)
+  -- the first of a cycle must differ from the last of the one before (swapping the first two keeps the last as it is)
+  if order[1] == shuffled(k - 1, n)[n] then order[1], order[2] = order[2], order[1] end
+  return order[period % n + 1]
+end
+
 -- The drop spot that is active at time t (seconds): the same answer for the same t, every server restart.
--- It changes every rotateMinutes; it never stays on the same spot two periods in a row when there is a choice.
+-- It changes every rotateMinutes, never to the same spot when there are two or more, and visits every spot once per n periods.
 function M.spotAt(t)
   local list = spots()
   local n = #list
   if n == 0 then return nil end
   local period = math.floor(t / math.max(60, c().rotateMinutes * 60))
-  local function base(p) return math.floor(((p * 2654435761 + 12345) % 4294967296) / 65536) % n + 1 end
-  local i = base(period)
-  if n > 1 and i == base(period - 1) then i = i % n + 1 end
-  local sp = list[i]
+  local sp = list[spotIndex(period, n)]
   return {name = sp.name, x = sp.x, y = sp.y, z = sp.z}, period
 end
 
@@ -130,6 +150,17 @@ local function dropMessage(o, now)
   local info = items.CATALOG[o.item]
   return {id = o.id, item = o.item, label = info and info.label or o.item, n = o.n, spot = o.spot.name,
           x = o.spot.x, y = o.spot.y, z = o.spot.z, readyIn = math.max(0, o.readyAt - now)}
+end
+
+-- Give a reserved invite back to its inviter (only possible while the same inviter session is online).
+local function releaseInvite(inv)
+  if not (inv and sessions.get(inv.byPid) == inv.bySession and inv.bySession.profile) then return false end
+  local m = stateOf(inv.bySession.profile)
+  if not (m and m.invites > 0) then return false end
+  m.invites = m.invites - 1
+  profiles.persist(inv.bySession.profile)
+  say(inv.byPid, "Your invite was not used; you get it back.")
+  return true
 end
 
 -- Commands -----------------------------------------------------------------------------------------
@@ -298,6 +329,10 @@ function cmds.invite(pid, arg)
   if tm and tm.member then return say(pid, target.name .. " is already in.") end
   local old = invites[targetPid]
   if old and old.s == target and old.expires >= util.now() then return say(pid, target.name .. " already has an invite.") end
+  if old then
+    invites[targetPid] = nil
+    releaseInvite(old)            -- expired but not swept yet: its inviter gets it back first
+  end
   m.invites = m.invites + 1      -- reserved now, saved now
   profiles.persist(s.profile)
   invites[targetPid] = {s = target, byPid = pid, bySession = s, byName = s.name, expires = util.now() + c().inviteSeconds}
@@ -311,7 +346,10 @@ function cmds.accept(pid)
   if not (s and inv and inv.s == s and inv.expires >= util.now()) then return say(pid, "No open invite.") end
   invites[pid] = nil
   local m = stateOf(s.profile, true)
-  if m.member then return say(pid, "You are already in.") end
+  if m.member then
+    releaseInvite(inv)
+    return say(pid, "You are already in.")
+  end
   m.member = true
   m.rep = math.max(m.rep, c().startRep)
   m.invitedBy = inv.byName
@@ -453,14 +491,7 @@ local function tick()
   for targetPid, inv in pairs(invites) do
     if inv.expires < now or sessions.get(targetPid) ~= inv.s then
       invites[targetPid] = nil
-      if sessions.get(inv.byPid) == inv.bySession and inv.bySession.profile then
-        local m = stateOf(inv.bySession.profile)
-        if m and m.invites > 0 then
-          m.invites = m.invites - 1
-          profiles.persist(inv.bySession.profile)
-          say(inv.byPid, "Your invite was not accepted; you get it back.")
-        end
-      end
+      releaseInvite(inv)
     end
   end
   for pid, s in pairs(sessions.all()) do

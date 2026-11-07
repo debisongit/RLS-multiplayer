@@ -98,6 +98,18 @@ market._tick()
 check(profile(1).market.invites == 1 and last(1):find("get it back"), "expired invite refunded")
 say(3, "/market accept")
 check(not market.isMember(3), "expired invite cannot be accepted")
+-- expired but not swept yet, then invited again: the first reservation is given back
+say(1, "/market invite cid")
+check(profile(1).market.invites == 2, "re-invite reserved")
+now = now + cfg.market.inviteSeconds + 1
+say(1, "/market invite cid")
+check(profile(1).market.invites == 2, "unswept expired invite refunded before the new one")
+-- invitee made a member by the console meanwhile: accept gives the slot back
+fire("onConsoleInput", "rlsmp market grant cid")
+say(3, "/market accept")
+check(last(3):find("already in") and profile(1).market.invites == 1, "accept when already in: slot refunded")
+fire("onConsoleInput", "rlsmp market revoke cid")
+check(not market.isMember(3) and disk(3).market.member == false, "console revoke")
 -- limit: bob has 2 invites at rep 0
 say(2, "/market invite cid")
 say(2, "/market invite dan")
@@ -279,6 +291,20 @@ local kinds = 0
 for _ in pairs(seen) do kinds = kinds + 1 end
 check(kinds == #cfg.market.dropSpots, "every spot gets used")
 local saved = cfg.market.dropSpots
+for _, n in ipairs({2, 3, 5, 7}) do
+  local list = {}
+  for i = 1, n do list[i] = {name = "s" .. i, x = i, y = 0, z = 0} end
+  cfg.market.dropSpots = list
+  local repeats, used = 0, {}
+  for k = 0, 500 do
+    local x, y = market.spotAt(t0 + k * period), market.spotAt(t0 + (k + 1) * period)
+    used[x.name] = true
+    if x.name == y.name then repeats = repeats + 1 end
+  end
+  local u = 0
+  for _ in pairs(used) do u = u + 1 end
+  check(repeats == 0 and u == n, n .. " spots: never twice in a row, all used")
+end
 cfg.market.dropSpots = {{name = "only", x = 1, y = 2, z = 3}, {name = "bad", x = "no", y = 0, z = 0}}
 check(market.spotAt(t0).name == "only" and market.spotAt(t0 + period).name == "only", "one valid spot, bad ones skipped")
 cfg.market.dropSpots = {}
