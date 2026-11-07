@@ -8,7 +8,7 @@ Plan for about 30 minutes, one player (a second player is optional, see the end)
 
 | Component | Version |
 |---|---|
-| RLS-Career-MP (this repo) | default branch `claude/amazing-sagan-kh6ecn`, code commit `71c42cf`, build `0.4.18` (everything on the default branch; later commits only change documents) |
+| RLS-Career-MP (this repo) | default branch `claude/amazing-sagan-kh6ecn`, code commit `aafeffa`, build `0.4.19` (everything on the default branch; later commits only change documents) |
 | RLS Career Overhaul source read | v2.8.0, commit `e701d9e2218ca12ff70ba4a09c0c91514e96e380` (29 Oct 2026) |
 | BeamNG.drive | **not pinned, write yours down** (docs target 0.38 / 0.39) |
 | BeamMP (server and client) | **not pinned, write yours down** |
@@ -25,7 +25,7 @@ Vanilla BeamNG's traffic code was never read; only RLS's code was.
    ```bash
    tools/install_to_server.sh /path/to/BeamMP-Server
    ```
-   It prints `Installed RLS-Career-MP build 0.4.18`. It is a bash script: on Windows run it from Git Bash or WSL.
+   It prints `Installed RLS-Career-MP build 0.4.19`. It is a bash script: on Windows run it from Git Bash or WSL.
 2. Put the RLS Career Overhaul zip in the server's `Resources/Client/` as well.
 3. On your own PC, delete any local `rls_career_overhaul_v2.8.0_hotfix.zip` (or any other copy of RLS) from your BeamNG
    mods folder, so RLS is not unloaded and rebuilt on every join.
@@ -39,8 +39,8 @@ Vanilla BeamNG's traffic code was never read; only RLS's code was.
    would never visibly act. Any `totalBudget` above 0 fixes the budget instead. Under `"police"`,
    leave `"antiTeleport": true` and `"blockRoadblocks": true`. Start the server again.
 7. Join with BeamNG. In BeamNG's own settings, set the **traffic amount to 15 or more** (the max is fine).
-8. **Check the build.** The server log must say `joined with client build 0.4.18 (server build 0.4.18)` and the game log must
-   say `client loaded, build 0.4.18`. If the two builds differ, you are running an old client zip (this has already wasted a test round): re-run the install
+8. **Check the build.** The server log must say `joined with client build 0.4.19 (server build 0.4.19)` and the game log must
+   say `client loaded, build 0.4.19`. If the two builds differ, you are running an old client zip (this has already wasted a test round): re-run the install
    command, restart the server and rejoin.
 
 Client-side settings are not stored in the server file, so nothing else needs changing. Do not rename the zip.
@@ -200,7 +200,7 @@ When the second player leaves, the first should get `active=6` again. Send both 
 4. Did traffic look thinner than usual with the settings above?
 5. Anything that looked broken outside a chase (police, traffic, money, saving)?
 
-## Taxis and riding along (build 0.4.18)
+## Taxis and riding along (build 0.4.19)
 
 Two things changed in the vehicle guard (it used to refuse every AI car and every other player's car):
 
@@ -247,7 +247,7 @@ Log tag for both is `RLSMP-GUARD` (already included in the capture commands abov
 - Another player's AI traffic is recognised by the name-tag flag that `trafficLabels` sets, which can take 2 to 4 seconds for a car
   that has only just appeared. In that short window a new traffic car of A's could be entered by B by mistake. Tell me if it happens.
 
-## Garage part shop (build 0.4.18)
+## Garage part shop (build 0.4.19)
 
 **The bug:** at the garage computer you shop for parts while standing on foot. RLS rebuilds the car with `replaceVehicle(model, options, theCar)`.
 BeamMP ignores `theCar` and replaces the car the PLAYER is in, which is the walking character. A new car appeared and took over,
@@ -283,4 +283,43 @@ RLSMP-REPLACE|replace etk800 target=123(etk800) but player is in 45(unicycle) (b
 ### Known gaps
 - Not played in the game. The missing power steering could be a separate problem; this build only fixes which car is replaced.
 - Fixing it relies on the game's own `replaceVehicle` being captured before BeamMP swaps it (the warning line above says if it was not).
+
+## Traffic variety, step 1 (build 0.4.19)
+
+More varied traffic and parked cars (see `docs/DESIGN_TRAFFIC_VARIETY.md`). **Live swapping while you drive is not in this build**:
+a car keeps its model once it exists, so road class and day or night only change cars built later (traffic start, refills, parked cars).
+
+### Test steps
+1. Install `0.4.19` (check both logs say `0.4.19`), join, start your career and drive for a few minutes. Does the traffic look more varied (more different models,
+   no model repeated many times in a row)? Do the same on a second join.
+2. Look for these lines in the game log (tag `RLSMP-P3`):
+   ```
+   RLSMP-P3|wrapped core_multiSpawn.createGroup (variety)
+   RLSMP-P3|traffic variety settings received: enabled=true mods=0 maxShare=0.25 oversample=2.0 traffic=true parked=true
+   RLSMP-P3|probe: group filters = Config Type,Type; first entry fields = config,model...; model Types in the pool = Car=..,Truck=..
+   RLSMP-P3|probe: road class source = speedLimit
+   RLSMP-P3|variety traffic group: want=12 pool=24 mods=0 picked=12 distinct models=8 relaxed=0 zone=city night=false
+   ```
+   and on the server `RLSMP-P3 traffic variety sent to pid=...`. **Send me the `probe:` lines**: they tell me the real `Type` names and whether the game knows road speed limits.
+3. Try a weight: in the server `config.json` set `"trafficVariety": {"typeWeights": {"Truck": 0}}` (use a Type name from the probe line) and restart.
+   No cars of that Type should appear in newly built groups.
+4. Optional, with a car mod: put its zip in the server's `Resources/Client` folder, list the model name under `"mods": {"modname": 3}`, restart. Every player downloads the zip when joining.
+
+### Named failure modes
+| What you see | What it means |
+|---|---|
+| No `wrapped core_multiSpawn.createGroup (variety)` line | The wrapper was not installed (the game's spawner was not ready). Send the log. |
+| `W RLSMP-P3|RLS's wrapperLifetime is not available` | RLS is missing or changed; variety stays off. Send the log. |
+| `probe: road class source = none` | The game gave no speed limit for the road: road class multipliers do nothing. Day and night still work. |
+| `variety failed, the game's own group is used` | An error inside our code; the game was not affected. Send the log line. |
+| `W RLSMP-P3|rewrapped createGroup ...` | Normal a few times: RLS wrapped over ours (for example when the career starts) and we put one layer on top; the older layer is switched off. If it repeats every few seconds, send the log. |
+| Taxis disappear or cannot be hailed | Taxis should not pass through this code, but I could not verify that in the game. Set `"trafficVariety": {"applyToTraffic": false}` and restart; send me the log. |
+| `relaxed=` above 0 in the group line | The pool was too small for the 25% rule. Not a problem by itself. |
+| `mod model X is not installed here` | That game does not have the mod. It skips it. Other players with the mod may see black blobs if they do not. |
+| Black blobs and a pop-up for every car on another player's screen | They are missing a mod model that someone's traffic uses. Remove the mod or make sure the zip is in `Resources/Client`. |
+| Traffic or police behave oddly after this build | Set `"trafficVariety": {"enabled": false}` and restart the server; send me the log. |
+
+### Known gaps
+- Not played. Everything about the car lists comes from reading RLS's code; the game's own spawner code is not visible to me.
+- Joins have stalled before during the save download; a big car mod makes joins heavier for everybody.
 

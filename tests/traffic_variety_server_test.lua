@@ -1,0 +1,76 @@
+-- Server traffic variety settings test (lua5.3). Run: lua5.3 tests/traffic_variety_server_test.lua
+package.path = "tests/support/?.lua;Resources/Server/RLS-Career-MP/lua/?.lua;" .. package.path
+local json = require("json")
+
+local sent, handlers = {}, {}
+MP = {
+  RegisterEvent = function(ev, fname) handlers[ev] = fname end,
+  CreateEventTimer = function() end,
+  TriggerClientEvent = function(pid, name, data) table.insert(sent, {pid = pid, name = name, data = json.decode(data)}) end,
+}
+Util = {}
+require("rlsmp.server.util").setJsonCodec(json)
+local stages = {}
+package.loaded["rlsmp.server.sessions"] = {
+  all = function() return stages end,
+  isLoaded = function(pid) return stages[pid] == "loaded" end,
+}
+local cfg = require("rlsmp.server.config").defaults
+require("rlsmp.server.net").init(cfg)
+local tv = require("rlsmp.server.trafficVariety")
+tv.init(cfg, "")
+
+local passed = 0
+local function check(cond, msg) if not cond then error("FAIL: " .. msg, 2) end passed = passed + 1 end
+local function tick() _G[handlers["rlsmpTrafficVarietyTick"]]() end
+local function take() local t = sent sent = {} return t end
+
+-- defaults
+check(cfg.trafficVariety.enabled == true and cfg.trafficVariety.maxShare == 0.25 and cfg.trafficVariety.oversample == 2, "defaults")
+check(next(cfg.trafficVariety.mods) == nil and next(cfg.trafficVariety.typeWeights) == nil, "no mods and no weights out of the box")
+check(cfg.trafficVariety.zoneSpeedLimits.city == 17 and cfg.trafficVariety.zoneSpeedLimits.main == 27, "road class limits")
+
+-- sent once, when loaded
+stages[0] = "await_hello"
+tick()
+check(#take() == 0, "not loaded -> nothing")
+stages[0] = "loaded"
+tick()
+local m = take()
+check(#m == 1 and m[1].name == "rlsmpTrafficVariety" and m[1].data.enabled == true and m[1].data.maxShare == 0.25, "settings sent on load")
+check(m[1].data.applyToTraffic == true and m[1].data.applyToParked == true, "traffic and parked on")
+tick()
+check(#take() == 0, "sent only once")
+stages[0] = nil
+tick()
+stages[0] = "loaded"
+tick()
+check(#take() == 1, "rejoin gets them again")
+
+-- a hand-edited config.json cannot send rubbish
+cfg.trafficVariety.typeWeights = {Truck = 0.5, Bad = "x", Neg = -1, Nan = 0 / 0, [1] = 5, [string.rep("n", 90)] = 1}
+cfg.trafficVariety.mods = {mycar = 3, ["other car"] = math.huge}
+cfg.trafficVariety.zones = {highway = {Truck = 2}, [7] = {Car = 1}}
+local big = {}
+for i = 1, 300 do big["t" .. i] = 1 end
+cfg.trafficVariety.night = big
+stages[1] = "loaded"
+tick()
+m = take()
+local d = m[1].data
+check(d.typeWeights.Truck == 0.5 and d.typeWeights.Bad == nil and d.typeWeights.Neg == nil and d.typeWeights.Nan == nil, "bad weights dropped")
+check(d.typeWeights[1] == nil and d.typeWeights[string.rep("n", 90)] == nil, "bad names dropped")
+check(d.mods.mycar == 3 and d.mods["other car"] == nil, "mod weights kept, infinity dropped")
+check(d.zones.highway.Truck == 2 and d.zones[7] == nil, "zones sanitized")
+local n = 0
+for _ in pairs(d.night) do n = n + 1 end
+check(n == 64, "at most 64 entries per table")
+
+-- switched off: still sent (so a game never guesses), with enabled = false
+cfg.trafficVariety.enabled = false
+stages[2] = "loaded"
+tick()
+m = take()
+check(#m == 1 and m[1].data.enabled == false, "switched off: sent with enabled = false")
+
+print(string.format("traffic_variety_server_test: %d checks passed", passed))
