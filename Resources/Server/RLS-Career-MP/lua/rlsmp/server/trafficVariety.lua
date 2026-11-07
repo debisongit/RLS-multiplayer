@@ -58,6 +58,7 @@ function M.payload()
   return {
     enabled = cfg.enabled == true,
     typeWeights = weights(cfg.typeWeights),
+    models = weights(cfg.models),
     mods = weights(cfg.mods),
     zones = zones,
     day = weights(cfg.day),
@@ -92,6 +93,9 @@ function M.push()
     if not live[pid] then told[pid] = nil end
   end
 end
+
+-- Settings changed (by the traffic menu): send everybody the new ones.
+function M.resend() told = {} end
 
 function M.init(config)
   cfg = config.trafficVariety

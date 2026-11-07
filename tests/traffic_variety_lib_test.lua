@@ -51,6 +51,23 @@ check(V.weight(truck, {type = "Truck"}, {zone = "city"}, cfg) == 0.5 * 2, "a zon
 check(V.weight({model = "modcar", config = "x"}, {type = "Car", mod = true}, {}, cfg) == 3, "mod weight")
 check(V.weight(car, {}, {zone = "highway"}, cfg) == 1, "unknown Type: only the mod weight can apply")
 
+-- per-model weights win over the weight of the Type ---------------------------------------------------------------------------
+cfg = cfgWith({typeWeights = {Truck = 0.5}, models = {pickup = 3, van = 0}, zones = {city = {Truck = 2, pickup = 10}}, night = {van = 5, Truck = 0.1}})
+local pickup, van, hatch = {model = "pickup", config = "a"}, {model = "van", config = "a"}, {model = "hatch", config = "a"}
+check(V.sanitize({models = {a = 2, b = "x", c = -1}}).models.a == 2 and V.sanitize({models = {a = 2, b = "x", c = -1}}).models.b == nil, "models sanitized like the other weight tables")
+check(V.weight(pickup, {type = "Truck"}, {}, cfg) == 3, "the model's weight replaces its Type's (3, not 0.5)")
+check(V.weight(van, {type = "Truck"}, {}, cfg) == 0, "a model weighted 0 is never picked, whatever its Type says")
+check(V.weight({model = "bus", config = "a"}, {type = "Truck"}, {}, cfg) == 0.5, "a model without its own weight uses its Type's")
+check(V.weight(pickup, {type = "Truck"}, {zone = "city"}, cfg) == 3 * 10, "a zone entry for the model wins over the zone entry for its Type")
+check(V.weight({model = "bus", config = "a"}, {type = "Truck"}, {zone = "city"}, cfg) == 0.5 * 2, "...the Type's zone entry still applies to the other models")
+check(V.weight(pickup, {type = "Truck"}, {night = true}, cfg) == 3 * 0.1, "night: the Type's entry applies when the model has none")
+check(V.weight(van, {type = "Truck"}, {night = true}, cfg) == 0, "weight 0 stays 0 at night (0 x 5)")
+check(V.weight(hatch, nil, {}, cfg) == 1, "a model with nothing set weighs 1")
+check(V.weight(pickup, {}, {zone = "city"}, cfg) == 3 * 10, "model entries work even when the Type is unknown")
+cfg = cfgWith({models = {hatch = 0}})
+local gm = V.select({{model = "hatch", config = "a"}, {model = "sedan", config = "b"}, {model = "sedan", config = "c"}}, 2, function() return {} end, {}, cfg, lcg(4))
+check(#gm == 2 and gm[1].model == "sedan" and gm[2].model == "sedan", "a model weighted 0 is left out of a group")
+
 -- select ----------------------------------------------------------------------------------------------------
 local function pool(model, count, startAt)
   local out = {}

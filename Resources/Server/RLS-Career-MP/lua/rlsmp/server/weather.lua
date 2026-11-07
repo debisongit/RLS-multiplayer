@@ -90,6 +90,7 @@ function M.at(epoch, c)
 end
 
 function M.tick()
+  if not cfg.weather.enabled then return end        -- can be switched on and off while the server runs (traffic menu)
   local c = {periodMinutes = cfg.weather.periodMinutes, mix = cfg.weather.mix, force = cfg.weather.force, serverTag = cfg.serverTag}
   local condition, period, left = M.at(util.now(), c)
   if period ~= lastPeriod then
@@ -104,8 +105,7 @@ end
 function M.init(config)
   cfg = config
   local w = cfg.weather
-  if not w.enabled then return end
-  net.on("rlsmpWeatherTick", M.tick)
+  net.on("rlsmpWeatherTick", M.tick)               -- always registered: tick itself checks `enabled`
   MP.CreateEventTimer("rlsmpWeatherTick", math.max(1000, math.floor((tonumber(w.syncSeconds) or 10) * 1000)))
   util.info("Shared weather on: a new condition every " .. tostring(w.periodMinutes) .. " min" .. ((w.force or "") ~= "" and (", forced: " .. w.force) or ""))
 end
