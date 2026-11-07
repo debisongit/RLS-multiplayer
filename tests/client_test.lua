@@ -164,5 +164,8 @@ do
   sent = {}
   check(netlib.requestMissing() == 2, "two chunks missing")
   check(sent[#sent].name == "rlsmpChunkMissing", "asks the server")
+  sent = {}
+  for i = 1, 8 do handlers["rlsmpChunk"](json.encode({id = 77, i = 1, d = chunks[1]})) end
+  check(#sent == 0, "no progress report before 8 chunks")
 end
 print(string.format("client_test: %d checks passed", passed))

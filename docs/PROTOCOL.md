@@ -146,6 +146,11 @@ Chat: `/duel <player>`, `/duel accept`, `/duel cancel`, `/duel claim`. Needs at 
   upload kind `duelHand {slip, inv, rec}`, `rlsmpDuelReceived {slip}`, `rlsmpDuelRelease {slip, why}`.
 - Owed cars are kept in `duels.json` until the winner confirms. See the safety rules at the top of `server/duel.lua`.
 
+## Flow control
+
+- `rlsmpChunkProgress {id, got}` (client to server): sent every 8 chunks received. The server keeps at most 24 chunks in flight beyond `got`
+  (a busy client drops what it cannot read, which stalled a 177 chunk save at 129 and 153). After 3 s without news it trickles on anyway.
+
 ## Lost chunks
 
 - `rlsmpChunkMissing {id, list}` (client to server): up to 50 chunk numbers of transfer `id` that never arrived. The client asks after 4 s without progress, repeating every 4 s.

@@ -35,4 +35,18 @@ check(count(1, "rlsmpChunk") == total + 2, "unknown transfer ignored")
 net.dropPlayer(1)
 fire("rlsmpChunkMissing", 1, json.encode({id = id, list = {1}}))
 check(count(1, "rlsmpChunk") == total + 2, "nothing kept after the player left")
+-- flow control: only a window of chunks goes out until the client confirms progress
+players[2] = {name = "bob", ids = {beammp = "2"}}
+local before = count(2, "rlsmpChunk")
+local id2 = net.sendBig(2, "big", string.rep("z", 16000 * 100), nil)
+for _ = 1, 100 do net.pump() end
+local out = count(2, "rlsmpChunk") - before
+check(out > 0 and out <= 24, "no more than the window is sent before the client confirms (" .. out .. ")")
+fire("rlsmpChunkProgress", 2, json.encode({id = id2, got = 24}))
+for _ = 1, 100 do net.pump() end
+local out2 = count(2, "rlsmpChunk") - before
+check(out2 > out and out2 <= 48, "confirmed progress lets more chunks go")
+for g = 24, 100, 8 do fire("rlsmpChunkProgress", 2, json.encode({id = id2, got = g})) for _ = 1, 10 do net.pump() end end
+for _ = 1, 100 do net.pump() end
+check(net.pendingFor(2) == 0, "transfer finishes when the client keeps confirming")
 print("resend_test: " .. passed .. " checks passed")

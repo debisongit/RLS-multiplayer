@@ -70,6 +70,10 @@ local function onChunk(c)
   local job = incoming[id]
   if not job then return end
   job.assembler:add(c.i, c.d)
+  -- Tell the server how far we are, so it sends no faster than we can read.
+  if job.assembler.received % 8 == 0 and not job.assembler:isComplete() then
+    M.send("rlsmpChunkProgress", {id = tonumber(id), got = job.assembler.received})
+  end
   if not job.assembler:isComplete() then return end
   incoming[id] = nil
   local text, problem = job.assembler:finish()

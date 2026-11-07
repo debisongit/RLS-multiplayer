@@ -17,6 +17,7 @@ local cfg
 local outbox = {}       -- pid -> list of pending outgoing transfers
 local recent = {}       -- pid -> transferId -> {chunks, expires}: finished transfers kept briefly so lost chunks can be sent again
 local KEEP_SECONDS = 120
+local WINDOW = 24       -- chunks that may be on the way before the client has confirmed some (a busy client drops what it cannot read)
 local nextTransferId = 0
 
 -- BeamMP wants a *global function name* per event. We generate one per event.
@@ -78,6 +79,15 @@ function M.pendingFor(pid)
   return outbox[pid] and #outbox[pid] or 0
 end
 
+-- The client reports how many chunks of transfer `id` it holds; this lets the next ones go out.
+local function onChunkProgress(pid, data)
+  local id, got = tonumber(data.id), tonumber(data.got)
+  if not id or not got then return end
+  for _, job in ipairs(outbox[pid] or {}) do
+    if job.header.id == id and got > (job.got or 0) then job.got, job.gotAt = got, os.clock() end
+  end
+end
+
 function M.dropPlayer(pid)
   outbox[pid] = nil
   recent[pid] = nil
@@ -117,6 +127,9 @@ local function pump()
         M.send(pid, "rlsmpChunkBegin", job.header)
         job.next = 1
         job.startedAt = os.clock()
+        job.gotAt = job.startedAt
+      elseif (job.next - 1) - (job.got or 0) >= WINDOW and os.clock() - (job.gotAt or job.startedAt or 0) < 3 then
+        break   -- wait for the client to confirm; after 3 s of silence we trickle on anyway
       else
         MP.TriggerClientEvent(pid, "rlsmpChunk",
           util.jsonEncode({id = job.header.id, i = job.next, d = job.chunks[job.next]}))
@@ -141,6 +154,7 @@ function M.init(config)
   M.on("onChatMessage", chatRouter)
   M.on("rlsmpPump", pump)
   M.onClient("rlsmpChunkMissing", onChunkMissing)
+  M.onClient("rlsmpChunkProgress", onChunkProgress)
   MP.CreateEventTimer("rlsmpPump", 50)
 end
 
