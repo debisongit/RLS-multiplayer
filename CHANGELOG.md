@@ -1,6 +1,6 @@
 # Changelog
 
-## Summary of 0.4.14 to 0.4.29 (what was added, in one place)
+## Summary of 0.4.14 to 0.4.30 (what was added, in one place)
 Every line below, and every line of the list further down, ends with who made it: **Claude A** (saves, wallet, business, claims, plates, market, theft core) or **Claude B** (traffic, police, variety, weather, traffic menu, fence, phone app).
 - 0.4.14: police freeze only the cops in your chase, players report positions (`/where`), shared shop stock (off). (Claude A)
 - 0.4.15: smart traffic personalities. 0.4.16: stuck traffic recycling. 0.4.17: duplicate-car cleanup. (Claude A)
@@ -10,11 +10,14 @@ Every line below, and every line of the list further down, ends with who made it
 - 0.4.23: sturdier save download and safer duels. (Claude A)
 - 0.4.23: traffic settings menu on the `[` key, only for the admins the server lists. (Claude B)
 - 0.4.24: plate reading and police records. 0.4.25: arrest flags the plate. 0.4.26: black market and car theft core. (Claude A)
-- 0.4.27: the fence (sell or strip stolen cars). 0.4.28: Black Market phone app, lockout kit, signal jammer, tracker blocker feedback. 0.4.29: theft, fence and market settings in the in-game menu. (Claude B)
+- 0.4.27: the fence (sell or strip stolen cars). 0.4.28: Black Market phone app, lockout kit, signal jammer, tracker blocker feedback. 0.4.29: theft, fence and market settings in the in-game menu. 0.4.30: Black Market phone app connection fix. (Claude B)
 
 Plain list of what changed in each build. The build number shows in the game log (`client loaded, build X`) and the server log.
 "Untested" means it passed the automatic tests but nobody has played it yet.
 When you add a line, end it with `(Claude A)` or `(Claude B)`, whoever made the change. Both of us write in this one file.
+
+## 0.4.30
+- Black Market phone app: first game test showed the app opens but said "No connection". The app now tries both ways RLS reaches the game (`lua.rlsmp_market` and `lua.extensions.rlsmp_market`), asks the game to load the market extension if it is missing, and shows the real error text under "No connection" so a screenshot tells what failed. The game log gets one line `RLSMP-MARKET the phone app reached the market extension` the first time the app calls in. Whether this fixes it is not known yet. (untested in game) (Claude B)
 
 ## 0.4.29
 - The in-game settings menu (`[` key, only for the admins the server lists) now also edits **car theft**, the **fence** and the **black market**, on three new pages: Theft (on/off, how many parked cars are stealable, witness and report chances, report times, which cars need which method, and each method's time, noise and failure chance), Fence (open/closed, what strip, resell and gamble pay, the trap chance, reputation per sale) and Market (open/closed, bust cost, delays, invites, and the price, reputation needed and on/off of every item). The server checks every number against a range, saves it to `config.json` and applies it at once. Theft can now be switched on and off from the menu without restarting the server (the games are told straight away). Drop spot places and the list of admins are still only in `config.json`. (untested in game) (Claude B)

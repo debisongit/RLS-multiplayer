@@ -27,7 +27,7 @@ check(r.backTarget == "phone-main", "Back goes to the phone's home")
 local vue = read(root .. r.component:gsub("^/", ""))
 check(vue:find("<template>", 1, true) and vue:find("<script setup>", 1, true), "the component file exists with a template and script")
 check(not vue:find("rls_career_overhaul", 1, true), "the view imports nothing from the RLS mod's own files")
-check(vue:find("lua.rlsmp_market.uiGet", 1, true) and vue:find("lua.rlsmp_market.uiAct", 1, true), "the view calls the client extension's two functions")
+check(vue:find("callGame('uiGet')", 1, true) and vue:find("callGame('uiAct'", 1, true) and vue:find("lua.rlsmp_market", 1, true) and vue:find("lua.extensions.rlsmp_market", 1, true), "the view calls the client extension's two functions, by both routes into Lua")
 
 -- the client extension really offers them
 local market = read(root .. "lua/ge/extensions/rlsmp/market.lua")

@@ -29,6 +29,7 @@
       <section v-if="problem" class="card center">
         <h2>{{ problem.title }}</h2>
         <p>{{ problem.text }}</p>
+        <p v-if="problem.detail" class="hint">{{ problem.detail }}</p>
       </section>
 
       <template v-else-if="state && !member">
@@ -101,6 +102,7 @@ const MESSAGE_MS = 9000
 
 const view = ref(null)         // what rlsmp_market.uiGet() returned last
 const failed = ref(false)
+const detail = ref('')        // the text of the last error, shown under "No connection" so a screenshot tells what went wrong
 const busy = ref(false)
 const message = ref('')
 const who = ref('')
@@ -114,7 +116,7 @@ let seenSeq = null             // null until the first poll: an old result from 
 const state = computed(() => (view.value && view.value.state) || null)
 const member = computed(() => !!(state.value && state.value.ready && state.value.member))
 const problem = computed(() => {
-  if (failed.value && !state.value) return { title: 'No connection', text: 'The phone could not reach the game. Try again in a moment.' }
+  if (failed.value && !state.value) return { title: 'No connection', text: 'The phone could not reach the game. Try again in a moment.', detail: detail.value }
   if (view.value && view.value.enabled === false) return { title: 'Not available', text: 'The black market only works while you are on a server running RLS-Career-MP.' }
   if (state.value && state.value.ready === false) return { title: 'Wait a moment', text: 'Your career is still loading.' }
   return null
@@ -153,9 +155,38 @@ function show(text) {
   messageTimer = setTimeout(() => { message.value = '' }, MESSAGE_MS)
 }
 
+// RLS reaches Lua two ways: lua.<extension>.fn() and lua.extensions.<extension>.fn(). Try the first, then the second, and keep the one that works.
+const ROUTES = [() => lua.rlsmp_market, () => lua.extensions.rlsmp_market]
+let route = 0
+let triedLoading = false
+async function callGame(fn, ...args) {
+  let lastError
+  for (let i = 0; i < ROUTES.length; i++) {
+    const r = (route + i) % ROUTES.length
+    try {
+      const result = await ROUTES[r]()[fn](...args)
+      route = r
+      return result
+    } catch (e) {
+      lastError = e
+    }
+  }
+  // Maybe the extension was never loaded (RLS itself loads some of its own on demand): ask the game to load it once, then try again.
+  if (!triedLoading) {
+    triedLoading = true
+    try {
+      await lua.extensions.load('rlsmp_market')
+      return await callGame(fn, ...args)
+    } catch (e) {
+      lastError = e
+    }
+  }
+  throw lastError
+}
+
 async function poll() {
   try {
-    const v = await lua.rlsmp_market.uiGet()
+    const v = await callGame('uiGet')
     if (!alive) return
     view.value = v || { enabled: false }
     failed.value = false
@@ -163,6 +194,8 @@ async function poll() {
     if (seenSeq === null) seenSeq = seq
     else if (seq !== seenSeq) { seenSeq = seq; show(v.result.text) }
   } catch (e) {
+    detail.value = String((e && (e.message || e)) || 'unknown error').slice(0, 200)
+    console.warn('[RLSMP] Black Market could not reach the game:', e)
     if (alive) failed.value = true
   }
 }
@@ -171,7 +204,7 @@ async function act(action, a, b) {
   if (busy.value) return
   busy.value = true
   try {
-    await lua.rlsmp_market.uiAct(action, a, b)
+    await callGame('uiAct', action, a, b)
   } catch (e) {
     show('Could not reach the game. Try again.')
   } finally {

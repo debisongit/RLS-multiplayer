@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import Comp from '../../Resources/Client/RLS-Career-MP/ui/ui-vue/mods/rls_career_mp/phone/PhoneBlackMarket.vue'
-import { fake, calls } from './bridge-mock.js'
+import { fake, calls, loads } from './bridge-mock.js'
 
 const member = (over = {}) => ({ ready: true, member: true, rep: 10, invitesLeft: 3, money: 5000, spot: "Joe's Junkyard",
   items: [
@@ -16,7 +16,7 @@ async function open(view) {
   await flushPromises()
   return w
 }
-beforeEach(() => { calls.length = 0; vi.useFakeTimers({ toFake: ['setInterval', 'setTimeout', 'clearInterval', 'clearTimeout'] }) })
+beforeEach(() => { loads.length = 0; fake.loadFixes = false; fake.direct = true; fake.viaExtensions = true; calls.length = 0; vi.useFakeTimers({ toFake: ['setInterval', 'setTimeout', 'clearInterval', 'clearTimeout'] }) })
 afterEach(() => { vi.useRealTimers() })
 
 describe('PhoneBlackMarket', () => {
@@ -116,6 +116,26 @@ describe('PhoneBlackMarket', () => {
     expect(w.text()).toContain('Your orders')
     await w.findAll('button').find(b => b.text() === 'Collect here').trigger('click'); await flushPromises()
     expect(calls[0][0]).toBe('pickup')
+  })
+  it('falls back to the second way into Lua when the first one fails', async () => {
+    fake.direct = false
+    const w = await open({ enabled: true, state: member() })
+    expect(w.text()).toContain('Reputation 10')
+    await w.findAll('button').find(b => b.text() === 'Buy $400').trigger('click'); await flushPromises()
+    expect(calls[0].slice(0, 3)).toEqual(['buy', 'screwdriver', 1])
+  })
+  it('shows the real error text when no way into Lua works', async () => {
+    fake.direct = false; fake.viaExtensions = false
+    const w = mount(Comp)
+    await flushPromises()
+    expect(w.text()).toContain('No connection')
+    expect(w.text()).toContain('no such extension')
+  })
+  it('asks the game to load the extension when it is missing, then works', async () => {
+    fake.direct = false; fake.viaExtensions = false; fake.loadFixes = true
+    const w = await open({ enabled: true, state: member() })
+    expect(loads).toEqual(['rlsmp_market'])
+    expect(w.text()).toContain('Reputation 10')
   })
   it('stops polling when closed', async () => {
     let n = 0

@@ -123,7 +123,12 @@ local function onResult(d)
 end
 
 -- What the app shows: {state = last rlsmpMarketState or nil, result = {text, seq} or nil, enabled}. Asks the server when the answer is stale.
+local loggedApp = false
 function M.uiGet()
+  if not loggedApp then
+    loggedApp = true
+    log("I", "RLSMP-MARKET", "the phone app reached the market extension (enabled=" .. tostring(enabled) .. ")")
+  end
   if not enabled then return {enabled = false} end
   if now() - askedAt >= ASK_EVERY then
     askedAt = now()
