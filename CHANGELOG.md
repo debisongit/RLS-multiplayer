@@ -49,7 +49,7 @@
 - More parked cars: after the career starts, the game setting `trafficParkingAmount` is raised to `trafficVariety.parked.amount` (default 10; your log had 2) and RLS tops the cars up; the old value comes back when you leave. 0 = leave alone. More parked cars are more BeamMP cars per player, so check `MaxCars`. Untested in game. (Claude A)
 - The `[` menu "amount" page got the pool, re-roll and parked settings. Research and unverified bits: `docs/RESEARCH_TRAFFIC_POOL.md`. (Claude A)
 - Note: with default weights live swapping never swaps (everything weighs the same); only the new re-roll changes cars on a default server. (Claude A)
-## Unreleased (not built, not played)
+## 0.4.35, more detail: meetup selling
 - New meetup selling. A Marketplace sale no longer finishes at once: you get a GPS route to a meetup spot the server picks, stop there for a moment, and the sale completes. Spots change each time and there is a cooldown. Untested in game, and the hook into the Marketplace is unverified (see `docs/RESEARCH_MEETUP_SALE.md`). (untested) (Claude A)
 - A fully legal car is never set up. A stolen car or a car with a police-flagged plate has a chance that the buyer is a police setup: 1 or 2 cops chase you, no roadblocks, no sale. The chance is never 0 or 100 percent for those cars, so you cannot be sure. (untested) (Claude A)
 - Black market: `/meetup black` sells a stolen car you drive by meetup; the server pays. `/meetup` is the fallback for a garage car. Settings in config `meetup`. (untested) (Claude A)
