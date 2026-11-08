@@ -12,14 +12,23 @@ local util = require("rlsmp.server.util")
 
 local M = {}
 
-local cfg
+local cfg, tcfg
 local told = {}   -- pid -> true once they have the settings
+
+-- Traffic respawn range and delay, and the stuck-car recycling (config.traffic, edited in the [ menu); the client sanitizes them again.
+function M.range()
+  local t = type(tcfg) == "table" and tcfg or {}
+  local u = type(t.unjam) == "table" and t.unjam or {}
+  return {respawnRange = tonumber(t.respawnRange), respawnDelay = tonumber(t.respawnDelay),
+    unjam = {enabled = u.enabled ~= false, seconds = tonumber(u.seconds), distance = tonumber(u.distance)}}
+end
 
 function M.payload()
   return {
     antiTeleport = cfg.antiTeleport == true,
     blockRoadblocks = cfg.blockRoadblocks == true,
     bubbleMode = cfg.bubbleMode,
+    range = M.range(),
   }
 end
 
@@ -46,6 +55,7 @@ function M.resend() told = {} end
 
 function M.init(config)
   cfg = config.police
+  tcfg = config.traffic
   told = {}
   net.on("rlsmpPoliceTick", function() if cfg.enabled then M.push() end end)
   MP.CreateEventTimer("rlsmpPoliceTick", 1000)

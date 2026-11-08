@@ -343,6 +343,12 @@ local function onConfig(data)
     if b and b.setMode then b.setMode(data.bubbleMode) end
     p3.log("I", "traffic bubble mode = " .. data.bubbleMode)
   end
+  if type(data.range) == "table" then
+    local b = rawget(_G, "rlsmp_bubble") or package.loaded["rlsmp/bubble"]
+    if b and b.setRange then b.setRange(data.range) end
+    local u = rawget(_G, "rlsmp_unjam") or package.loaded["rlsmp/unjam"]
+    if u and u.configure then u.configure(b and b.getRange and b.getRange().unjam or data.range.unjam) end
+  end
   if not settings.antiTeleport then releaseAll() end
 end
 

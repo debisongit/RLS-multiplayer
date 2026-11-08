@@ -20,6 +20,7 @@ local mp = require("rlsmp/lib/mp")
 local p3 = require("rlsmp/lib/p3")
 local G = require("rlsmp/lib/viewGate")
 local W = require("rlsmp/lib/respawnWatch")
+local R = require("rlsmp/lib/range")
 
 local BUBBLE = 450
 local SIGHT = 1000
@@ -34,6 +35,19 @@ function M.setMode(m)
   if MODES[m] then mode = m end
 end
 function M.getMode() return mode end
+
+-- Respawn range and delay (server settings traffic.respawnRange / respawnDelay, docs/RESEARCH_RESPAWN_RANGE.md). Defaults = the game's original.
+local range = R.sanitize({})
+local placed = setmetatable({}, {__mode = "k"})   -- traffic car -> {count, at}: when the game last placed it
+local clock = 0
+function M.setRange(src)
+  local new = R.sanitize(src)
+  local change = R.describe(range, new)
+  range = new
+  p3.log("I", "range: " .. (change and ("changed " .. change) or "unchanged") .. string.format(" (now range=%s delay=%s unjam=%s/%ss/%sm)",
+    tostring(new.respawnRange), tostring(new.respawnDelay), tostring(new.unjam.enabled), tostring(new.unjam.seconds), tostring(new.unjam.distance)))
+end
+function M.getRange() return range end
 
 -- Positions of the other players' cars (and walking characters).
 local function playerPositions()
@@ -105,7 +119,22 @@ function M.viewReason(veh)
   return why, d
 end
 
+-- Distance in metres from a car to the nearest player (the local one and every other), nil when unknown. For unjam.
+function M.minPlayerDistance(veh)
+  if not (veh and veh.pos) then return nil end
+  local best
+  local function take(p)
+    if not p then return end
+    local d = math.sqrt((veh.pos.x - p.x) ^ 2 + (veh.pos.y - p.y) ^ 2 + (veh.pos.z - p.z) ^ 2)
+    if not best or d < best then best = d end
+  end
+  take(focusPos(veh))
+  for _, p in ipairs(playerPositions()) do take(xyz(p)) end
+  return best
+end
+
 local wrappers = setmetatable({}, {__mode = "k"})   -- class -> the wrapper we installed
+local radiusWrappers = setmetatable({}, {__mode = "k"})   -- class -> our updateActiveRadius wrapper
 
 local function anyTrafficClass()
   if not (gameplay_traffic and gameplay_traffic.getTrafficData) then return nil end
@@ -115,10 +144,32 @@ local function anyTrafficClass()
   end
 end
 
+-- updateActiveRadius: RLS computes finalRadius every tick; we multiply the result by respawnRange (police and held units are left alone).
+-- If RLS returned early (finalRadius not recomputed) the value is still our scaled one: `rlsmpScaled` stops it from being scaled twice.
+local function installRadius(class)
+  local original = class.updateActiveRadius
+  if type(original) ~= "function" then return end
+  if radiusWrappers[class] and class.updateActiveRadius == radiusWrappers[class] then return end
+  local wrapper = function(self, ...)
+    local res = original(self, ...)
+    if enabled and range.respawnRange ~= 1 and type(self.respawn) == "table" and not self.rlsmpHold and not (type(self.role) == "table" and self.role.name == "police") then
+      local fr = tonumber(self.respawn.finalRadius)
+      if fr and fr ~= self.rlsmpScaled and fr < 1e5 then
+        self.respawn.finalRadius = R.scale(fr, range.respawnRange)
+        self.rlsmpScaled = self.respawn.finalRadius
+      end
+    end
+    return res
+  end
+  radiusWrappers[class] = wrapper
+  class.updateActiveRadius = wrapper
+end
+
 -- Runs every frame: RLS may replace the method when its services restart, then we wrap the new one.
 function M.install()
   local class = anyTrafficClass()
   if not class or type(class.tryRespawn) ~= "function" then return false end
+  installRadius(class)
   if wrappers[class] and class.tryRespawn == wrappers[class] then return true end
   local original = class.tryRespawn
   local wrapper
@@ -126,6 +177,10 @@ function M.install()
     if enabled and self.rlsmpHold then p3.count("bubble: police held") return end   -- a police unit tied to the player's chase (rlsmp/police.lua) must not be recycled
     -- RLS's own cheap gates first: nothing to decide unless RLS is about to recycle this car
     local aboutToGo = self.enableRespawn and type(self.respawn) == "table" and self.focusDist and (tonumber(self.respawn.finalRadius) or math.huge) < self.focusDist
+    if enabled and aboutToGo and range.respawnDelay > 0 and R.holdByDelay(placed[self] and placed[self].at, clock, range.respawnDelay) then
+      p3.count("range: held by delay")
+      return
+    end
     if enabled and aboutToGo and mode ~= "off" and mp.isMPSession() and self.pos then
       local players = playerPositions()
       if #players > 0 then
@@ -146,7 +201,7 @@ end
 
 -- Respawn / fade-out census for the "distance:" log (every 30 s). Read only.
 local watch = W.new()
-local clock, logTimer = 0, 0
+local logTimer = 0
 function M.onUpdate(dtReal)
   M.install()
   dtReal = dtReal or 0
@@ -163,6 +218,8 @@ function M.onUpdate(dtReal)
   local alive, amount, radius = {}, 0, nil
   for id, veh in pairs(data) do
     alive[id] = true
+    local rec = placed[veh]
+    if not rec or rec.count ~= veh.respawnCount then placed[veh] = {count = veh.respawnCount, at = clock} end
     if veh.isAi and veh.state ~= "queued" then amount = amount + 1 end
     local vp = xyz(veh.pos)
     local dist = vp and fp and math.sqrt((vp.x - fp.x) ^ 2 + (vp.y - fp.y) ^ 2 + (vp.z - fp.z) ^ 2) or nil
@@ -182,6 +239,10 @@ function M.onUpdate(dtReal)
     logTimer = 0
     local vars = gameplay_traffic.getTrafficVars and gameplay_traffic.getTrafficVars() or {}
     local n, nearest = W.summary(watch, clock)
+    if range.respawnRange ~= 1 or range.respawnDelay > 0 then
+      p3.log("I", string.format("range: respawnRange=%s respawnDelay=%s biggest finalRadius=%s held by delay so far=%s", tostring(range.respawnRange), tostring(range.respawnDelay),
+        radius and string.format("%.0f", radius) or "?", tostring(p3.get("range: held by delay"))))
+    end
     p3.log("I", string.format("distance: walking=%s radius=%s activeAmount=%s cars=%d respawns/min=%d nearestRespawn=%s spawnValue=%s bubble=%s",
       tostring(gameplay_walk ~= nil and gameplay_walk.isWalking and gameplay_walk.isWalking() or false), radius and string.format("%.0f", radius) or "?",
       tostring(vars.activeAmount), amount, n, nearest and string.format("%.0f", nearest) or "none", tostring(vars.spawnValue), mode))

@@ -1,4 +1,4 @@
--- RLS-Career-MP client extension "rlsmp_unjam": stuck traffic cars (standing still for 30 s, honking) are recycled one by one.
+-- RLS-Career-MP client extension "rlsmp_unjam": stuck traffic cars (standing still for 120 s, 400 m or more from every player) are recycled one by one.
 -- SPDX-License-Identifier: AGPL-3.0-only
 --
 -- Uses RLS's own recycle: a car in state 'fadeOut' fades away and RLS puts it back somewhere else.
@@ -13,6 +13,15 @@ local enabled = false
 local tracker = U.new()
 local clock, timer = 0, 0
 local CHECK_EVERY = 1
+
+-- Server settings (traffic.unjam: enabled, seconds, distance), pushed through rlsmp_police's config. Nothing recycles while `enabled` is false.
+local allowed = true
+function M.configure(c)
+  if type(c) ~= "table" then return end
+  allowed = c.enabled ~= false
+  if tonumber(c.seconds) then U.STUCK_SECONDS = tonumber(c.seconds) end
+  if tonumber(c.distance) then U.MIN_DISTANCE = tonumber(c.distance) end
+end
 
 function M.enable(on)
   enabled = on == true
@@ -35,7 +44,7 @@ end
 
 -- One round. Returns the id that was recycled, if any (for tests and logs).
 function M.check()
-  if not (gameplay_traffic and gameplay_traffic.getTrafficData) then return nil end
+  if not allowed or not (gameplay_traffic and gameplay_traffic.getTrafficData) then return nil end
   local P, ps = personality(), personalities()
   if not (P and ps and ps.context) then return nil end
   local ctx = ps.context()
@@ -50,6 +59,11 @@ function M.check()
         local bubbleOff = b and b.isEnabled and not b.isEnabled()   -- without the bubble we do not know where the other players are
         local hidden = veh.camVisible ~= true and not bubbleOff and not (b and b.stayFor and b.stayFor(veh))
         if hidden and b and b.viewReason and b.viewReason(veh) then hidden = false end   -- strict: near a player or in front of the camera
+        -- far from EVERY player (own game and the others); unknown distance counts as near
+        if hidden then
+          local d = b and b.minPlayerDistance and b.minPlayerDistance(veh)
+          if not d or d < U.MIN_DISTANCE then hidden = false end
+        end
         candidates[#candidates + 1] = {id = id, stuck = stuck, hidden = hidden}
       end
     end
@@ -58,7 +72,7 @@ function M.check()
   local id = U.pick(tracker, candidates, clock)
   if id then
     recycle(gameplay_traffic.getTrafficData()[id])
-    log("I", "RLS-Career-MP", "unjam: recycled stuck traffic car " .. tostring(id))
+    log("I", "RLS-Career-MP", "unjam: recycled stuck traffic car " .. tostring(id) .. " after " .. tostring(U.STUCK_SECONDS) .. " s, nearest player >= " .. tostring(U.MIN_DISTANCE) .. " m")
   end
   return id
 end

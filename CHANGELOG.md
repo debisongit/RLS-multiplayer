@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased: traffic respawn range (all untested in-game)
+- New settings `traffic.respawnRange` (multiplier on the game's own respawn radius, 1.0 = the game's original, up to 3) and `traffic.respawnDelay` (least seconds a car stays after the game placed it, 0 = off); both in the `[` menu under Amount. Log lines start with `range:` and show the values before and after. (Claude A)
+- Stuck-car recycling (`traffic.unjam`) is stricter now: stuck 120 s (was 30) and 400 m or more from every player (own game and the others), still one car at a time; can be switched off. (Claude A)
+- Live model swapping (`trafficVariety.swap.live`) is now off by default: it replaced cars the game had not recycled. The re-roll still only happens after the game itself respawned the car and never forces a respawn. (Claude A)
+- Research and what is verified or guessed: `docs/RESEARCH_RESPAWN_RANGE.md`. (Claude A)
+
 ## 0.4.40 (all untested in-game, off by default)
 - Simplified cars (`trafficVariety.simplified`, off): stealable parked spots turn into real cars when a player comes within 250 m, other parked cars stay simplified; far-away traffic can return as simplified cars and is upgraded when it comes near. Details and limits in `docs/RESEARCH_SIMPLIFIED.md`. (Claude A)
 

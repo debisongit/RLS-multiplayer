@@ -3,7 +3,8 @@
 
 local M = {}
 
-M.STUCK_SECONDS = 30    -- standing still this long counts as stuck (red lights are shorter)
+M.STUCK_SECONDS = 120   -- standing still this long counts as stuck (red lights are shorter); the server setting traffic.unjam.seconds changes it
+M.MIN_DISTANCE = 400    -- and only a car this far (m) from EVERY player; traffic.unjam.distance
 M.GAP_SECONDS = 5       -- at most one recycled car per this many seconds ("one by one")
 M.MOVE_METRES = 2       -- moving farther than this from the anchor spot resets the timer
 M.SLOW = 0.5            -- m/s

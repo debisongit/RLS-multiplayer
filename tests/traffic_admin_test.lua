@@ -295,4 +295,17 @@ check(r.applied == 2 and #r.rejected == 2 and cfg.trafficVariety.simplified.enab
 check(admin.snapshot().trafficVariety.simplified.enabled == true and admin.snapshot().trafficVariety.simplified.nearRadius == 300, "simplified: in the snapshot")
 cfg.trafficVariety.simplified.enabled = false
 
+-- respawn range and delay: defaults keep the game's original, editable within range, sent to the clients inside rlsmpPoliceConfig
+check(cfg.traffic.respawnRange == 1.0 and cfg.traffic.respawnDelay == 0, "range: defaults are the game's original (1.0, 0 s)")
+check(cfg.traffic.unjam.enabled == true and cfg.traffic.unjam.seconds == 120 and cfg.traffic.unjam.distance == 400, "range: stuck recycling needs 120 s and 400 m")
+check(cfg.trafficVariety.swap.live == false, "range: live swapping (replaces cars the game did not recycle) is off by default")
+check(require("rlsmp.server.trafficPolice").payload().range.respawnRange == 1, "range: the clients get it with the police config")
+set(0, {{p = {"traffic", "respawnRange"}, v = 2.5}, {p = {"traffic", "respawnDelay"}, v = 45}, {p = {"traffic", "respawnRange"}, v = 9}, {p = {"traffic", "unjam", "distance"}, v = 10}})
+r = lastResult()
+check(r.applied == 2 and #r.rejected == 2 and cfg.traffic.respawnRange == 2.5 and cfg.traffic.respawnDelay == 45, "range: edited, above 3 and a too small unjam distance refused")
+check(admin.snapshot().traffic.respawnRange == 2.5 and admin.snapshot().traffic.unjam.seconds == 120, "range: in the snapshot")
+local pc = require("rlsmp.server.trafficPolice").payload()
+check(pc.range.respawnRange == 2.5 and pc.range.respawnDelay == 45 and pc.range.unjam.enabled == true, "range: the payload follows the edit")
+cfg.traffic.respawnRange, cfg.traffic.respawnDelay = 1.0, 0
+
 print(string.format("traffic_admin_test: %d checks passed", passed))
