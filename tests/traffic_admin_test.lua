@@ -277,6 +277,11 @@ check(next(sn.theft.methods) ~= nil and allOn, "the default methods have no enab
 cfg.theft.methods.relay_box.enabled = false
 check(admin.snapshot().theft.methods.relay_box.enabled == false and admin.snapshot().theft.methods.signal_cloner.enabled == true, "a method switched off shows as off")
 cfg.theft.methods.relay_box.enabled = nil
+set(0, {{p = {"police", "noFineInStolenCar"}, v = false}})
+r = lastResult()
+check(r and r.applied == 1 and cfg.police.noFineInStolenCar == false and admin.snapshot().police.noFineInStolenCar == false, "the no-fine-in-a-stolen-car switch can be changed from the menu")
+cfg.police.noFineInStolenCar = true
+check(admin.snapshot().police.noFineInStolenCar == true, "...and is on by default")
 set(0, {{p = {"police", "enabled"}, v = false}, {p = {"police", "plateReading", "readChance"}, v = 0.2}, {p = {"police", "plateReading", "rangeMeters"}, v = 500}})
 r = lastResult()
 check(r.applied == 2 and #r.rejected == 1 and cfg.police.enabled == false and cfg.police.plateReading.readChance == 0.2 and cfg.police.plateReading.rangeMeters ~= 500,

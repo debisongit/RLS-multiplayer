@@ -27,6 +27,7 @@ function M.payload()
   return {
     antiTeleport = cfg.antiTeleport == true,
     blockRoadblocks = cfg.blockRoadblocks == true,
+    noFineInStolenCar = cfg.noFineInStolenCar ~= false,
     bubbleMode = cfg.bubbleMode,
     range = M.range(),
   }

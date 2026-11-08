@@ -443,3 +443,8 @@ A plate that is in somebody else's theft record is refused. A stolen car's value
 `/steal`, `/inspect`, `/fence`, `/market`, `/meetup` and `/items` only work while `ui.chatCommands` is true (set it in `config.json`; nobody needs it). With it off the server answers one plain line ("That is done in the game menus now") and does nothing else. Registered with `net.onChat(name, fn, true)`. No toast, hint or text names them any more; `tests/no_chat_hints_test.lua` scans for that.
 
 Client input action `rlsmpInteract` (`core/input/actions/rlsmp.json`, default key Y in `settings/inputmaps/keyboard_rlsmp.json`) calls `rlsmp_theft.interact()`. See `docs/RESEARCH_THEFT_UI.md`.
+
+
+## No fine in a stolen car (client `rlsmp/police.lua`, server setting `police.noFineInStolenCar`)
+
+`rlsmpPoliceConfig` also carries `noFineInStolenCar` (default true). While the player's car is one the theft code converted from a parked car (`lib/theft` converted set), the client wraps `overhaul_career_economy_payment.pay` and skips the one payment whose reason label is "Police fine" (RLS's `playerDriving.onPursuitAction` charges it on a citation or arrest), and rewrites the "Citation fine" / "Arrest fine" message that follows within 2 s. Nothing else is touched.

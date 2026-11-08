@@ -523,3 +523,11 @@ Known gaps: never played. Drop spot places are only in `config.json`. Changes ma
 1. Two players drive the same model in the same colour. Player A escapes a police chase (so the car's description is remembered for 20 minutes). Player B drives slowly past a cop: B should NOT get the "wanted" chase from the description. If A changes plates and drives slowly past a cop, A still should.
 2. Menu, Police page: untick "Police rules on" and Apply. Cops should stop reading plates (no "Police reading your plate" text) until you tick it again.
 3. Send the `[plates]` server log lines and the `plates` client log lines if anything looks wrong.
+
+
+## No fine in a stolen car (build 0.4.48)
+
+1. Steal a car (see the theft section) and get caught for speeding or a chase ending in a citation or arrest. Expected: the message says "Citation: no fine, this car is not registered to you." (or "Arrest: ..."), your money does not drop, and the game log has `police fine NOT charged`.
+2. Do the same in a car from your own garage: the fine is charged as before.
+3. If you are fined in the stolen car anyway, send the game log lines with `finePay` / `police fine` and the exact message you saw: it means RLS charged the fine another way.
+Known gaps: only RLS's own "Police fine" is covered (not other fees); the chase, arrest and plate flag still happen. Loaned or rented garage cars are still fined.

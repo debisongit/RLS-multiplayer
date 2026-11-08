@@ -98,6 +98,9 @@ M.defaults = {
     antiTeleport = true,
     -- Refuse RLS roadblocks (they put police cars on the road ahead of you).
     blockRoadblocks = true,
+    -- RLS charges a "Police fine" when a chase ends in a citation or an arrest. Driving a car that is not registered to you (a stolen car) means
+    -- the fine is not charged: the car is not on your name. The chase, the arrest and the plate flag still happen.
+    noFineInStolenCar = true,
     -- Which traffic cars another player's game may not recycle (client rlsmp/bubble.lua):
     -- "original" = RLS's own spawn and respawn distances, a car is only kept while another player is within its
     --   own active radius AND has a clear line to it; "protect" = the old strict rule (450 m, or a clear line up to 1 km);

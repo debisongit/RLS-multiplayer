@@ -31,7 +31,7 @@ stages[0] = "loaded"
 tick()
 local m = take()
 check(#m == 1 and m[1].name == "rlsmpPoliceConfig" and m[1].data.antiTeleport == true
-  and m[1].data.blockRoadblocks == true, "settings sent on load")
+  and m[1].data.blockRoadblocks == true and m[1].data.noFineInStolenCar == true, "settings sent on load (no fine in a stolen car is on by default)")
 check(m[1].data.bubbleMode == "original", "the traffic bubble mode is sent and defaults to original (RLS's own distances)")
 tick()
 check(#take() == 0, "sent only once")

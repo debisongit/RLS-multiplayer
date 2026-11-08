@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.4.48 (untested in-game)
+- No speeding tickets or fines in a car that is not yours: when you drive a stolen car (one made from a parked car), RLS's "Police fine" that is charged when a chase ends in a citation or an arrest is not charged, and the message says "Citation/Arrest: no fine, this car is not registered to you." The chase, the arrest and the plate flag still happen, only the money fine is skipped. Cars from your own garage (also loaned or rented ones) still get fined as before. Switch: `police.noFineInStolenCar` (default on, also in the `[` menu on the Police page). Log line `police fine NOT charged`. (Claude B)
+
 ## 0.4.47 (untested in-game)
 - Stolen cars are worth their real used price (found from the real config or RLS's own valuation), not a flat 2,000. Payouts: strip 45%, sell without papers 40%, gamble 55 to 60% with a 20% trap chance, resell with all papers 70%. Existing servers keep their old values in `config.json`: change `fence.stripRate`, `fence.gambleBase`, `fence.gamblePerPaper`, `fence.gambleBust`, `fence.resellRate` and the market `fenceCarRate`. (Claude A)
 
