@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased: everybody can steal every parked car (no build bump, untested in-game)
+- I misunderstood you in 0.4.60. Now ANY player can inspect and steal ANY parked car, also one that another player's game spawned. The thief's game finds it (the server lists the other games' parked cars near you), the normal steal timer runs on the server, then the owner's game deletes that car and hands over its exact data, and your game spawns the real car from it. Not stealable: traffic, police, taxis, other players' real cars, a car someone else is stealing or already took. (Claude A)
+- If the owner's game does not answer in 12 s the steal fails and none of your tools are used up. New events `rlsmpParkedReport`, `rlsmpParkedNear`, `rlsmpParkedTake`, `rlsmpParkedTaken` (see `docs/PROTOCOL.md`). The stolen car's place may get a new parked car from RLS later. (Claude A)
+- Same config: the stolen car now comes out exactly like the parked one (your Pessima TUNED stays tuned). A full parked car uses its own part config; a stand-in car is now only a look of a full pick we remember, so the exact pick is known. Only a stand-in nobody remembered is still guessed. The log says `theft config: ... (full|map|standin-guess)`. (Claude A)
+- Parked cars can be every available car, also those with no stand-in: `trafficVariety.parked.fullPool` (default on, RLS's parked filter, no police or taxi, junk words stay out) and `trafficVariety.parked.simplifiedShare` (default 0.5; 0 = always full cars). Both can be set in `config.json` or with the server's settings rules. (Claude A)
+- Fixed: scout tips (Black Market) were always refused since 0.4.60 because the game did not send the car ids. (Claude A)
+- Research and the verified/guessed list: `docs/RESEARCH_PARKED_THEFT.md`. (Claude A)
+
 ## 0.4.60 (all untested in-game)
 - Cops: no extra cops by default (`police.copCount` 0). A cop the game puts near you, in view, on your road or straight ahead/behind is moved to a road spot 1000 to 2500 m away (600 m minimum in a chase), right side preferred. If you want more cops, the count follows area and time of day: at most 3, one per 1500 m area. (Claude A)
 - Traffic is placed anywhere in a 250 to 4000 m ring when it respawns, and recycled past 4 km. Expect thinner traffic near you; raise `traffic.minAmount` if needed. (Claude A)

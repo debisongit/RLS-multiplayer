@@ -401,24 +401,162 @@ do
   r["OLD 1"], r["OTH 1"] = nil, nil
 end
 check(require("rlsmp.server.config").defaults.theft.perMille == 150, "the stealable share still defaults to 150 per mille")
--- Only parked cars of the sender's OWN game: the car's BeamMP id must carry the sender's player number
+-- Parked cars of ANY game can be stolen (owner: "everyone must be able to steal all parked cars"); only what a game REPORTED counts, never a bare claim.
 do
   cfg.theft.enabled = true
   theft.resend() theft.tick()
   check(theft.ownsSid(1, "1-3") and not theft.ownsSid(1, "2-3") and not theft.ownsSid(1, nil) and not theft.ownsSid(1, "x") and not theft.ownsSid(1, 3),
     "ownsSid: own player number only")
-  now = now + 5
+  players[3] = {name = "cy", ids = {beammp = "33"}}
+  fire("onPlayerJoin", 3)
+  fire("rlsmpHello", 3, json.encode({v = 1, build = require("rlsmp.shared.transfer").BUILD}))
+  sessions.get(3).stage = "loaded"
+  local per = theft.periodSeconds()
+  if (theft.periodAt(now) + 1) * per - now < 900 then now = (theft.periodAt(now) + 1) * per + 10 end
+  local period = theft.periodAt(now)
+  local spots, boring = {}, nil
+  for i = 1, 400 do
+    local pt = {x = i * 8 + 0.5, y = 3.5}
+    if theft.stealableAt(period, pt) then if #spots < 2 then spots[#spots + 1] = pt end else boring = boring or pt end
+  end
+  check(#spots == 2 and boring, "found two stealable spots and a boring one")
+  local function pos(pid, x, y) now = now + 1 fire("rlsmpPos", pid, json.encode({x = x, y = y, z = 50, speed = 0, chased = false})) end
+  local function report(pid, cars) now = now + 4 client(pid, "rlsmpParkedReport", {cars = cars}) end
+  local car = {sid = "2-5", model = "pessima", config = "vehicles/pessima/tuned.pc", how = "map", plate = "TUN 1", x = spots[1].x, y = spots[1].y, z = 50}
+  local junk = {sid = "2-6", model = "covet", how = "full", plate = "JNK 1", x = boring.x, y = boring.y, z = 50}
+  local second = {sid = "2-7", model = "covet", how = "full", plate = "TWO 2", x = spots[2].x, y = spots[2].y, z = 50}
+  report(2, {car, junk, second, {sid = "1-9", model = "covet", x = 1, y = 1, z = 1}, {sid = "2-8", model = "bad model!", x = 1, y = 1, z = 1}})
+  check(theft.parkedRec("2-5") and theft.parkedRec("2-5").config == "vehicles/pessima/tuned.pc" and theft.parkedCount(2) == 3, "a game's parked report is kept (3 good cars)")
+  check(theft.parkedRec("1-9") == nil and theft.parkedRec("2-8") == nil, "a car with another player's number or a bad model is dropped from the report")
+  client(2, "rlsmpParkedReport", {cars = {}})
+  check(theft.parkedCount(2) == 3, "reports are rate limited (3 s)")
+  -- not near, not listed, not stealable: all refused, silently for the check
+  items.give(1, "window_punch") items.give(1, "screwdriver")
+  now = now + 30
   local before = last(1, "rlsmpTheftCan")
   client(1, "rlsmpTheftCheck", {id = 5, sid = "2-5", value = 4000, year = 1988})
-  check(last(1, "rlsmpTheftCan") == before, "another player's parked car: no prompt answer")
-  client(1, "rlsmpTheftCheck", {id = 5, sid = false, value = 4000, year = 1988})
-  check(last(1, "rlsmpTheftCan") == before, "no BeamMP id: no prompt answer")
-  now = now + 5
+  check(last(1, "rlsmpTheftCan") == before, "a listed car far from you: no answer (no position known)")
+  pos(1, spots[1].x + 400, spots[1].y)
   client(1, "rlsmpTheftStart", {sid = "2-5", value = 4000, year = 1988})
-  check(last(1, "rlsmpTheftGo").ok == false and last(1, "rlsmpTheftGo").err:find("not yours"), "another player's parked car: a steal is refused")
-  client(1, "rlsmpTheftInspect", {id = 9, sid = "2-9", x = 1, y = 1, value = 4000, year = 1988})
-  local go = last(1, "rlsmpTheftInspectGo")
-  client(1, "rlsmpTheftInspect", {id = 9, sid = "2-9", x = 1, y = 1, value = 4000, year = 1988})
-  check(last(1, "rlsmpTheftInspectGo") == go, "another player's parked car: no inspect")
+  check(last(1, "rlsmpTheftGo").ok == false and last(1, "rlsmpTheftGo").err:find("not yours"), "a listed car 400 m away: refused")
+  pos(1, spots[1].x + 1, spots[1].y)
+  now = now + 5
+  client(1, "rlsmpTheftCheck", {id = 5, sid = "2-77", value = 4000, year = 1988})
+  check(last(1, "rlsmpTheftCan") == before, "an id nobody reported: no answer")
+  client(1, "rlsmpTheftCheck", {id = 5, sid = "3-1", value = 4000, year = 1988})
+  check(last(1, "rlsmpTheftCan") == before, "another player's number nobody reported: no answer")
+  client(1, "rlsmpTheftCheck", {id = 5, sid = false, value = 4000, year = 1988})
+  check(last(1, "rlsmpTheftCan") == before, "no BeamMP id: no answer")
+  pos(1, boring.x + 1, boring.y)
+  now = now + 5
+  client(1, "rlsmpTheftStart", {sid = "2-6", value = 4000, year = 1988})
+  check(last(1, "rlsmpTheftGo").ok == false, "a reported car on a boring spot: refused (same pick as the client)")
+  -- inspect answers for any reported car, so a boring one cannot be told apart
+  client(1, "rlsmpTheftInspect", {id = 6, sid = "2-6", x = boring.x, y = boring.y, value = 4000, year = 1988})
+  check(last(1, "rlsmpTheftInspectGo") and last(1, "rlsmpTheftInspectGo").ok == true, "inspect: a boring reported car of another game gets the same go")
+  -- the near list
+  pos(1, spots[1].x + 1, spots[1].y)
+  pos(2, spots[1].x + 300, spots[1].y)
+  now = now + 5
+  theft.tick()
+  local near = last(1, "rlsmpParkedNear")
+  check(near and #near.cars >= 1 and near.cars[1].sid == "2-5" and near.cars[1].config == "vehicles/pessima/tuned.pc" and near.cars[1].model == "pessima",
+    "the near list names the other game's parked car with model and exact config")
+  local own = last(2, "rlsmpParkedNear")
+  check(not (own and #own.cars > 0 and own.cars[1].sid == "2-5"), "the owner is not told about their own car")
+  -- a steal: check, start, finish, the OWNER hands the car over, tools used only then
+  now = now + 5
+  client(1, "rlsmpTheftCheck", {id = 5, sid = "2-5", value = 4000, year = 1988})
+  check(last(1, "rlsmpTheftCan").ok == true and last(1, "rlsmpTheftCan").id == 5, "a listed, stealable car near you: the prompt answer")
+  items.give(1, "key_programmer") items.give(1, "lockout_kit") items.give(1, "blank_key", 3)
+  theft.setRandom(function() return 0.99 end)
+  now = now + 20
+  pos(1, spots[1].x + 1, spots[1].y) client(1, "rlsmpTheftStart", {sid = "2-5", value = 9000, year = 2004})
+  check(last(1, "rlsmpTheftGo").ok == true and last(1, "rlsmpTheftGo").method == "key_programmer", "start on another game's parked car")
+  pos(3, spots[1].x + 1, spots[1].y)
+  items.give(3, "window_punch") items.give(3, "screwdriver")
+  now = now + 1
+  client(3, "rlsmpTheftStart", {sid = "2-5", value = 4000, year = 1988})
+  check(last(3, "rlsmpTheftGo").ok == false and last(3, "rlsmpTheftGo").err:find("already at that car"), "one steal per parked car: the second thief is refused")
+  local k = items.count(1, "blank_key")
+  now = now + 25
+  client(1, "rlsmpTheftFinish", {})
+  local take = last(2, "rlsmpParkedTake")
+  check(take and take.sid == "2-5" and take.token, "finish: the owner's game is asked to hand the car over")
+  check(last(1, "rlsmpTheftResult") == nil or last(1, "rlsmpTheftResult").car == nil, "finish: the thief gets no car yet")
+  check(items.count(1, "blank_key") == k, "finish: nothing is used up before the owner answers")
+  -- owner too slow: timeout, tools kept, claim released
+  now = now + 13
+  theft.tick()
+  local res = last(1, "rlsmpTheftResult")
+  check(res.ok == false and res.err:find("did not answer") and items.count(1, "blank_key") == k, "owner too slow: the steal fails and nothing was used")
+  client(2, "rlsmpParkedTaken", {token = take.token, ok = true, car = {model = "pessima", plate = "TUN 1", x = car.x, y = car.y, z = 50}})
+  check(theft.records()["TUN 1"] == nil and last(1, "rlsmpTheftResult") == res, "a late hand-over is ignored")
+  -- second try works; the wrong player, the wrong token or a far snapshot do nothing good
+  report(2, {car, junk, second})
+  now = now + 20
+  pos(1, spots[1].x + 1, spots[1].y) client(1, "rlsmpTheftStart", {sid = "2-5", value = 9000, year = 2004})
+  check(last(1, "rlsmpTheftGo").ok == true, "the claim was released: the car can be tried again")
+  now = now + 25
+  client(1, "rlsmpTheftFinish", {})
+  take = last(2, "rlsmpParkedTake")
+  local snap = {sid = "2-5", model = "pessima", config = "vehicles/pessima/tuned.pc", how = "map", plate = "TUN 1", look = {{x = 1, y = 0, z = 0, w = 1}},
+    rot = {x = 0, y = 0, z = 0.7, w = 0.7}, x = car.x + 0.2, y = car.y, z = 50}
+  client(3, "rlsmpParkedTaken", {token = take.token, ok = true, car = snap})
+  client(2, "rlsmpParkedTaken", {token = take.token + 1, ok = true, car = snap})
+  check(theft.parkedRec("2-5") ~= nil and not (last(1, "rlsmpTheftResult").car), "a hand-over from the wrong player or with the wrong token does nothing")
+  now = now + 20
+  pos(1, spots[1].x + 1, spots[1].y) client(1, "rlsmpTheftStart", {sid = "2-5", value = 9000, year = 2004})
+  now = now + 25
+  client(1, "rlsmpTheftFinish", {})
+  take = last(2, "rlsmpParkedTake")
+  client(2, "rlsmpParkedTaken", {token = take.token, ok = true, car = snap})
+  res = last(1, "rlsmpTheftResult")
+  check(res.ok == true and res.car and res.car.config == "vehicles/pessima/tuned.pc" and res.car.plate == "TUN 1" and res.car.model == "pessima",
+    "the owner's snapshot reaches the thief with the exact (tuned) config")
+  check(items.count(1, "blank_key") == k - 1, "tools are used up when the car is handed over")
+  check(theft.parkedRec("2-5") == nil, "the stolen car is off the table")
+  client(1, "rlsmpTheftDone", {plate = "LIES 9", model = "covet", color = "Blue", value = 9000, year = 2004, x = 1, y = 2, z = 3, witnesses = 0})
+  local rec2 = theft.records()["TUN 1"]
+  check(rec2 and rec2.model == "pessima" and rec2.config == "vehicles/pessima/tuned.pc" and rec2.car and rec2.car.config == "vehicles/pessima/tuned.pc"
+    and theft.records()["LIES 9"] == nil, "the stolen record comes from the owner's snapshot, not from what the thief says")
+  report(2, {car, junk, second})
+  check(theft.parkedRec("2-5") == nil, "a late report of the stolen car does not bring it back")
+  now = now + 20
+  pos(1, spots[1].x + 1, spots[1].y) client(1, "rlsmpTheftStart", {sid = "2-5", value = 4000, year = 1988})
+  check(last(1, "rlsmpTheftGo").ok == false, "the same car cannot be stolen twice")
+  -- a snapshot far from the reported spot is refused and the tools are kept
+  local third = {sid = "2-8", model = "covet", how = "full", plate = "THR 3", x = spots[2].x, y = spots[2].y, z = 50}
+  report(2, {second, third})
+  pos(1, spots[2].x + 1, spots[2].y)
+  now = now + 20
+  client(1, "rlsmpTheftStart", {sid = "2-8", value = 9000, year = 2004})
+  now = now + 25
+  client(1, "rlsmpTheftFinish", {})
+  take = last(2, "rlsmpParkedTake")
+  client(2, "rlsmpParkedTaken", {token = take.token, ok = true, car = {model = "covet", plate = "THR 3", x = third.x + 90, y = third.y, z = 50}})
+  check(last(1, "rlsmpTheftResult").ok == false and items.count(1, "blank_key") == k - 1, "a snapshot far from the reported spot is refused, tools kept")
+  -- the owner no longer has it
+  pos(1, spots[2].x + 1, spots[2].y)
+  now = now + 20
+  pos(1, spots[2].x + 1, spots[2].y)
+  client(1, "rlsmpTheftStart", {sid = "2-7", value = 9000, year = 2004})
+  check(last(1, "rlsmpTheftGo").ok == true, "second car: start")
+  now = now + 25
+  client(1, "rlsmpTheftFinish", {})
+  take = last(2, "rlsmpParkedTake")
+  client(2, "rlsmpParkedTaken", {token = take.token, ok = false})
+  check(last(1, "rlsmpTheftResult").ok == false and last(1, "rlsmpTheftResult").err:find("gone") and theft.parkedRec("2-7") == nil,
+    "the owner says it is gone: the steal fails, the car leaves the table")
+  check(items.count(1, "blank_key") == k - 1, "...and nothing was used")
+  check(theft.scoutKind(1, "2-8") == nil and theft.scoutKind(1, "1-4") == "own" and theft.scoutKind(1, "2-77") == nil, "scout: own car yes, unlisted car no")
+  report(2, {{sid = "2-9", model = "covet", x = second.x, y = second.y, z = 50}})
+  local sk, spos = theft.scoutKind(1, "2-9")
+  check(sk == "remote" and spos.x == second.x, "scout: a listed car of another game, with its REPORTED position")
+  -- the owner leaves: their cars go
+  check(theft.parkedRec("2-9") ~= nil, "(2-9 is on the table before the owner leaves)")
+  fire("onPlayerDisconnect", 2)
+  theft.tick()
+  check(theft.parkedRec("2-9") == nil, "the owner left: their parked cars are no longer on the table")
 end
 print("theft_test: " .. passed .. " checks passed")

@@ -85,6 +85,30 @@ function M.pickSimple(map, real, kind, rnd)
   return list[math.floor((rnd or math.random)() * #list) % #list + 1]
 end
 
+-- A parked stand-in of `real` whose name shares a word (3+ letters, e.g. "sedan", "wagon") with the real config key, so the stand-in is
+-- at least the same body style. Best match wins, ties are random. nil when none fits (the car then stays a full car). A GUESS: the stand-in
+-- names are not documented anywhere we could read.
+local function words(s)
+  local out = {}
+  for w in tostring(s or ""):lower():gmatch("%a%a%a+") do out[w] = true end
+  return out
+end
+function M.pickSimpleFor(map, real, key, rnd)
+  local e = map and map[real]
+  local list = e and e.parked
+  if not list or #list == 0 then return nil end
+  local want = words(key)
+  local best, bestScore = {}, 0
+  for _, name in ipairs(list) do
+    local score = 0
+    for w in pairs(words((name:gsub("^%w+_", ""):gsub("_parked$", "")))) do if want[w] then score = score + 1 end end
+    if score > bestScore then best, bestScore = {name}, score
+    elseif score == bestScore and score > 0 then best[#best + 1] = name end
+  end
+  if bestScore < 1 then return nil end
+  return best[math.floor((rnd or math.random)() * #best) % #best + 1]
+end
+
 function M.hasTraffic(map)
   for _, e in pairs(map or {}) do if #e.traffic > 0 then return true end end
   return false

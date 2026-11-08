@@ -68,7 +68,7 @@ local original = vanilla
 
 local passed = 0
 local function check(c, m) if not c then error("FAIL: " .. m, 2) end passed = passed + 1 end
-local function server(tbl) if tbl.focus == nil then tbl.focus = {enabled = false} end handlers["rlsmpTrafficVariety"](json.encode(tbl)) end   -- focus has its own scenario at the end
+local function server(tbl) if tbl.focus == nil then tbl.focus = {enabled = false} end if tbl.parked == nil then tbl.parked = {fullPool = false} end handlers["rlsmpTrafficVariety"](json.encode(tbl)) end   -- focus and the full parked pool have their own scenarios at the end
 local function countModel(group, model) local k = 0 for _, e in ipairs(group) do if e.model == model then k = k + 1 end end return k end
 local TRAFFIC = {filters = {Type = {Car = 1}, ["Config Type"] = {other = 1}}}
 local PARKED = {filters = {Type = {propparked = 1}, ["Config Type"] = {other = 1}}}
@@ -498,6 +498,76 @@ do
   server({enabled = true, focus = {enabled = false}})
   local spread = core_multiSpawn.createGroup(10, TRAFFIC)
   check(#spread == 10, "focus off: normal groups again")
+end
+
+-- 12. parked cars: the full pool (every model and config, also without a stand-in), stand-ins only as a look of a full pick --------------------------------
+do
+  local TH = require("rlsmp/lib/theft")
+  T.onServerLeave()
+  TH.clearIntended()
+  local oldGetModel, oldList = core_vehicles.getModel, core_vehicles.getModelList
+  core_vehicles.getModelList = function()
+    return {models = {etk800 = {Type = "Car"}, sunburst = {Type = "Car"}, pickup = {Type = "Truck"}, simple_traffic = {Type = "PropParked"}}}
+  end
+  core_vehicles.getModel = function(name)
+    if name == "simple_traffic" then
+      return {configs = {etk800_sedan_pre_s_parked = {}, etk800_wagon_parked = {}, etk800_sedan = {}}}   -- stand-ins for the etk800 only
+    end
+    local cfgs = {}
+    for i = 1, 4 do cfgs["sedan_k" .. i] = {} end
+    cfgs.taxi_x = {["Config Type"] = "Taxi"}
+    cfgs.police_x = {["Config Type"] = "Police"}
+    cfgs.junk_x = {}
+    cfgs.bad = {}
+    return {configs = cfgs}
+  end
+  gameplay_traffic_trafficUtils = {getBaseGroupParams = function() return {filters = {Type = {Car = 1, Truck = 1}}} end}
+  server({enabled = true, parked = {fullPool = true, simplifiedShare = 0}})
+  local seenModels, bad = {}, false
+  for _ = 1, 30 do
+    for _, e in ipairs(core_multiSpawn.createGroup(10, PARKED)) do
+      seenModels[e.model] = true
+      if e.model == "simple_traffic" or e.config == "taxi_x" or e.config == "police_x" or e.config == "junk_x" or e.config == "bad" then bad = true end
+    end
+  end
+  check(not bad, "full parked pool: no stand-in at share 0, no taxi, no police, no junk, nothing RLS's parked filter refuses")
+  check(seenModels.etk800 and seenModels.sunburst and seenModels.pickup, "full parked pool: models WITHOUT a stand-in (sunburst, pickup) are parked too")
+  check(saw("parked pool: ") and saw("variety parked group"), "the parked pool and the group are logged")
+  -- share 1: an etk800 pick is shown as the stand-in of the same body style, and the real pick is remembered
+  server({enabled = true, parked = {fullPool = true, simplifiedShare = 1}})
+  local stand, full, pickedStand = 0, 0, nil
+  for _ = 1, 20 do
+    for _, e in ipairs(core_multiSpawn.createGroup(10, PARKED)) do
+      if e.model == "simple_traffic" then stand = stand + 1 pickedStand = e.config else full = full + 1 end
+      check(e.model ~= "simple_traffic" or e.config:find("^etk800_"), "a stand-in is only used for a model that has one")
+    end
+  end
+  check(stand > 0 and full > 0, "share 1: etk800 shows as a stand-in, the models without one stay full")
+  check(saw("theft config: parked pick etk800/") and saw("(remembered, how=map)"), "log: theft config line for a remembered pick")
+  -- the game spawned the stand-in: the pick is bound to the car
+  TH.clearIntended()
+  server({enabled = true, parked = {fullPool = true, simplifiedShare = 1}})
+  local g = core_multiSpawn.createGroup(10, PARKED)
+  local firstStand
+  for _, e in ipairs(g) do if e.model == "simple_traffic" then firstStand = firstStand or e.config end end
+  check(firstStand ~= nil, "(a stand-in was picked)")
+  be = {getObjectByID = function(_, id)
+    if id == 777 then return {jbeam = "simple_traffic", partConfig = "vehicles/simple_traffic/" .. firstStand .. ".pc"} end
+  end}
+  T.onVehicleGroupSpawned({777, 778}, 1, "autoParking")
+  local bound = TH.intendedFor(777)
+  check(bound and bound.model == "etk800" and bound.config:find("^sedan_k") , "onVehicleGroupSpawned binds the stand-in car to the real pick")
+  be = nil
+  -- fullPool off: the game's own parked offer, as before
+  server({enabled = true, parked = {fullPool = false}})
+  vanillaCalls = {}
+  core_multiSpawn.createGroup(6, PARKED)
+  check(vanillaCalls[1] ~= nil, "fullPool false: the game's offer")
+  check(require("rlsmp/lib/trafficVariety").sanitize({parked = {simplifiedShare = 5}}).parked.simplifiedShare == 1
+    and require("rlsmp/lib/trafficVariety").sanitize({}).parked.fullPool == true, "settings: simplifiedShare clamped, fullPool default on")
+  T.onServerLeave()
+  core_vehicles.getModel, core_vehicles.getModelList = oldGetModel, oldList
+  gameplay_traffic_trafficUtils = nil
 end
 
 print(string.format("traffic_variety_client_test: %d checks passed", passed))

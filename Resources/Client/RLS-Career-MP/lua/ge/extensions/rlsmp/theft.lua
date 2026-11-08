@@ -21,6 +21,13 @@
 --    (rlsmpTheftHint); only a member in range gets an answer, then one small toast says "Press [key] to look closer". The popup's Inspect
 --    works on the nearest parked car of ANY kind (the popup opens for any parked car in range, so it never tells who is a member), takes
 --    a few seconds and the server answers with text; boring cars and non-members get the same wait and the plain "nothing stands out" text.
+-- 7. ANY parked car can be stolen, also one that another player's game spawned (BeamMP shows those to us as remote vehicles, and only their
+--    own game can delete them). Every game reports its parked cars to the server (rlsmpParkedReport: BeamMP id "pid-vid", real model, exact config,
+--    plate, position); the server tells us the ones near us (rlsmpParkedNear). We match them to the remote vehicles by BeamMP id and position, the
+--    steal runs through the server as usual, and on success the server asks the OWNER's game to delete the car and send its exact snapshot
+--    (rlsmpParkedTake / rlsmpParkedTaken); we get it in rlsmpTheftResult {car} and spawn the real car from it (spawnStolen). We never delete a remote car.
+--    Which config comes out: a full parked car = its own .pc path (or inline part config); a stand-in = the real pick our group builder remembered
+--    (lib/theft noteIntended, "how=map"); only a stand-in nobody remembered is guessed ("how=standin-guess"). Log lines start with "theft config:".
 -- Untested in-game. Log tag RLSMP-THEFT.
 
 local M = {}
@@ -53,6 +60,15 @@ local popupCar                 -- parked car id the open popup is about
 local toldKey = {}             -- parked car id -> spot key we showed the key toast for
 local stolen = {}              -- new vehicle id -> {vehId, plate, model, config, color, value, year, t, reported}
 local noiseLevel, noiseUntil = 0, -1
+local SIMPLE = "simple_traffic"
+local remote = {}              -- game id -> {sid, model, config, how, x, y, z}: parked cars of OTHER games that the server listed and that exist here
+local remoteList, remoteAt = {}, -1e9   -- last rlsmpParkedNear
+local goneSid = {}             -- sid -> time we took that car (the server's list may still name it for a moment)
+local remoteWait               -- {car, id, at}: the owner's snapshot is here, waiting until BeamMP has removed the remote car
+local reported = {}            -- sid -> local id of the cars in our last parked report
+local reportKey, reportAt, reportCheck = nil, -1e9, 0
+local REMOTE_TTL, REMOTE_MATCH = 40, 10   -- s a server list stays valid; m the remote car may differ from the reported spot
+local REPORT_MAX, REPORT_CHECK, REPORT_EVERY = 40, 5, 30
 
 local function toast(kind, msg, ms)
   if guihooks then guihooks.trigger("toastrMsg", {type = kind, title = "Car theft", msg = msg, config = {timeOut = ms or 4000}}) end
@@ -110,19 +126,62 @@ local function ownCar(id)
 end
 M.ownCar = ownCar
 
-local function parkedIds()
+-- Parked cars of other games that the server listed (rlsmpParkedNear): matched to the remote vehicles BeamMP shows us, by BeamMP id and position.
+local function refreshRemote()
+  remote = {}
+  if clock - remoteAt > REMOTE_TTL then return end
+  for _, r in ipairs(remoteList) do
+    local id = mp.gameIdOf(r.sid)
+    local o = id and objOf(id)
+    if o and T.dist(posOf(o), r) <= REMOTE_MATCH then remote[id] = r end
+  end
+end
+
+-- A car we may target: one of ours (this game owns it) or a listed parked car of another game.
+local function canTarget(id)
+  if remote[id] then return true end
+  return ownCar(id)
+end
+M.canTarget = canTarget
+
+local function listHas(id)
+  if not (gameplay_parking and gameplay_parking.getParkedCarsList) then return false end
+  for _, v in ipairs(gameplay_parking.getParkedCarsList(true) or {}) do if v == id then return true end end
+  return false
+end
+
+-- Our own parked cars only (what we report to the server).
+local function ownParkedIds()
   if not (gameplay_parking and gameplay_parking.getParkedCarsList) then return {} end
   local out = {}
   for _, id in ipairs(gameplay_parking.getParkedCarsList(true) or {}) do
-    if ownCar(id) then out[#out + 1] = id end
+    if not remote[id] and ownCar(id) then out[#out + 1] = id end
   end
   return out
 end
 
+-- Every parked car we can target: ours and the listed ones of other games.
+local function parkedIds()
+  local out, seen = ownParkedIds(), {}
+  for _, id in ipairs(out) do seen[id] = true end
+  local extra = {}
+  for id in pairs(remote) do if not seen[id] then extra[#extra + 1] = id end end
+  table.sort(extra)
+  for _, id in ipairs(extra) do out[#out + 1] = id end
+  return out
+end
+
+-- BeamMP id of a parked car we target.
+local function sidFor(id)
+  local r = remote[id]
+  return r and r.sid or mp.sidOf(id)
+end
+
 -- Is this parked car one of the stealable ones? Cached per spot (RLS moves pool cars to other spots).
 function M.isStealable(id)
-  if not active() or not ownCar(id) then return false end
-  local pos = posOf(objOf(id))
+  if not active() or not canTarget(id) then return false end
+  local r = remote[id]
+  local pos = r and {x = r.x, y = r.y, z = r.z} or posOf(objOf(id))   -- a remote car: the spot the OWNER reported, the same one the server judges
   local key = pos and T.spotKey(cfg.period, pos)
   if not key then return false end
   local c = spots[id]
@@ -164,7 +223,7 @@ function M.stealableNear(radius, max)
   local out = {}
   if not (pos and active()) then return out end
   for _, c in ipairs(parkedNear(pos, tonumber(radius) or 800)) do
-    if M.isStealable(c.id) then out[#out + 1] = {x = c.pos.x, y = c.pos.y, z = c.pos.z} end
+    if M.isStealable(c.id) then out[#out + 1] = {x = c.pos.x, y = c.pos.y, z = c.pos.z, sid = sidFor(c.id)} end
     if #out >= (tonumber(max) or 8) then break end
   end
   return out
@@ -226,14 +285,47 @@ end
 
 -- Model, config, value and year of a parked car. value = what a used car of this kind sells for (lib/stolenValue.lua: RLS's own
 -- valuation of the real or typical config, else quick value, else our estimate). year = first year of the config.
+-- The exact car behind a parked object (lib/theft exactOf): a full car = its own part config; a stand-in = the pick our group builder remembered for it
+-- (bound on spawn, or now by the stand-in's name). Only a stand-in nobody remembered is guessed from its name. info.how: "full" | "map" | "standin-guess".
 function M.carInfo(o)
-  local model, config, key = T.realModel(jbeamOf(o), o.partConfig)
+  local jb = jbeamOf(o)
+  local intended
+  if jb == SIMPLE and o.getID then
+    local id = o:getID()
+    intended = T.intendedFor(id) or T.bindSpawned(id, T.configKey(o.partConfig), os.time())
+  end
+  local ex = T.exactOf(jb, o.partConfig, intended, jsonEncode)
+  if ex then
+    local key = T.configKey(ex.config)
+    local r = resolveValue(ex.model, {key, key}, key)
+    return {model = ex.model, config = ex.config, inline = ex.inline, configKey = key or r.configKey, value = r.value or 0, year = r.year,
+      source = r.source, how = ex.how}
+  end
+  local model, config, key = T.realModel(jb, o.partConfig)
   if not model then return nil end
   local full = T.configKey(o.partConfig)
   local r = resolveValue(model, {key, full}, key)
-  -- a simplified car whose name matched a real config: spawn that config
+  -- a simplified car whose name matched a real config: spawn that config (a guess)
   if not config and r.configKey and r.matched ~= "typical" then config = "vehicles/" .. model .. "/" .. r.configKey .. ".pc" end
-  return {model = model, config = config, configKey = r.configKey or key, value = r.value or 0, year = r.year, source = r.source}
+  return {model = model, config = config, configKey = r.configKey or key, value = r.value or 0, year = r.year, source = r.source, how = "standin-guess"}
+end
+
+-- Model, config and value of a parked car of another game, from what its owner's game reported (the server relays it).
+local remoteInfoCache = {}
+local function infoByKey(model, config)
+  local key = T.configKey(config)
+  local r = resolveValue(model, {key, key}, key)
+  return {model = model, config = config, configKey = key or r.configKey, value = r.value or 0, year = r.year, source = r.source}
+end
+local function infoOfId(id)
+  local r = remote[id]
+  if not r then return M.carInfo(objOf(id)) end
+  local c = remoteInfoCache[r.sid]
+  if c and c.model == r.model and c.config == r.config then return c end
+  local info = infoByKey(r.model, r.config)
+  info.how = "remote:" .. tostring(r.how)
+  remoteInfoCache[r.sid] = info
+  return info
 end
 
 -- Value again for a stolen car (model + config path as the record stored them), with today's market. Returns value, source.
@@ -270,7 +362,7 @@ function M.witnesses(pos)
     if type(v) == "table" and v.isAi == true and T.dist(pos, posOf(objOf(id))) <= WITNESS_TRAFFIC then n = n + 1 end
   end
   for id in pairs(mp.remoteSet()) do
-    if T.dist(pos, posOf(objOf(id))) <= WITNESS_PLAYERS then n = n + 1 end
+    if not remote[id] and T.dist(pos, posOf(objOf(id))) <= WITNESS_PLAYERS then n = n + 1 end
   end
   return n
 end
@@ -295,6 +387,16 @@ local function lookOf(o)
 end
 local function rotTable(q) return q and {x = q.x, y = q.y, z = q.z, w = q.w} or nil end
 
+-- The config to hand to the spawn: the .pc path, else the inline part config (JSON text) decoded.
+local function configOpt(config, inline)
+  if config then return config end
+  if inline and jsonDecode then
+    local ok, t = pcall(jsonDecode, inline)
+    if ok and type(t) == "table" then return t end
+  end
+  return nil
+end
+
 -- Turn a parked car into a normal car we can drive. Returns the new vehicle object and the snapshot, or nil + why.
 -- Order matters: snapshot -> delete the parked car -> spawn -> ignoreParking / never isParked -> converted set -> off the
 -- walk blacklist. Entering happens a moment later (M.onUpdate) so the new car is ready.
@@ -304,11 +406,15 @@ function M.convertParked(id)
   if not ownCar(id) then return nil, "not our car" end
   local info = M.carInfo(o)
   if not info then return nil, "unknown model" end
+  say(info.how == "standin-guess" and "W" or "I", string.format("theft config: parked car %s plate %s -> model %s config %s (%s) from partConfig %s%s", tostring(id),
+    tostring(plateOf(o)), tostring(info.model), tostring(info.config or (info.inline and "inline part config") or "none"), tostring(info.how),
+    tostring(type(o.partConfig) == "string" and o.partConfig:sub(1, 80) or type(o.partConfig)),
+    info.how == "standin-guess" and "; a stand-in nobody remembered a pick for, so the config is a guess" or ""))
   local metallic = o.getMetallicPaintData and o:getMetallicPaintData() or {}
   local function paint(c, m) if createVehiclePaint and c then return createVehiclePaint(c, m) end return nil end
   local p = o:getPosition()
   local snap = {
-    model = info.model, config = info.config, value = info.value, year = info.year, source = info.source,
+    model = info.model, config = info.config, cfgJson = info.inline, how = info.how, value = info.value, year = info.year, source = info.source,
     pos = p, rot = quatFromDir and quatFromDir(vec3(o:getDirectionVector()), vec3(o:getDirectionVectorUp())) or nil,
     paint = paint(o.color, metallic[1]), paint2 = paint(o.colorPalette0, metallic[2]), paint3 = paint(o.colorPalette1, metallic[3]),
     licenseText = plateOf(o), color = colorOf(o), at = {x = p.x, y = p.y, z = p.z},
@@ -319,7 +425,7 @@ function M.convertParked(id)
   o:delete()
   spots[id] = nil
   local ok, veh = pcall(core_vehicles.spawnNewVehicle, snap.model, {
-    config = snap.config, pos = snap.pos, rot = snap.rot, paint = snap.paint, paint2 = snap.paint2, paint3 = snap.paint3,
+    config = configOpt(snap.config, snap.cfgJson), pos = snap.pos, rot = snap.rot, paint = snap.paint, paint2 = snap.paint2, paint3 = snap.paint3,
     licenseText = snap.licenseText, autoEnterVehicle = false, canSpawnAnotherVehicleCheck = false, centeredPosition = true,
   })
   if not ok or not veh then
@@ -417,7 +523,7 @@ function M.spawnStolen(spec, pos, rot)
   if type(spec) ~= "table" or type(spec.model) ~= "string" or not pos then return nil, "bad record" end
   local look = type(spec.look) == "table" and spec.look or {}
   local ok, veh = pcall(core_vehicles.spawnNewVehicle, spec.model, {
-    config = spec.config, pos = vec3(pos.x, pos.y, pos.z), rot = rot and quat and quat(rot.x, rot.y, rot.z, rot.w) or nil,
+    config = configOpt(spec.config, spec.cfgJson), pos = vec3(pos.x, pos.y, pos.z), rot = rot and quat and quat(rot.x, rot.y, rot.z, rot.w) or nil,
     paint = paintFrom(look[1]), paint2 = paintFrom(look[2]), paint3 = paintFrom(look[3]),
     licenseText = spec.plate, autoEnterVehicle = false, canSpawnAnotherVehicleCheck = false, centeredPosition = true,
   })
@@ -511,7 +617,8 @@ local function scanHints(pos)
     if M.isStealable(c.id) and hinted[c.id] ~= spots[c.id].key and clock - (hintAsked[c.id] or -999) > 15 then
       hintAsked[c.id] = clock
       if rlsmp_positions and rlsmp_positions.reportNow then rlsmp_positions.reportNow() end
-      net.send("rlsmpTheftHint", {id = c.id, sid = mp.sidOf(c.id), x = c.pos.x, y = c.pos.y})
+      local r = remote[c.id]
+      net.send("rlsmpTheftHint", {id = c.id, sid = sidFor(c.id), x = r and r.x or c.pos.x, y = r and r.y or c.pos.y})
     end
   end
 end
@@ -543,13 +650,17 @@ function M.onUpdate(dtReal)
   local dt = dtReal or 0
   clock = clock + dt
   if pendingEnter and clock >= pendingEnter.at then enterNow() end
+  if remoteWait and (not objOf(remoteWait.id) or clock - remoteWait.at > 6) then M.finishRemote() end
   if not active() then return end
+  reportCheck = reportCheck + dt
+  if reportCheck >= REPORT_CHECK then M.reportParked() end
   local _, pos = walker()
   if action then return runAction(dt, pos) end
   if inspectAct then return runInspect(dt, pos) end
   scanTimer = scanTimer + dt
   if scanTimer < SCAN_EVERY then return end
   scanTimer = 0
+  refreshRemote()
   if not pos then target = nil return end
   -- Why can nobody find a car to steal? Log what exists around a walking player, at most every 30 s (parked cars are few in RLS).
   if clock - lastCensus >= 30 then
@@ -571,16 +682,19 @@ function M.onUpdate(dtReal)
     -- the server answers at most once a second: ask again when no answer came
     if target.can == nil and clock - target.asked > 3 then
       target.asked = clock
-      net.send("rlsmpTheftCheck", {id = id, sid = mp.sidOf(id), value = target.info.value, year = target.info.year})
+      if remote[id] and rlsmp_positions and rlsmp_positions.reportNow then rlsmp_positions.reportNow() end   -- the server checks your distance to the car
+      net.send("rlsmpTheftCheck", {id = id, sid = sidFor(id), value = target.info.value, year = target.info.year})
     end
     return
   end
-  local info = M.carInfo(objOf(id))
+  local info = infoOfId(id)
   if not info then return end
   target = {id = id, info = info, asked = clock}
-  say("I", string.format("stealable car %s nearby: model %s config %s value %s year %s plate %s", tostring(id), tostring(info.model),
-    tostring(info.configKey), tostring(info.value), tostring(info.year), tostring(plateOf(objOf(id)))))
-  net.send("rlsmpTheftCheck", {id = id, sid = mp.sidOf(id), value = info.value, year = info.year})
+  say("I", string.format("stealable car %s nearby: model %s config %s (%s) value %s year %s plate %s%s", tostring(id), tostring(info.model),
+    tostring(info.configKey), tostring(info.how), tostring(info.value), tostring(info.year), tostring(plateOf(objOf(id))),
+    remote[id] and " (another player's parked car)" or ""))
+  if remote[id] and rlsmp_positions and rlsmp_positions.reportNow then rlsmp_positions.reportNow() end
+  net.send("rlsmpTheftCheck", {id = id, sid = sidFor(id), value = info.value, year = info.year})
 end
 
 -- Messages from the server ---------------------------------------------------------------------------
@@ -630,11 +744,13 @@ local function startInspect(carId)
   for _, k in ipairs(parkedNear(pos, I.range)) do
     if carId == nil or k.id == carId then c = k break end
   end
-  if not c or not ownCar(c.id) then return toast("info", "No parked car close enough to look at.", 3000) end
-  local info = M.carInfo(objOf(c.id)) or {}
+  if not c or not canTarget(c.id) then return toast("info", "No parked car close enough to look at.", 3000) end
+  local info = infoOfId(c.id) or {}
   if rlsmp_positions and rlsmp_positions.reportNow then rlsmp_positions.reportNow() end
   inspectAct = {id = c.id, seconds = 0, elapsed = 0, startPos = pos, lastShown = -1, finishing = false, waiting = true}
-  net.send("rlsmpTheftInspect", {id = c.id, sid = mp.sidOf(c.id), x = c.pos.x, y = c.pos.y, z = c.pos.z, value = info.value or 0, year = info.year})
+  local r = remote[c.id]
+  net.send("rlsmpTheftInspect", {id = c.id, sid = sidFor(c.id), x = r and r.x or c.pos.x, y = r and r.y or c.pos.y, z = r and r.z or c.pos.z,
+    value = info.value or 0, year = info.year})
 end
 
 local function onInspectAsk() startInspect(nil) end   -- the server's developer chat fallback
@@ -656,11 +772,19 @@ local function startSteal(method)
   if inspectAct then return toast("warning", "You are already busy.", 2500) end
   local _, pos = walker()
   if not pos then return toast("warning", "Get out of your car first.") end
-  if not (target and target.can and objOf(target.id) and ownCar(target.id) and T.dist(pos, posOf(objOf(target.id))) <= radius() + 0.5) then
+  if not (target and target.can and objOf(target.id) and canTarget(target.id) and T.dist(pos, posOf(objOf(target.id))) <= radius() + 0.5) then
     return toast("warning", "There is no car you can steal right here.")
   end
+  if remote[target.id] then
+    -- another player's parked car becomes one more car of ours: BeamMP refuses a spawn above the server's per-player limit, after the tools were used
+    local v = rawget(_G, "rlsmp_trafficVariety") or package.loaded["rlsmp/trafficVariety"]
+    local vc = v and v.getConfig and v.getConfig()
+    local maxCars = vc and tonumber(vc.maxCars) or 0
+    if maxCars > 0 and mp.ownCount() >= maxCars then return toast("warning", "You have too many cars to take another one.", 5000) end
+    if rlsmp_positions and rlsmp_positions.reportNow then rlsmp_positions.reportNow() end   -- the server checks your distance to the car
+  end
   target.startPos = pos
-  net.send("rlsmpTheftStart", {sid = mp.sidOf(target.id), method = method or target.method, value = target.info.value, year = target.info.year})
+  net.send("rlsmpTheftStart", {sid = sidFor(target.id), method = method or target.method, value = target.info.value, year = target.info.year})
 end
 
 local function onSteal(d)   -- the server's developer chat fallback
@@ -697,9 +821,9 @@ function M.interact()
   end
   if #buttons == 0 then return toast("info", "Nothing to do with this car.", 3000) end
   buttons[#buttons + 1] = {label = "Cancel", luaCallback = "", enabled = true}
-  if not ownCar(c.id) then return toast("info", "No parked car close enough.", 3000) end
+  if not canTarget(c.id) then return toast("info", "No parked car close enough.", 3000) end
   popupCar = c.id
-  local info = M.carInfo(objOf(c.id))
+  local info = infoOfId(c.id)
   if guihooks then
     guihooks.trigger("showConfirmationDialog", {text = "Parked car" .. (info and info.model and (": " .. tostring(info.model)) or ""), buttons = buttons, class = "recoveryPrompt"})
   end
@@ -728,12 +852,129 @@ local function onResult(d)
   if not a then return end
   if not d.ok then return toast("warning", tostring(d.err or "It did not work.")) end
   target = nil
-  if not ownCar(a.id) then return toast("warning", "That car is not yours to take.") end
+  if type(d.car) == "table" then
+    -- another game's parked car: its owner's game deleted it and sent its exact snapshot. We never delete a remote car; once BeamMP has removed it
+    -- here (or after a few seconds) the real car is spawned from the snapshot.
+    local r = remote[a.id]
+    if r then goneSid[r.sid] = clock end
+    remote[a.id] = nil
+    remoteWait = {car = d.car, id = a.id, at = clock}
+    return toast("info", "Almost there...", 3000)
+  end
+  if remote[a.id] or not ownCar(a.id) then return toast("warning", "That car is not yours to take.") end
   local veh, snap = M.convertParked(a.id)
   if not veh then return toast("error", "The car could not be taken (" .. tostring(snap) .. ").") end
   net.send("rlsmpTheftDone", {plate = snap.licenseText, model = snap.model, color = snap.color, value = snap.value, year = snap.year,
     valueSource = snap.source, config = snap.config, look = snap.look, rot = snap.rotT,
     x = snap.at.x, y = snap.at.y, z = snap.at.z, witnesses = M.witnesses(snap.at)})
+end
+
+-- Our parked cars -> the server (rlsmpParkedReport), so every other player can steal them. Every REPORT_CHECK s; sent when the list changed, else every
+-- REPORT_EVERY s. Cheap: no price lookup, only model + exact config + plate + position.
+local function exactCheap(o)
+  local jb = jbeamOf(o)
+  local intended
+  if jb == SIMPLE and o.getID then
+    local id = o:getID()
+    intended = T.intendedFor(id) or T.bindSpawned(id, T.configKey(o.partConfig), os.time())
+  end
+  local ex = T.exactOf(jb, o.partConfig, intended, jsonEncode)
+  if ex then return ex.model, ex.config, ex.how end
+  return (T.realModel(jb, o.partConfig)), nil, "standin-guess"
+end
+
+function M.reportParked()
+  reportCheck = 0
+  if not active() then return end
+  local cars, parts = {}, {}
+  reported = {}
+  for _, id in ipairs(ownParkedIds()) do
+    if #cars >= REPORT_MAX then break end
+    local o, sid = objOf(id), mp.sidOf(id)
+    local p = o and posOf(o)
+    if p and sid and not T.isConverted(id) then
+      local model, config, how = exactCheap(o)
+      if model then
+        cars[#cars + 1] = {sid = sid, model = model, config = config, how = how, plate = T.cleanPlate(tostring(plateOf(o) or "")), x = p.x, y = p.y, z = p.z}
+        reported[sid] = id
+        parts[#parts + 1] = sid .. ":" .. math.floor(p.x) .. ":" .. math.floor(p.y)
+      end
+    end
+  end
+  local key = table.concat(parts, ",")
+  if key == reportKey and clock - reportAt < REPORT_EVERY then return end
+  reportKey, reportAt = key, clock
+  net.send("rlsmpParkedReport", {cars = cars})
+end
+
+-- The snapshot of a parked car of ours for the thief's game: model, exact config, plate, three paints, rotation, position.
+local function wireSnap(o, info, sid)
+  local p = o:getPosition()
+  local q = quatFromDir and quatFromDir(vec3(o:getDirectionVector()), vec3(o:getDirectionVectorUp())) or nil
+  return {sid = sid, model = info.model, config = info.config, cfgJson = (info.inline and #info.inline <= 8000) and info.inline or nil, how = info.how,
+    plate = plateOf(o), look = lookOf(o), rot = rotTable(q), x = p.x, y = p.y, z = p.z}
+end
+
+-- The server asks us to give up a parked car of ours: another player stole it. Same removal as our own convert (o:delete(), RLS's onVehicleDestroyed
+-- cleans its parking lists); RLS tops its parked cars up later, so a new one can appear (acceptable).
+local function onTake(d)
+  if not active() or type(d) ~= "table" then return end
+  local function refuse(why)
+    say("W", "parked take refused: " .. why)
+    net.send("rlsmpParkedTaken", {token = d.token, ok = false})
+  end
+  local id = type(d.sid) == "string" and reported[d.sid] or nil
+  local o = id and objOf(id)
+  if not o then return refuse("car gone") end
+  if mp.sidOf(id) ~= d.sid or not listHas(id) or T.isConverted(id) or not ownCar(id) then return refuse("not a parked car of ours any more") end
+  local info = M.carInfo(o)
+  if not info then return refuse("unknown model") end
+  local car = wireSnap(o, info, d.sid)
+  say(info.how == "standin-guess" and "W" or "I", string.format("theft config: parked car %s plate %s given up for a steal by another player -> model %s config %s (%s)", tostring(id),
+    tostring(car.plate), tostring(info.model), tostring(info.config or (info.inline and "inline part config") or "none"), tostring(info.how)))
+  o:delete()
+  spots[id], reported[d.sid] = nil, nil
+  say("I", "parked car " .. tostring(id) .. " deleted for another player; RLS may top its parked cars up and spawn a new one")
+  net.send("rlsmpParkedTaken", {token = d.token, ok = true, car = car})
+end
+
+-- The server's list of other games' parked cars near us.
+local function onNear(d)
+  remoteList = {}
+  for _, c in ipairs(type(d) == "table" and type(d.cars) == "table" and d.cars or {}) do
+    if type(c) == "table" and type(c.sid) == "string" and type(c.model) == "string" and tonumber(c.x) and tonumber(c.y) and #remoteList < 20
+      and not (goneSid[c.sid] and clock - goneSid[c.sid] < 120) then
+      remoteList[#remoteList + 1] = {sid = c.sid, model = c.model, config = type(c.config) == "string" and c.config or nil,
+        how = type(c.how) == "string" and c.how or nil, x = tonumber(c.x), y = tonumber(c.y), z = tonumber(c.z) or 0}
+    end
+  end
+  remoteAt = clock
+  refreshRemote()
+end
+
+-- The owner's snapshot has arrived and the remote car is gone here (or we waited long enough): spawn the real car from it.
+function M.finishRemote()
+  local w = remoteWait
+  remoteWait = nil
+  if not w then return end
+  local c = w.car
+  local model = type(c.model) == "string" and c.model or nil
+  if not model or type(c.x) ~= "number" or type(c.y) ~= "number" then return say("E", "remote steal: the snapshot is unusable") end
+  local info = infoByKey(model, c.config)
+  local look = type(c.look) == "table" and c.look or {}
+  local color = look[1] and colorName(look[1].x, look[1].y, look[1].z) or nil
+  local pos = {x = c.x, y = c.y, z = tonumber(c.z) or 0}
+  local veh, why = M.spawnStolen({plate = c.plate, model = model, config = c.config, cfgJson = c.cfgJson, look = c.look, color = color,
+    value = info.value, year = info.year}, pos, c.rot)
+  if not veh then
+    toast("error", "The car could not be taken (" .. tostring(why) .. ").")
+    return say("E", "remote steal: " .. tostring(why))
+  end
+  pendingEnter = {id = veh:getID(), at = clock + 0.5}
+  say("I", string.format("theft config: stole another player's parked car plate %s -> model %s config %s (%s)", tostring(c.plate), model,
+    tostring(c.config or (c.cfgJson and "inline part config") or "none"), tostring(c.how)))
+  net.send("rlsmpTheftDone", {plate = c.plate, model = model, color = color, value = info.value, year = info.year, valueSource = info.source,
+    config = c.config, look = c.look, rot = c.rot, x = pos.x, y = pos.y, z = pos.z, witnesses = M.witnesses(pos)})
 end
 
 local function onReported(d)
@@ -817,6 +1058,8 @@ end
 
 function M.onVehicleDestroyed(id)
   refusedLogged[id] = nil
+  T.forgetIntended(id)
+  remote[id] = nil
   T.forget(id)
   stolen[id] = nil
   spots[id] = nil
@@ -825,6 +1068,7 @@ end
 function M.onServerLeave()
   cfg, target, action, inspectAct, pendingEnter = nil, nil, nil, nil, nil
   spots, stolen, hintAsked, hinted, toldKey, popupCar = {}, {}, {}, {}, {}, nil
+  remote, remoteList, remoteWait, reported, reportKey, remoteInfoCache, goneSid = {}, {}, nil, {}, nil, {}, {}
   fakePlates = {}
   T.clearConverted()
 end
@@ -841,6 +1085,8 @@ function M.onExtensionLoaded()
   net.on("rlsmpTheftResult", onResult)
   net.on("rlsmpTheftReported", onReported)
   net.on("rlsmpTheftReprice", onReprice)
+  net.on("rlsmpParkedNear", onNear)
+  net.on("rlsmpParkedTake", onTake)
   net.on("rlsmpFenceAsk", onFenceAsk)
   net.on("rlsmpFenceResult", onFenceResult)
 end

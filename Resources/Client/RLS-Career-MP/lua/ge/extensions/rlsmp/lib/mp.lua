@@ -49,6 +49,14 @@ function M.isOwn(gameVehicleId)
   return true
 end
 
+-- The game vehicle id of a BeamMP server id ("pid-vid"), or nil when that car is not in this game (yet).
+function M.gameIdOf(sid)
+  if not (MPVehicleGE and MPVehicleGE.getVehicles) or type(sid) ~= "string" then return nil end
+  local v = MPVehicleGE.getVehicles()[sid]
+  local id = v and v.gameVehicleID
+  return (id and id ~= -1) and id or nil
+end
+
 -- The server id "pid-vid" of a game vehicle (nil when BeamMP does not list it).
 function M.sidOf(gameVehicleId)
   local serverId = M.serverIdOf(gameVehicleId)

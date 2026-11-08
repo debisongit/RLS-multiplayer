@@ -71,4 +71,18 @@ check(L.preferSimple({}, 1)[1] == nil, "empty list")
 local a, b = L.census({"simple_traffic", "pickup", "simple_traffic", "van"})
 check(a == 2 and b == 2, "census")
 
+-- parked stand-in as the look of a full pick -------------------------------------------------------------------------------
+local sm = L.buildMap({"legran_sedan_pre_s_parked", "legran_wagon_parked", "legran_sedan", "pickup_d25_parked"})
+check(L.pickSimpleFor(sm, "legran", "sedan_pre_h", function() return 0 end) == "legran_sedan_pre_s_parked", "stand-in of the same body style (sedan)")
+check(L.pickSimpleFor(sm, "legran", "wagon_lux", function() return 0 end) == "legran_wagon_parked", "stand-in of the same body style (wagon)")
+check(L.pickSimpleFor(sm, "legran", "coupe_v8") == nil, "no shared word: no stand-in, the car stays a full car")
+check(L.pickSimpleFor(sm, "bastion", "sedan") == nil, "no stand-in for the model: nil")
+local grp = {{model = "legran", config = "sedan_k1"}, {model = "bastion", config = "x"}, {model = "simple_traffic", config = "a_parked"}}
+local out, intended = V.proxyParked(grp, function(e) return L.pickSimpleFor(sm, e.model, e.config, function() return 0 end) end, 1, function() return 0 end)
+check(#out == 3 and out[1].model == "simple_traffic" and out[2].model == "bastion" and out[3].config == "a_parked", "share 1: a pick with a stand-in is shown as the stand-in, others stay")
+check(#intended == 1 and intended[1].model == "legran" and intended[1].config == "sedan_k1" and intended[1].stand == "legran_sedan_pre_s_parked", "the real pick is listed")
+out, intended = V.proxyParked(grp, function() return "x_parked" end, 0, function() return 0 end)
+check(out[1].model == "legran" and #intended == 0, "share 0: all full cars")
+check(#V.dropBlocked({{model = "a", config = "taxi_x"}, {model = "a", config = "k", ctype = "Police"}, {model = "a", config = "ok"}}) == 1, "police and taxi stay out of parked groups")
+
 print(string.format("simplified_lib_test: %d checks passed", passed))

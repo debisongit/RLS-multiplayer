@@ -75,6 +75,70 @@ function M.realModel(model, partConfig)
   return real, nil, rest
 end
 
+-- Exact config of a parked car -------------------------------------------------------------------------------------------------------------
+-- "vehicles/<model>/<key>.pc" from a config key (a path stays as it is).
+function M.configPath(model, key)
+  if type(model) ~= "string" or type(key) ~= "string" or key == "" then return nil end
+  if key:find("/", 1, true) or key:match("%.pc$") then return key end
+  return "vehicles/" .. model .. "/" .. key .. ".pc"
+end
+
+-- What a game object's partConfig is: "path" (a .pc file), "inline" (a JSON text of the whole part config, from a string or a table), or nil.
+function M.configSpec(pc, encode)
+  if type(pc) == "table" then
+    if not encode then return nil end
+    local ok, text = pcall(encode, pc)
+    if ok and type(text) == "string" and #text > 0 then return "inline", text end
+    return nil
+  end
+  if type(pc) ~= "string" or pc == "" then return nil end
+  if pc:match("^%s*[%[{]") then return "inline", pc end
+  return "path", pc
+end
+
+-- The exact real car behind a parked object, or nil when it cannot be told (a stand-in nobody remembered a pick for).
+--   jbeam, partConfig: the object's. intended: {model, config} remembered at group time for a stand-in (or nil).
+-- Returns {model, config (path or nil), inline (JSON text or nil), how = "full" | "map"}.
+function M.exactOf(jbeam, partConfig, intended, encode)
+  if type(jbeam) ~= "string" or jbeam == "" then return nil end
+  if jbeam ~= "simple_traffic" then
+    local kind, v = M.configSpec(partConfig, encode)
+    return {model = jbeam, how = "full", config = kind == "path" and v or nil, inline = kind == "inline" and v or nil}
+  end
+  if type(intended) == "table" and intended.model and intended.config then
+    return {model = intended.model, how = "map", config = M.configPath(intended.model, intended.config)}
+  end
+  return nil
+end
+
+-- Stand-ins our group picks made: stand-in config name -> FIFO of the real {model, config}. The spawned car is matched by its stand-in name
+-- (two stand-ins with the same name look the same, so which of them gets which real config does not matter).
+local pendingStand, boundStand = {}, {}
+local STAND_TTL = 900
+function M.noteIntended(stand, model, config, now)
+  if type(stand) ~= "string" or type(model) ~= "string" or type(config) ~= "string" then return end
+  local q = pendingStand[stand]
+  if not q then q = {} pendingStand[stand] = q end
+  q[#q + 1] = {model = model, config = config, at = tonumber(now) or 0}
+end
+-- A stand-in car appeared (vehicle id, its config key): bind the oldest unexpired pick of that name to it. Returns the pick or nil.
+function M.bindSpawned(id, stand, now)
+  if boundStand[id] then return boundStand[id] end
+  local q = type(stand) == "string" and pendingStand[stand]
+  now = tonumber(now) or 0
+  while q and q[1] do
+    local e = table.remove(q, 1)
+    if now - e.at <= STAND_TTL then
+      boundStand[id] = e
+      return e
+    end
+  end
+  return nil
+end
+function M.intendedFor(id) return boundStand[id] end
+function M.forgetIntended(id) if id ~= nil then boundStand[id] = nil end end
+function M.clearIntended() pendingStand, boundStand = {}, {} end
+
 -- Colour word from linear 0-1 RGB. The same buckets as lib/plateRead.colorName of the plate-reading feature (police match
 -- descriptions by model + colour word, so both must name a colour the same way); rlsmp/theft.lua prefers plateRead's when present.
 function M.colorName(r, g, b)

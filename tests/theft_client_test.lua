@@ -385,7 +385,30 @@ check(valuationOpts.applyVehicleBuyMarket == true, "reprice: market flag on the 
 overhaul_career_economy_globalEconomy = {getVehicleMarketIndex = function() return 0.9 end}
 server("rlsmpTheftReprice", {cars = {{plate = "OLD 1", model = "bastion", config = "vehicles/bastion/sedan_pre_s.pc"}}})
 check(last("rlsmpTheftValue").value == 18900, "reprice: a changed market gives a new value (cache keyed by market)")
--- 3. Another player's parked cars (BeamMP syncs them to us as remote vehicles) can never be stolen, inspected, scouted or converted
+-- Exact config of a parked car: a full car = its own part config, a stand-in = the pick the group builder remembered, only else a guess
+local tuned = mkObj(303, "pessima", 3, 3, {partConfig = "vehicles/pessima/tuned.pc"})
+ci = theft.carInfo(tuned)
+check(ci.model == "pessima" and ci.config == "vehicles/pessima/tuned.pc" and ci.how == "full", "full parked car: its own .pc path, how=full")
+check(theft.carInfo(stand).how == "standin-guess", "a stand-in nobody remembered a pick for: how=standin-guess")
+T.noteIntended("pessima_sedan_pre_s_parked", "pessima", "tuned", os.time())
+local mapped = mkObj(302, "simple_traffic", 4, 4, {partConfig = "vehicles/simple_traffic/pessima_sedan_pre_s_parked.pc"})
+ci = theft.carInfo(mapped)
+check(ci.model == "pessima" and ci.config == "vehicles/pessima/tuned.pc" and ci.how == "map", "stand-in with a remembered pick: the TUNED config, how=map (not a guess)")
+check(theft.carInfo(mapped).how == "map" and T.intendedFor(302) ~= nil, "...and it stays bound to that car")
+local inline = mkObj(304, "pessima", 5, 5, {partConfig = {parts = {engine = "tuned_engine"}, vars = {a = 1}}})
+ci = theft.carInfo(inline)
+check(ci.how == "full" and ci.config == nil and type(ci.inline) == "string" and ci.inline:find("tuned_engine"), "an inline part config is kept whole")
+local e = T.exactOf("simple_traffic", "vehicles/simple_traffic/x_parked.pc", nil)
+check(e == nil, "exactOf: a stand-in without a pick is not exact")
+check(T.configPath("pessima", "tuned") == "vehicles/pessima/tuned.pc" and T.configPath("pessima", "vehicles/pessima/a.pc") == "vehicles/pessima/a.pc", "configPath")
+T.noteIntended("a_parked", "m", "one", 1) T.noteIntended("a_parked", "m", "two", 2)
+check(T.bindSpawned(901, "a_parked", 3).config == "one" and T.bindSpawned(902, "a_parked", 3).config == "two" and T.bindSpawned(903, "a_parked", 3) == nil, "picks are bound in order, once")
+T.noteIntended("old_parked", "m", "x", 1)
+check(T.bindSpawned(904, "old_parked", 5000) == nil, "an old pick (15 min) is not used")
+for _, id in ipairs({901, 902, 302}) do T.forgetIntended(id) end
+for _, id in ipairs({300, 301, 302, 303, 304}) do objects[id] = nil end
+
+-- 3. Another player's parked cars (BeamMP shows them to us as remote vehicles): stealable when the SERVER listed them, never otherwise
 logs = {}
 local function logged(fragment) for _, l in ipairs(logs) do if l:find(fragment, 1, true) then return true end end return false end
 theft.onServerLeave()
@@ -393,34 +416,107 @@ server("rlsmpTheftConfig", {enabled = true, seed = seed, period = 3, perMille = 
   inspect = {enabled = true, range = 15}})
 check(T.stealable(seed, 3, 1000, spotA), "perMille 1000 in this test: every spot is stealable")
 mkObj(20, "covet", 20.5, 20.5, {partConfig = "vehicles/covet/base.pc"})     -- a parked car of the other game, synced to us
-mkObj(21, "covet", 30.5, 20.5, {partConfig = "vehicles/covet/base.pc"})     -- a parked car BeamMP has not registered yet
-remoteIds[20], unregistered[21] = true, true
+mkObj(21, "covet", 30.5, 20.5, {partConfig = "vehicles/covet/base.pc"})     -- a car BeamMP has not registered yet
+unregistered[20], unregistered[21] = true, true
+mpVehicles["1-20"] = {gameVehicleID = 20, isLocal = false}                    -- BeamMP id "player 1, car 20"
 parked = {20, 21, 10}
 walkerObj.pos = {x = 20.5, y = 21.5, z = 0}          -- standing right beside the remote car
 local before = count("rlsmpTheftCheck")
 step(6)
-check(count("rlsmpTheftCheck") == before, "remote parked car beside us: no theft check is sent")
-check(theft.isStealable(20) == false and theft.isStealable(21) == false and theft.isStealable(10) == true, "only our own parked car is stealable")
-check(theft.nearestStealable({x = 20.5, y = 21.5, z = 0}) == nil, "nearestStealable ignores the remote and the unregistered car")
-check(#theft.stealableNear(800, 8) == 1, "scout tip lists only our own car")
+check(count("rlsmpTheftCheck") == before, "a remote car the server did not list: no theft check")
+check(theft.isStealable(20) == false and theft.isStealable(21) == false and theft.isStealable(10) == true, "unlisted remote cars are not stealable, ours is")
+check(theft.nearestStealable({x = 20.5, y = 21.5, z = 0}) == nil, "nearestStealable ignores the unlisted remote and the unregistered car")
+local near = theft.stealableNear(800, 8)
+check(#near == 1 and near[1].sid == "0-10", "scout tip lists only our own car (with its BeamMP id)")
 check(logged("refused: not our car id=20 (remote)") and logged("refused: not our car id=21 (unregistered)"), "refusals are logged with the car id")
 local nd = #dialogs
 theft.interact()
-check(#dialogs == nd, "interact: no popup for a remote parked car")
-local nt2 = #toasts
-check(theft.convertParked(20) == nil and objects[20] ~= nil, "convertParked refuses a remote car and leaves it alone")
+check(#dialogs == nd, "interact: no popup for an unlisted remote parked car")
+check(theft.convertParked(20) == nil and objects[20] ~= nil, "convertParked never deletes a remote car")
 check(theft.convertParked(21) == nil and objects[21] ~= nil, "convertParked refuses an unregistered car")
 local insp = count("rlsmpTheftInspect")
 theft.choose("inspect")
-check(count("rlsmpTheftInspect") == insp, "inspect: nothing is sent for a remote parked car")
--- the server ids ride along for our own cars
-walkerObj.pos = {x = 1.5, y = 1.5, z = 0}
+check(count("rlsmpTheftInspect") == insp, "inspect: nothing is sent for an unlisted remote parked car")
+-- the server lists it (and one that is not in this game): now it is a target
+server("rlsmpParkedNear", {cars = {{sid = "1-20", model = "pessima", config = "vehicles/pessima/tuned.pc", how = "map", x = 20.5, y = 21.0, z = 0},
+  {sid = "1-99", model = "covet", x = 500, y = 500, z = 0}, {sid = 5, model = "covet", x = 1, y = 1}}})
+check(theft.isStealable(20) == true and theft.canTarget(20) == true and theft.canTarget(21) == false, "a listed remote parked car is stealable, an unlisted one still not")
+check(#theft.stealableNear(800, 8) == 2, "scout tip: our car and the listed remote car")
 step(4)
-local c10 = last("rlsmpTheftCheck")
-check(c10 and c10.id == 10 and c10.sid == "0-10", "our own car: the check carries its BeamMP id")
+local c20 = last("rlsmpTheftCheck")
+check(count("rlsmpTheftCheck") == before + 1 and c20.id == 20 and c20.sid == "1-20", "a listed remote car: the check names its BeamMP id")
+check(logged("another player's parked car") and logged("pessima"), "the log names the car and its model")
+server("rlsmpTheftCan", {ok = true, id = 20, method = "window_screwdriver", label = "Smash", seconds = 2, noise = 0.5,
+  methods = {{method = "window_screwdriver", label = "Smash", seconds = 2}}})
+nd = #dialogs
+theft.interact()
+check(#dialogs == nd + 1 and dialogs[#dialogs].buttons[2].label:find("Smash"), "interact: the popup opens for the remote car")
+rlsmp_trafficVariety = {getConfig = function() return {maxCars = 1} end}
+theft.choose("steal:window_screwdriver")
+check(last("rlsmpTheftStart") == nil or last("rlsmpTheftStart").sid ~= "1-20", "too many cars for BeamMP's limit: no steal started")
+rlsmp_trafficVariety = nil
+theft.choose("steal:window_screwdriver")
+local st2 = last("rlsmpTheftStart")
+check(st2 and st2.sid == "1-20" and st2.method == "window_screwdriver", "start names the remote car by its BeamMP id")
+server("rlsmpTheftGo", {ok = true, method = "window_screwdriver", label = "Smash", seconds = 2, noise = 0.5})
+step(6, 0.5)
+check(count("rlsmpTheftFinish") >= 1, "finish asked when the time is up")
+order = {}
+local nextBefore = nextId
+server("rlsmpTheftResult", {ok = true, car = {sid = "1-20", model = "pessima", config = "vehicles/pessima/tuned.pc", how = "map", plate = "TUN 1",
+  look = {{x = 0.1, y = 0.2, z = 0.9, w = 1}}, rot = {x = 0, y = 0, z = 0, w = 1}, x = 20.5, y = 21.0, z = 0}})
+check(objects[20] ~= nil and nextId == nextBefore and #order == 0, "the remote car is NOT deleted by us and nothing is spawned until BeamMP removed it")
+objects[20] = nil     -- the owner's game deleted it and BeamMP removed it here
+step(1)
+check(order[1] == "spawn pessima" and spawned.model == "pessima" and spawned.opts.config == "vehicles/pessima/tuned.pc" and spawned.opts.licenseText == "TUN 1",
+  "then the real car is spawned from the owner's snapshot: same model, TUNED config, same plate")
+check(spawned.opts.paint and spawned.opts.paint.baseColor.z == 0.9, "...and the same paint")
+local d2 = last("rlsmpTheftDone")
+check(d2 and d2.plate == "TUN 1" and d2.model == "pessima" and d2.config == "vehicles/pessima/tuned.pc" and d2.x == 20.5, "the server hears: plate, model, exact config, place")
+check(T.isConverted(nextId) and theft.stolenCars()[#theft.stolenCars()].plate == "TUN 1", "the new car is enterable and listed as stolen")
+check(logged("theft config: stole another player's parked car plate TUN 1") and logged("(map)"), "log: theft config line with how=map")
+step(2)
+check(theft.isStealable(20) == false, "the stolen car is not offered again")
+server("rlsmpParkedNear", {cars = {{sid = "1-20", model = "pessima", x = 20.5, y = 21.0, z = 0}}})
+check(theft.canTarget(20) == false, "...even when the server's list still names it for a moment")
+
+-- Our own parked cars are reported to the server and handed over when asked
+theft.onServerLeave() theft.enable(true)
+server("rlsmpTheftConfig", {enabled = true, seed = seed, period = 3, perMille = 150, periodSeconds = 3600, radius = 3})
+mkObj(30, "covet", 5, 5, {partConfig = "vehicles/covet/base.pc"})
+objects[30].dyn.licenseText = "OWN 1"
+T.noteIntended("pessima_sedan_pre_s_parked", "pessima", "tuned", os.time())
+mkObj(31, "simple_traffic", 8, 8, {partConfig = "vehicles/simple_traffic/pessima_sedan_pre_s_parked.pc"})
+objects[31].dyn.licenseText = "STD 2"
+parked = {30, 31}
+walkerObj.pos = {x = 100, y = 100, z = 0}
+step(12, 0.5)
+local rp = last("rlsmpParkedReport")
+check(rp and #rp.cars == 2, "we report our parked cars (" .. tostring(rp and #rp.cars) .. ")")
+local byS = {}
+for _, c in ipairs(rp.cars) do byS[c.sid] = c end
+check(byS["0-30"].model == "covet" and byS["0-30"].config == "vehicles/covet/base.pc" and byS["0-30"].how == "full" and byS["0-30"].plate == "OWN 1", "report: a full car with its exact config")
+check(byS["0-31"].model == "pessima" and byS["0-31"].config == "vehicles/pessima/tuned.pc" and byS["0-31"].how == "map" and byS["0-31"].plate == "STD 2",
+  "report: a stand-in is reported as the real car we picked for it")
+local nrep = count("rlsmpParkedReport")
+step(8, 0.5)
+check(count("rlsmpParkedReport") == nrep, "no new report while nothing changed")
+step(60, 0.5)
+check(count("rlsmpParkedReport") == nrep + 1, "...but one every 30 s")
+server("rlsmpParkedTake", {token = 7, sid = "0-31"})
+local tk = last("rlsmpParkedTaken")
+check(tk and tk.ok == true and tk.token == 7 and tk.car.model == "pessima" and tk.car.config == "vehicles/pessima/tuned.pc" and tk.car.how == "map" and tk.car.plate == "STD 2",
+  "take: the car is handed over with its exact config")
+check(objects[31] == nil and objects[30] ~= nil, "take: our parked car is deleted (and only that one)")
+check(logged("deleted for another player"), "take: logged, with the note that RLS may top up")
+server("rlsmpParkedTake", {token = 8, sid = "0-31"})
+check(last("rlsmpParkedTaken").token == 8 and last("rlsmpParkedTaken").ok == false, "take: a second ask for the same car is answered with a no")
+server("rlsmpParkedTake", {token = 9, sid = "0-777"})
+check(last("rlsmpParkedTaken").ok == false, "take: a car we never reported is a no")
+-- the next steps of the old suite use the single player rules
 -- a BeamMP player number that is not ours
 MPConfig = {getPlayerServerID = function() return 5 end}
-check(select(1, require("rlsmp/lib/mp").isOwn(10)) == false, "isOwn also compares the player number in the BeamMP id with ours")
+check(select(1, require("rlsmp/lib/mp").isOwn(30)) == false, "isOwn also compares the player number in the BeamMP id with ours")
 MPConfig = nil
 -- single player: no BeamMP, every game car is ours
 local saveMP = MPVehicleGE

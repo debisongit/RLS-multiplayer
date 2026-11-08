@@ -413,9 +413,12 @@ function cmds.scout(pid, cars)
     local ok = type(car) == "table"
     local x, y, z = ok and tonumber(car.x), ok and tonumber(car.y), ok and tonumber(car.z)
     if ok and finite(x) and finite(y) and finite(z) then
+      -- our own car, or a parked car of another game that the server's table lists (then ITS reported spot counts, not the client's numbers)
+      local kind, rpos = theft.scoutKind(pid, car.sid)
+      if kind == "remote" then x, y, z = rpos.x, rpos.y, rpos.z end
       local key = math.floor(x / 4) .. ":" .. math.floor(y / 4)
-      local own = theft.ownsSid(pid, car.sid)
-      if not own then util.info(string.format("RLSMP-THEFT refused: not our car sid=%s (scout) from pid=%s", tostring(car.sid), tostring(pid))) end
+      local own = kind ~= nil
+      if not own then util.info(string.format("RLSMP-THEFT refused: not a listed parked car sid=%s (scout) from pid=%s", tostring(car.sid), tostring(pid))) end
       if own and not seen[key] and math.sqrt((pos.x - x) ^ 2 + (pos.y - y) ^ 2) <= sc.radius + 25 and theft.stealableAt(period, {x = x, y = y}) then
         seen[key] = true
         good[#good + 1] = {x = x, y = y, z = z}

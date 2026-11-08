@@ -20,6 +20,7 @@ local p3 = require("rlsmp/lib/p3")
 local V = require("rlsmp/lib/trafficVariety")
 local PL = require("rlsmp/lib/trafficPreload")
 local SM = require("rlsmp/lib/simplified")
+local T = require("rlsmp/lib/theft")
 local F = require("rlsmp/lib/trafficFill")
 local FO = require("rlsmp/lib/trafficFocus")
 
@@ -41,11 +42,15 @@ local RECENT_MAX = 120
 local mem = V.newPool()      -- round-robin memory: which models were used lately (groups and re-rolls share it)
 local brandCache = {}       -- model name -> Brand string or false
 local premadeList           -- the premade pool: list of {model, config, pop}; nil until built
+local parkedList            -- the same for PARKED cars (RLS's parked filter, more configs per model); nil until built
+local memParked = V.newPool()   -- round-robin memory of the parked groups
+local standCache            -- simple_traffic stand-in map (lib/simplified buildMap), false when there is none
 local premadeJob            -- the build in progress: {models, i, out, params, filter}
 local clock = 0
 local focus = FO.newState()   -- the few configs traffic uses for now (lib/trafficFocus.lua)
 local warm = {}             -- models whose meshes are probably loaded (on the street now, or built this session)
 
+local showParkedLook, parkedFull   -- defined below
 local function careerActive() return overhaul_career_career ~= nil and overhaul_career_career.isActive() end
 
 -- The server's settings can arrive AFTER RLS built its first traffic group (seen in a real log: settings at 57.5 s, group built just before).
@@ -242,6 +247,33 @@ local function trafficCars()
   return n
 end
 
+-- The stand-in map of the model simple_traffic (lib/simplified buildMap), nil when the game has none.
+local function standMap()
+  if standCache ~= nil then return standCache or nil end
+  standCache = false
+  local ok, data = pcall(core_vehicles and core_vehicles.getModel or function() return nil end, SM.MODEL)
+  if ok and type(data) == "table" and type(data.configs) == "table" then
+    local names = {}
+    for name in pairs(data.configs) do names[#names + 1] = name end
+    table.sort(names)
+    standCache = SM.buildMap(names, nil)
+  end
+  return standCache or nil
+end
+
+-- A share (parked.simplifiedShare) of the picked full cars is shown as the cheap stand-in of the same model and body style; the pick is remembered
+-- (lib/theft noteIntended) so a stolen car is exactly the picked config. Returns the group to spawn.
+showParkedLook = function(group)
+  local sm = standMap()
+  local grp, intended = V.proxyParked(group, function(e) return sm and SM.pickSimpleFor(sm, e.model, e.config) or nil end, config.parked.simplifiedShare)
+  for _, it in ipairs(intended) do
+    T.noteIntended(it.stand, it.model, it.config, os.time())
+    p3.log("I", string.format("theft config: parked pick %s/%s is shown as stand-in %s (remembered, how=map)", it.model, tostring(it.config), it.stand))
+  end
+  p3.log("I", string.format("parked: %d of %d picks shown as stand-ins (simplifiedShare %.2f), the rest are full cars", #intended, #grp, config.parked.simplifiedShare))
+  return grp
+end
+
 -- Builds the new group, or returns nil to let the game keep its own.
 local function build(original, amount, params)
   local parked = isParkedIntent(params)
@@ -265,7 +297,21 @@ local function build(original, amount, params)
   end
   local mods = modCandidates(params)
   for _, e in ipairs(mods) do candidates[#candidates + 1] = e end
-  if parked and config.simplified.enabled and config.simplified.parked then
+  -- Parked cars can be EVERY model and config (full cars), also those with no stand-in. The game's own parked offer is only stand-ins, and a stand-in cannot be
+  -- traced to ONE real config, so with the full pool the stand-ins come back only as a look of a full pick (below), with that pick remembered.
+  local usedFull = false
+  if parked and config.parked.fullPool then
+    local list = parkedFull()
+    if list and #list > 0 then
+      local keep = {}
+      for _, e in ipairs(candidates) do if e.model ~= SM.MODEL then keep[#keep + 1] = e end end
+      for _, e in ipairs(list) do keep[#keep + 1] = e end
+      candidates, usedFull = keep, true
+    else
+      p3.log("W", "parked: the full parked pool is not ready (or empty): the game's own offer is used this time")
+    end
+  end
+  if parked and not usedFull and config.simplified.enabled and config.simplified.parked then
     -- the cheap stand-ins only (when the game offered enough of them): real parked cars come later, one by one, where a player can steal them
     local only, n = SM.preferSimple(candidates, want)
     p3.log("I", string.format("simplified: parked group offered %d stand-ins of %d entries (%s)", n, #candidates, only ~= candidates and "stand-ins only" or "list kept"))
@@ -279,8 +325,9 @@ local function build(original, amount, params)
     -- the premade pool: one entry list of every model the game could use, so a group is not limited to what the game offered this time
     for _, e in ipairs(premadeList or {}) do candidates[#candidates + 1] = e end
   end
-  local group, relaxed = V.select(candidates, want, infoOf, ctx, config, nil, usePool and mem or nil)
+  local group, relaxed = V.select(candidates, want, infoOf, ctx, config, nil, usedFull and memParked or (usePool and mem or nil))
   if #group == 0 then return nil end
+  if usedFull then group = showParkedLook(group) end
   if not parked and config.focus.enabled then
     -- the same few configs for a while: choose them (normal weights) when none are set or their time is over, then every car of the group is one of them
     if FO.due(focus, config.focus, clock) then
@@ -398,6 +445,7 @@ end
 local PREMADE_MODELS_PER_FRAME = 3
 local BLOCKED_TYPES = {prop = true, propparked = true, proptraffic = true, trailer = true, unicycle = true}   -- used when the game lists no Types
 local BLOCKED_MODELS = {simple_traffic = true, unicycle = true}
+local PARKED_PARAMS = {filters = {Type = {propparked = 1}}}   -- the parked intent of RLS's trafficConfigFilter (its parked pool rules)
 
 local function startPremade()
   if premadeList or premadeJob then return end
@@ -431,7 +479,7 @@ local function startPremade()
     if good and not BLOCKED_MODELS[name] then names[#names + 1] = name end
   end
   table.sort(names)
-  premadeJob = {models = names, i = 1, out = {}, params = params, filter = filter}
+  premadeJob = {models = names, i = 1, out = {}, outP = {}, params = params, filter = filter}
   p3.log("I", string.format("premade pool: building from %d models (Types from the game: %s)", #names, any and table.concat(shown, ",") or "none, using the built-in block list"))
 end
 
@@ -439,10 +487,13 @@ local function stepPremade()
   local j = premadeJob
   if not j then return end
   local perModel = (config or V.DEFAULTS).pool.configsPerModel
+  local perModelP = math.min(20, perModel * 2)      -- parked: more configs of each model
+  local words = (config or V.DEFAULTS).excludeWords
   for _ = 1, PREMADE_MODELS_PER_FRAME do
     local name = j.models[j.i]
     if not name then
-      premadeList, premadeJob = j.out, nil
+      premadeList, parkedList, premadeJob = j.out, j.outP, nil
+      p3.log("I", string.format("parked pool: %d configs (RLS's parked filter, no police or taxi, junk words excluded)", #j.outP))
       local models, brands, bn = {}, {}, 0
       for _, e in ipairs(j.out) do
         models[e.model] = true
@@ -462,27 +513,39 @@ local function stepPremade()
         for c in pairs(data.configs) do cfgs[#cfgs + 1] = c end
         table.sort(cfgs)
         for a = #cfgs, 2, -1 do local b = math.random(a) cfgs[a], cfgs[b] = cfgs[b], cfgs[a] end
-        local taken = 0
+        local taken, takenP = 0, 0
         for _, c in ipairs(cfgs) do
-          if taken >= perModel then break end
-          local good, eligible = pcall(j.filter.isConfigEligible, name, c, j.params)
-          if good and eligible then
-            local info = data.configs[c]
-            local known = type(info) == "table"
-            local e = {model = name, config = c, pop = known and tonumber(info.Population) or nil,
-              ctype = known and type(info["Config Type"]) == "string" and info["Config Type"] or nil, value = known and tonumber(info.Value) or nil}
-            if known and (info.isDrivable == false or info.drivable == false) then e.drivable = false end
-            if V.isExcluded(e, (config or V.DEFAULTS).excludeWords) then
-              p3.count("variety: junk config skipped")
-            else
-              j.out[#j.out + 1] = e
-              taken = taken + 1
+          if taken >= perModel and takenP >= perModelP then break end
+          local info = data.configs[c]
+          local known = type(info) == "table"
+          local e = {model = name, config = c, pop = known and tonumber(info.Population) or nil,
+            ctype = known and type(info["Config Type"]) == "string" and info["Config Type"] or nil, value = known and tonumber(info.Value) or nil}
+          if known and (info.isDrivable == false or info.drivable == false) then e.drivable = false end
+          if V.isExcluded(e, words) then
+            p3.count("variety: junk config skipped")
+          else
+            if taken < perModel then
+              local good, eligible = pcall(j.filter.isConfigEligible, name, c, j.params)
+              if good and eligible then j.out[#j.out + 1] = e taken = taken + 1 end
+            end
+            if takenP < perModelP and #V.dropBlocked({e}) == 1 then
+              local good, eligible = pcall(j.filter.isConfigEligible, name, c, PARKED_PARAMS)
+              if good and eligible then j.outP[#j.outP + 1] = e takenP = takenP + 1 end
             end
           end
         end
       end
     end
   end
+end
+
+-- The parked pool, built to the end right now when it is not there yet (a one-time cost, the parked group needs it before the first car is spawned).
+parkedFull = function()
+  if parkedList then return parkedList end
+  if not premadeJob then startPremade() end
+  local guard = 0
+  while premadeJob and guard < 3000 do stepPremade() guard = guard + 1 end
+  return parkedList
 end
 
 -- RLS's wrapperLifetime, loaded once. A failed require is not cached by Lua, so it is only retried every 60th call (~1 s).
@@ -617,7 +680,7 @@ function M.onUpdate(dtReal)
   if config and config.enabled and config.focus and config.focus.enabled and focus.entries and FO.due(focus, config.focus, clock) and mp.isMPSession() and careerActive() then
     rotateFocus()
   end
-  if not premadeList and mp.isMPSession() and careerActive() and (config == nil or config.pool.enabled) then
+  if not premadeList and mp.isMPSession() and careerActive() and (config == nil or config.pool.enabled or config.parked.fullPool) then
     startPremade()
     stepPremade()
   end
@@ -628,6 +691,8 @@ function M.onServerLeave()
   policeCache, policeKeys = nil, {}
   recent, recentSeen = {}, {}
   mem, brandCache, premadeList, premadeJob, warm = V.newPool(), {}, nil, nil, {}
+  parkedList, memParked, standCache = nil, V.newPool(), nil
+  T.clearIntended()
   focus = FO.newState()
 end
 
@@ -680,6 +745,20 @@ function M.fullEntryFor(model)
   if #list == 0 then return nil end
   return list[math.random(#list)]
 end
+-- RLS's parking calls this for the group it spawns (vehicle ids, group id, group name "autoParking"): a stand-in that came from one of our picks is
+-- bound to the real car we picked (carInfo in rlsmp/theft.lua asks lib/theft intendedFor).
+function M.onVehicleGroupSpawned(vehIds, groupId, groupName)
+  if type(vehIds) ~= "table" then return end
+  for _, id in ipairs(vehIds) do
+    local o = be and be.getObjectByID and be:getObjectByID(id)
+    local jb = o and (o.jbeam or o.JBeam or (o.getJBeamFilename and o:getJBeamFilename()))
+    if jb == SM.MODEL then
+      local e = T.bindSpawned(id, T.configKey(o.partConfig), os.time())
+      if e then p3.log("I", string.format("theft config: parked stand-in %s (%s) stands for %s/%s (how=map)", tostring(id), tostring(T.configKey(o.partConfig)), e.model, tostring(e.config))) end
+    end
+  end
+end
+function M.parkedPoolCount() return parkedList and #parkedList or 0 end
 function M.report() return p3.report() end
 
 function M.onExtensionLoaded()

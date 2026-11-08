@@ -52,7 +52,9 @@ Both players restart the game after installing; the server host re-runs `tools/i
 
 Also tell me: could B see the road from the passenger seat, could B steer (should not), did B stand beside the car after getting out, did A see B in the car (probably not: BeamMP has no seat for a remote player, so others probably see nothing).
 
-## 4. Theft only on cars of your own game
+## 4. Theft only on cars of your own game (OUT OF DATE: undone for parked cars, see `docs/RESEARCH_PARKED_THEFT.md`)
+
+> The owner meant the opposite: everyone can steal ALL parked cars. What stays from this section: `isOwn` for LOCAL converts and the stand-in conversion, and the idea that the server must not trust a client's claim about another player's car (now it uses its table of reported parked cars).
 
 Owner report: everyone could steal EVERY parked car; before, only the cars that spawned because of you.
 

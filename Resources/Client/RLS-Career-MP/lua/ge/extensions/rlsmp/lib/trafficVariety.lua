@@ -34,7 +34,7 @@ M.DEFAULTS = {
   -- Re-roll: a traffic car that RLS respawned out of everybody's sight becomes a different model with a different config.
   respawn = {enabled = true, mode = "async", perMinute = 2, chance = 0.25, repaintChance = 0.5, waitSeconds = 3, checkSeconds = 0.5},
   -- Parked cars: how many RLS keeps (its own game setting trafficParkingAmount). 0 = leave the game's own amount alone.
-  parked = {amount = 10},
+  parked = {amount = 10, fullPool = true, simplifiedShare = 0.5},
   -- Rarity: everyday cars are the clear majority. Tier shares (of the picks), and what puts a config into a higher tier (words in the model or config
   -- name, the config's Config Type and Value when the game tells them).
   rarity = {enabled = true, common = 0.88, uncommon = 0.10, rare = 0.02,
@@ -173,7 +173,9 @@ M.sanitizeRespawn = respawnSettings
 -- Parked cars: 0 leaves the game's own amount alone, otherwise 1..30.
 local function parkedSettings(src)
   src = type(src) == "table" and src or {}
-  return {amount = math.floor(number(src.amount, M.DEFAULTS.parked.amount, 0, 30))}
+  local d = M.DEFAULTS.parked
+  return {amount = math.floor(number(src.amount, d.amount, 0, 30)), fullPool = src.fullPool ~= false,
+    simplifiedShare = number(src.simplifiedShare, d.simplifiedShare, 0, 1)}
 end
 M.sanitizeParked = parkedSettings
 
@@ -625,6 +627,37 @@ function M.distinctModels(group)
     if e.model and not seen[e.model] then seen[e.model] = true n = n + 1 end
   end
   return n
+end
+
+-- Parked cars (config trafficVariety.parked) ----------------------------------------------------------------------------------------------------
+-- Words that keep a car out of a parked group even when RLS's parked filter lets it through (the filter only reserves police).
+M.PARKED_BLOCK_WORDS = {"police", "taxi"}
+
+function M.dropBlocked(list, words)
+  local out = {}
+  for _, e in ipairs(list or {}) do
+    if not M.isExcluded({model = e.model, config = e.config, ctype = e.ctype}, words or M.PARKED_BLOCK_WORDS) then out[#out + 1] = e end
+  end
+  return out
+end
+
+-- Shows a share of the picked FULL cars as the cheap stand-in of the same model, when one fits (standFor(entry) -> stand-in config name or nil).
+-- The car you get when you steal it is the picked config, so every proxy is listed in `intended` = {stand, model, config}.
+-- Entries that are stand-ins already are left alone. Returns the new group and the intended list.
+function M.proxyParked(group, standFor, share, rnd)
+  rnd = rnd or math.random
+  local out, intended = {}, {}
+  share = tonumber(share) or 0
+  for _, e in ipairs(group or {}) do
+    local stand = share > 0 and e.model ~= "simple_traffic" and standFor and standFor(e) or nil
+    if stand and rnd() < share then
+      out[#out + 1] = {model = "simple_traffic", config = stand}
+      intended[#intended + 1] = {stand = stand, model = e.model, config = e.config}
+    else
+      out[#out + 1] = e
+    end
+  end
+  return out, intended
 end
 
 return M
