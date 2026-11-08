@@ -328,7 +328,7 @@ No new network events: it rides on the save upload and the profile download.
 
 | Direction | Event | Body |
 |---|---|---|
-| S→C | `rlsmpTrafficVariety` | `{enabled, typeWeights, mods, zones, day, night, oversample, maxShare, maxCandidates, applyToTraffic, applyToParked, zoneSpeedLimits, swap, police}` sent once when a player finishes loading (also when `enabled` is false) |
+| S→C | `rlsmpTrafficVariety` | `{enabled, typeWeights, mods, zones, day, night, oversample, maxShare, maxCandidates, applyToTraffic, applyToParked, zoneSpeedLimits, swap, police, pool, respawn, parked}` sent once when a player finishes loading (also when `enabled` is false). `pool = {enabled, avoidLast, brandWindow, brandMax, streetMax, configsPerModel, popPower, ageMax}` (premade round-robin pool), `respawn = {enabled, perMinute, chance, repaintChance, waitSeconds, checkSeconds}` (re-roll of respawned traffic cars), `parked = {amount}` (the client raises its game setting `trafficParkingAmount` to this; 0 = leave alone). All sanitized again on the client. |
 
 Weights are `{name = number >= 0}` (at most 64 entries, names up to 64 characters). `typeWeights`, `zones[zone]`, `day` and `night` are keyed by the model's `Type`;
 `mods` by model name. `swap` = `{enabled, live, perMinute, hiddenSeconds, checkSeconds, minRatio, maxFailures}` (live swapping; `enabled` only watches, `live` replaces cars). The client sanitizes everything again. Settings are forgotten when the player leaves the server. `police` = `{enabled, models, undercoverShare, maxShare, undercoverWords}` (police groups, see `docs/RESEARCH_POLICE_MIX.md`).

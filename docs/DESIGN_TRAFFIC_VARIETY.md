@@ -47,6 +47,9 @@ BeamMP facts that shaped it: a swap is a delete and a spawn that every other gam
 Still unverified in the game: what `replaceVehicle` returns for a different model, whether `insertTraffic` is enough to restore the car's role and pooling, and RLS's saved traffic state
 after a swap. The watch-only mode and the `swap done` / `swap failed` log lines are there to find that out.
 
+## Step 3: premade pool, respawn re-roll, parked amount (built, untested)
+See `docs/RESEARCH_TRAFFIC_POOL.md`: a round-robin pool of every eligible model (not the same model twice in a row, per-brand caps), a re-roll of respawned traffic cars out of sight (different model and config, some repainted), and a higher parked car amount through the game setting `trafficParkingAmount`.
+
 ## Open questions
 - Which `Type` names does the game use? (The log line `model Types in the pool = ...` lists them after the first group; put them in `typeWeights`.)
 - Does the game give a `speedLimit` per road node? (`probe: road class source` says `speedLimit` or `none`.)
