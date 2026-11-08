@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.62 (untested in-game)
+- Joining again after a dropped connection: if the game reconnects on its own while the join is still waiting for the server (a friend's log showed the launcher link breaking 7 s after the hello), the join starts again instead of failing after 60 s with `no_answer`; if the connection is lost during the join the join is forgotten so the next world-ready starts a new one. (Claude A)
+- More parked cars at night: `trafficVariety.parked.nightAmount` (default 16, day amount stays 10). No parked cars are added while the frame rate is bad. Menu: Parked cars at night. Existing servers keep their own `parked` block: add `nightAmount` to `config.json`. (Claude A)
+
 ## 0.4.61 (all untested in-game)
 - Everyone can steal ALL parked cars again, also the ones another player's game spawned (this replaces the wrong 'own cars only' rule of 0.4.60). The server asks the owner's game to remove the car and hand over its exact details. AI traffic, police, taxis and real player cars stay off limits. (Claude A)
 - Parked cars can be any available model, with or without a simplified version (`trafficVariety.parked.fullPool`, `simplifiedShare`). A stolen car keeps the exact config of the parked car (`theft config:` log lines). (Claude A)

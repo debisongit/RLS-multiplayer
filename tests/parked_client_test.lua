@@ -41,11 +41,12 @@ overhaul_career_police_playerDriving = {onSettingsChanged = function() notifyCal
 MPCoreNetwork = {isMPSession = function() return true end}
 overhaul_career_career = {isActive = function() return true end}
 local config
-package.loaded["rlsmp/trafficVariety"] = {getConfig = function() return config end}
+local nightNow = false
+package.loaded["rlsmp/trafficVariety"] = {getConfig = function() return config end, contextNow = function() return {night = nightNow} end}
 
 local T = require("rlsmp/parked")
 local function setConfig(amount) config = V.sanitize({parked = {amount = amount}}) end
-local function run(seconds) for _ = 1, math.floor(seconds / 0.5) do T.onUpdate(0.5) end end
+local function run(seconds) for _ = 1, math.floor(seconds / 0.5) * 25 do T.onUpdate(0.02) end end   -- real frame times (a slow frame stops new parked cars)
 local function reset()
   values.trafficParkingAmount, values.trafficParkedVehicles = 2, true
   writes, parked, syncCalls, notifyCalls, pending, logged = {}, 2, 0, 0, false, {}
@@ -148,3 +149,21 @@ run(6)
 check(values.trafficParkingAmount == 10 and saw("onSettingsChanged failed"), "RLS functions that fail are logged, not fatal")
 
 print(string.format("parked_client_test: %d checks passed", passed))
+
+-- 10. more parked cars at night ---------------------------------------------------------------------------------------------------------------------------------
+reset() nightNow = false
+config = V.sanitize({parked = {amount = 10, nightAmount = 16}}) run(6)
+check(values.trafficParkingAmount == 10, "day: the day amount")
+nightNow = true run(6)
+check(values.trafficParkingAmount == 16, "night: the bigger night amount is asked for")
+nightNow = false run(6)
+check(values.trafficParkingAmount == 10, "day again: back to the day amount")
+-- slow frames stop adding more
+reset() nightNow = false
+config = V.sanitize({parked = {amount = 10, nightAmount = 16}}) run(6)
+for _ = 1, 100 do T.onUpdate(0.1) end   -- 10 fps for 10 s first
+nightNow = true
+for _ = 1, 400 do T.onUpdate(0.1) end   -- ...and on for 40 s
+check(values.trafficParkingAmount == 10, "slow frames: no more parked cars are added at night")
+nightNow = false
+

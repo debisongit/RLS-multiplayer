@@ -27,6 +27,7 @@ local original            -- the setting before we raised it
 local released            -- the wanted amount we stopped managing because someone else changed the setting
 local applied             -- the value we wrote
 local tries, lastSync, timer, clock = 0, -SYNC_EVERY, 0, 0
+local slowFor = 0       -- seconds the frame time has been bad (more parked cars cost frames: do not add while the game struggles)
 local logged = {}
 
 local function careerActive() return overhaul_career_career ~= nil and overhaul_career_career.isActive() end
@@ -88,7 +89,16 @@ function M.check()
   if not cfg then return "idle" end
   local current = getSetting()
   if current == nil then return "idle" end
-  local state = {wanted = cfg.parked.amount, current = current, noParked = noParked(), applied = applied, released = released, have = haveCars(), tries = tries}
+  local wanted = cfg.parked.amount
+  local night = false
+  if v.contextNow then
+    local okc, ctx = pcall(v.contextNow)
+    night = okc and type(ctx) == "table" and ctx.night == true
+  end
+  if night and (cfg.parked.nightAmount or 0) > wanted and wanted > 0 then wanted = cfg.parked.nightAmount end
+  -- never ADD parked cars while the frame rate is bad (the amount is only lowered again at day, RLS removes cars by itself)
+  if slowFor > 5 and applied ~= nil and wanted > applied then wanted = applied end
+  local state = {wanted = wanted, current = current, noParked = noParked(), applied = applied, released = released, have = haveCars(), tries = tries}
   local act = Pk.plan(state)
   if act == "skip" then
     once("noparked", "parked: parked cars are switched off in the game settings, leaving them alone")
@@ -126,6 +136,7 @@ end
 
 function M.onUpdate(dtReal)
   dtReal = dtReal or 0
+  if dtReal > 0.045 then slowFor = slowFor + dtReal else slowFor = math.max(0, slowFor - dtReal * 2) end
   clock, timer = clock + dtReal, timer + dtReal
   if timer < CHECK_EVERY then return end
   timer = 0

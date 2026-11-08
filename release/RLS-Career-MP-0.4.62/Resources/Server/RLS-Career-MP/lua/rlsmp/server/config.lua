@@ -231,7 +231,7 @@ M.defaults = {
     -- fullPool: parked cars can be EVERY available model/config (full cars, also those with no simple_traffic stand-in), under RLS's own parked filter
     -- (no police or taxi; junk stays out through excludeWords). simplifiedShare: of the picks that have a stand-in model, this share is shown as the cheap stand-in;
     -- the car you get when you steal it is still the exact picked config (client rlsmp/trafficVariety.lua remembers it). 0 = always full cars.
-    parked = {amount = 10, fullPool = true, simplifiedShare = 0.5},
+    parked = {amount = 10, nightAmount = 16, fullPool = true, simplifiedShare = 0.5},   -- nightAmount: wanted at night (people park); 0 or below amount = same as day
     -- Rarity: everyday cars are the clear majority. Shares of the picks per tier (renormalised over the tiers that exist). A config is "rare" when its model or
     -- config name has a rareWords word / is in rareModels / has Config Type Race or Drift / a Value of rareValue or more; "uncommon" for uncommonWords or
     -- uncommonValue; else common. Words of 5+ letters match inside names ("offroad" in "offroada331972"), shorter ones whole words only.

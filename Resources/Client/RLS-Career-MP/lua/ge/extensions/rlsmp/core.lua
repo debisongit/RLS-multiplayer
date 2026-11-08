@@ -155,6 +155,7 @@ function M.onOverhaulActive(active)
   end
 end
 
+local lostFor = 0       -- seconds without a multiplayer connection while a join was waiting
 local started = false   -- a join attempt was made since we last left a server
 
 local function begin()
@@ -165,7 +166,14 @@ end
 -- Any state but "a join is running or done" restarts on a fresh world: a failed or stuck earlier attempt must not block the next join.
 function M.onWorldReadyState(worldState)
   if worldState ~= 2 or not isMP() then return end
-  if state == "starting" or state == "active" or state == "hello_sent" or state == "downloading" then return end
+  if state == "starting" or state == "active" then return end
+  if state == "hello_sent" or state == "downloading" then
+    -- A second world-ready signal while a join is still waiting means the game reconnected on its own (a log showed the launcher link
+    -- breaking 7 s after the hello): the old hello is dead, so ask again instead of waiting 60 s for an answer that never comes.
+    if stateTime < 5 then return end
+    log("W", "RLS-Career-MP", "the game joined again while the old join was waiting: starting the join again")
+    net.reset()
+  end
   begin()
 end
 
@@ -187,6 +195,17 @@ function M.onUpdate(dtReal)
       fail("rls_missing", "RLS Career Overhaul is not installed or failed to load.")
     end
   elseif state == "hello_sent" or state == "downloading" then
+    -- The connection to the server is gone (the game fell back to a plain world): forget this join so the next world-ready starts a new one.
+    if isMP() then lostFor = 0 else
+      lostFor = lostFor + (dtReal or 0)
+      if lostFor > 5 then
+        log("W", "RLS-Career-MP", "the connection to the server was lost during the join")
+        lostFor, started = 0, false
+        net.reset()
+        setState("idle")
+        return
+      end
+    end
     local got, total = net.incomingProgress()
     if state == "hello_sent" and got > 0 then setState("downloading") end
     local verdict, logNow = downloadWatch.step(watch, dtReal, got, state)

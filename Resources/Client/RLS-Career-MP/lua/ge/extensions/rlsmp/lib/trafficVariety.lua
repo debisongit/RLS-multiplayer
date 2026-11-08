@@ -34,7 +34,7 @@ M.DEFAULTS = {
   -- Re-roll: a traffic car that RLS respawned out of everybody's sight becomes a different model with a different config.
   respawn = {enabled = true, mode = "async", perMinute = 2, chance = 0.25, repaintChance = 0.5, waitSeconds = 3, checkSeconds = 0.5},
   -- Parked cars: how many RLS keeps (its own game setting trafficParkingAmount). 0 = leave the game's own amount alone.
-  parked = {amount = 10, fullPool = true, simplifiedShare = 0.5},
+  parked = {amount = 10, nightAmount = 16, fullPool = true, simplifiedShare = 0.5},
   -- Rarity: everyday cars are the clear majority. Tier shares (of the picks), and what puts a config into a higher tier (words in the model or config
   -- name, the config's Config Type and Value when the game tells them).
   rarity = {enabled = true, common = 0.88, uncommon = 0.10, rare = 0.02,
@@ -174,7 +174,7 @@ M.sanitizeRespawn = respawnSettings
 local function parkedSettings(src)
   src = type(src) == "table" and src or {}
   local d = M.DEFAULTS.parked
-  return {amount = math.floor(number(src.amount, d.amount, 0, 30)), fullPool = src.fullPool ~= false,
+  return {amount = math.floor(number(src.amount, d.amount, 0, 30)), nightAmount = math.floor(number(src.nightAmount, d.nightAmount, 0, 30)), fullPool = src.fullPool ~= false,
     simplifiedShare = number(src.simplifiedShare, d.simplifiedShare, 0, 1)}
 end
 M.sanitizeParked = parkedSettings
