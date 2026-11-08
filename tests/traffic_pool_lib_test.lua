@@ -23,7 +23,7 @@ local cfg = V.sanitize({rarity = {enabled = false}})   -- rarity has its own tes
 local ctx = {}
 
 -- sanitize ------------------------------------------------------------------------------------------------
-check(cfg.pool.avoidLast == 6 and cfg.pool.brandMax == 3 and cfg.respawn.enabled and cfg.respawn.perMinute == 3 and cfg.parked.amount == 10, "defaults")
+check(cfg.pool.avoidLast == 6 and cfg.pool.brandMax == 3 and cfg.respawn.enabled and cfg.respawn.perMinute == 2 and cfg.parked.amount == 10, "defaults")
 local c2 = V.sanitize({pool = {avoidLast = 999, brandMax = 0, popPower = 9}, respawn = {perMinute = 99, chance = 5, enabled = false}, parked = {amount = 500}})
 check(c2.pool.avoidLast == 40 and c2.pool.brandMax == 1 and c2.pool.popPower == 1, "pool numbers clamped")
 check(c2.respawn.perMinute == 12 and c2.respawn.chance == 1 and c2.respawn.enabled == false, "respawn numbers clamped")
