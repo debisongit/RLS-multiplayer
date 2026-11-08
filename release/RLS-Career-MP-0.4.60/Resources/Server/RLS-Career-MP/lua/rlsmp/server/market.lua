@@ -414,7 +414,9 @@ function cmds.scout(pid, cars)
     local x, y, z = ok and tonumber(car.x), ok and tonumber(car.y), ok and tonumber(car.z)
     if ok and finite(x) and finite(y) and finite(z) then
       local key = math.floor(x / 4) .. ":" .. math.floor(y / 4)
-      if not seen[key] and math.sqrt((pos.x - x) ^ 2 + (pos.y - y) ^ 2) <= sc.radius + 25 and theft.stealableAt(period, {x = x, y = y}) then
+      local own = theft.ownsSid(pid, car.sid)
+      if not own then util.info(string.format("RLSMP-THEFT refused: not our car sid=%s (scout) from pid=%s", tostring(car.sid), tostring(pid))) end
+      if own and not seen[key] and math.sqrt((pos.x - x) ^ 2 + (pos.y - y) ^ 2) <= sc.radius + 25 and theft.stealableAt(period, {x = x, y = y}) then
         seen[key] = true
         good[#good + 1] = {x = x, y = y, z = z}
       end

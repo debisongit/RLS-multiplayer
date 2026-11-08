@@ -212,7 +212,10 @@ local function onChanged(pid, d)
   local model = M.cleanModel(d.model)
   if not model then return end
   local old, new = M.cleanPlate(d.oldPlate), M.cleanPlate(d.plate)
-  if old and old ~= new then M.clearPlate(old, model) end
+  -- Our own fake plate swap (server/fakePlates.lua) is not a "new plate": the real plate keeps its record while the fake one is on.
+  local okF, fp = pcall(require, "rlsmp.server.fakePlates")
+  local swap = okF and type(fp) == "table" and fp.involves and (fp.involves(pid, old) or fp.involves(pid, new))
+  if old and old ~= new and not swap then M.clearPlate(old, model) end
   local oldColor, color = M.cleanColor(d.oldColor), M.cleanColor(d.color)
   if oldColor and oldColor ~= color then M.clearDescription(model, oldColor) end
 end

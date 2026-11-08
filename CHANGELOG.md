@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.60 (all untested in-game)
+- Cops: no extra cops by default (`police.copCount` 0). A cop the game puts near you, in view, on your road or straight ahead/behind is moved to a road spot 1000 to 2500 m away (600 m minimum in a chase), right side preferred. If you want more cops, the count follows area and time of day: at most 3, one per 1500 m area. (Claude A)
+- Traffic is placed anywhere in a 250 to 4000 m ring when it respawns, and recycled past 4 km. Expect thinner traffic near you; raise `traffic.minAmount` if needed. (Claude A)
+- Passengers are on by default (`vehicles.allowPassengers`), with a watchdog that puts you on foot if the seat is wrong or the driver leaves. Needs a two-player test. (Claude A)
+- Theft only works on parked cars of your own game, never on another player's cars. (Claude A)
+- Fake plates on your own cars: garage tile, real plate change, no fines, own police record. (Claude A)
+
 ## Unreleased (no build bump, untested in-game)
 - Cop budget uses the real spawn spot: the far road spot is chosen first and the one-cop-per-area rule looks at THAT spot's area, not the player's. The area and time target wins over `police.copCount`, the maximum of 3 always holds. A re-placed cop is still rebuilt or moved (count unchanged); with `copCount` 0 no cop is added, and cops are never removed by the budget. (Claude A)
 - Fake plates on your OWN cars: the garage computer has a new tile on every owned car, "Fit fake plate" (and "Fake plate (fitted)" when one is on). A popup shows 3 random plates to pick from, "Other plates" for 3 new ones, and "Restore real plate". Fitting uses up one `fake_plate` item from the Black Market (the server takes it) and the plate text really changes on the car and in RLS's garage record, so it should survive saves, respawns and the part shop. A check puts it back if RLS restores the real plate. New files: `rlsmp/fakePlate.lua`, `lib/fakePlate.lua`, `server/fakePlates.lua`. See `docs/RESEARCH_FAKE_PLATES.md` (what is verified and what is guessed). (Claude A)
