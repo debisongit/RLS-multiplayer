@@ -264,4 +264,5 @@ end
 
 M.onInit = function() setExtensionUnloadMode(M, "manual") end
 
+require("rlsmp/lib/perf").wrap("bubble", M)
 return M

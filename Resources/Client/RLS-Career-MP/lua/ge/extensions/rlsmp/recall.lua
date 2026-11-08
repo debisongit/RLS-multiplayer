@@ -156,4 +156,5 @@ end
 M._queue = function() return queue end
 M.onInit = function() setExtensionUnloadMode(M, "manual") end
 
+require("rlsmp/lib/perf").wrap("recall", M)
 return M

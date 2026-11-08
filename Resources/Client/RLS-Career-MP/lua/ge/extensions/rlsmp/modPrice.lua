@@ -204,4 +204,5 @@ end
 M._onConfig = onConfig
 M.onInit = function() setExtensionUnloadMode(M, "manual") end
 
+require("rlsmp/lib/perf").wrap("modPrice", M)
 return M

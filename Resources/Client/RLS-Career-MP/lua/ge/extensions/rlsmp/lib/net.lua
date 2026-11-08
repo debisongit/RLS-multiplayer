@@ -233,6 +233,11 @@ function M.reset()
   registered = {}   -- BeamMP forgets our handlers when a session ends: register them again next time
 end
 
+-- Forget the transfers that are running (the handlers stay): used when the download is asked for again, so old chunks cannot mix with the new ones.
+function M.dropIncoming()
+  incoming, orphans, lastAsked = {}, {}, nil
+end
+
 function M.init()
   M.on("rlsmpChunkBegin", onChunkBegin)
   M.on("rlsmpChunk", onChunk)

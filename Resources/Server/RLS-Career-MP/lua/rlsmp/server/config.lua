@@ -231,7 +231,7 @@ M.defaults = {
     -- fullPool: parked cars can be EVERY available model/config (full cars, also those with no simple_traffic stand-in), under RLS's own parked filter
     -- (no police or taxi; junk stays out through excludeWords). simplifiedShare: of the picks that have a stand-in model, this share is shown as the cheap stand-in;
     -- the car you get when you steal it is still the exact picked config (client rlsmp/trafficVariety.lua remembers it). 0 = always full cars.
-    parked = {amount = 10, nightAmount = 16, fullPool = true, simplifiedShare = 0.5,
+    parked = {amount = 10, nightAmount = 16, fullPool = false, simplifiedShare = 0.5,
       -- Keep parked cars NEAR the player (RLS leaves its cars where they were created once they are far and switched off, docs/RESEARCH_PARKED_NEAR.md):
       -- when fewer than nearCount (nearNightCount at night) of your parked cars are within nearRadius m, one parked car that is farther than farRadius m from
       -- every player is moved to a free parking spot 120..nearRadius m from you, out of view, at most one per moveEverySeconds. 0 = off.
@@ -563,6 +563,15 @@ function M.load(path)
   if not cfg.migrations.passengersOn then
     cfg.migrations.passengersOn = true
     if type(raw) == "table" and type(raw.vehicles) == "table" and raw.vehicles.allowPassengers == false then cfg.vehicles.allowPassengers = true end
+  end
+  -- Lag (0.4.64): a config.json written before still has full parked cars (each one is a full car for you AND for every other player);
+  -- switch to the cheap stand-ins once. Put it back in the [ menu if you want it (and compare the frame rate).
+  if not cfg.migrations.lagTrim then
+    cfg.migrations.lagTrim = true
+    if cfg.trafficVariety.parked.fullPool == true then
+      cfg.trafficVariety.parked.fullPool = false
+      util.info("RLSMP-P3 lag trim: trafficVariety.parked.fullPool is now false (cheap stand-ins for parked cars); change it in the [ menu")
+    end
   end
   if type(cfg.serverTag) ~= "string" or not cfg.serverTag:match("^[a-z0-9]+$") then
     cfg.serverTag = randomTag()

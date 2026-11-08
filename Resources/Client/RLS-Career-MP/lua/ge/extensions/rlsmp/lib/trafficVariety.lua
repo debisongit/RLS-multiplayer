@@ -34,7 +34,7 @@ M.DEFAULTS = {
   -- Re-roll: a traffic car that RLS respawned out of everybody's sight becomes a different model with a different config.
   respawn = {enabled = true, mode = "async", perMinute = 2, chance = 0.25, repaintChance = 0.5, waitSeconds = 3, checkSeconds = 0.5},
   -- Parked cars: how many RLS keeps (its own game setting trafficParkingAmount). 0 = leave the game's own amount alone.
-  parked = {amount = 10, nightAmount = 16, fullPool = true, simplifiedShare = 0.5, nearCount = 6, nearNightCount = 10, nearRadius = 350, farRadius = 700, moveEverySeconds = 8},
+  parked = {amount = 10, nightAmount = 16, fullPool = false, simplifiedShare = 0.5, nearCount = 6, nearNightCount = 10, nearRadius = 350, farRadius = 700, moveEverySeconds = 8},
   -- Rarity: everyday cars are the clear majority. Tier shares (of the picks), and what puts a config into a higher tier (words in the model or config
   -- name, the config's Config Type and Value when the game tells them).
   rarity = {enabled = true, common = 0.88, uncommon = 0.10, rare = 0.02,

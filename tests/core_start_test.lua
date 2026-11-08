@@ -20,7 +20,7 @@ local core = require("rlsmp/core")
 core.onExtensionLoaded()
 local passed = 0
 local function check(c, m) if not c then error("FAIL: " .. m, 2) end passed = passed + 1 end
-local function hellos() local n = 0 for _, v in ipairs(sent) do if v == "rlsmpHello" then n = n + 1 end end return n end
+local function hellos() local n = 0 for _, d in ipairs(sentData) do if d.name == "rlsmpHello" and not d.data.again then n = n + 1 end end return n end   -- first hellos only
 
 -- normal start
 core.onWorldReadyState(2)
@@ -102,4 +102,45 @@ end
 local miss
 for k = #sentData, 1, -1 do if sentData[k].name == "rlsmpChunkMissing" then miss = sentData[k].data break end end
 check(asked and asked <= 5 and miss.id == 600 and miss.list[1] == 4 and miss.list[6] == 9, "holes are asked for within ~4 s although chunks keep coming")
+
+-- 0.4.64: a download that stops is asked for again (smaller and slower each time) before the join gives up
+core.onServerLeave()
+core.onWorldReadyState(2)
+local h4, ch4 = transfer.describe(string.rep("z", 400), 10)   -- 40 chunks
+h4.id, h4.kind, h4.extra = 700, "profile", {profile = "rlsmpabc1"}
+handlers.rlsmpChunkBegin(json.encode(h4))
+for i = 1, 29 do handlers.rlsmpChunk(json.encode({id = 700, i = i, d = ch4[i]})) end
+local r0 = count("rlsmpRetry")
+for _ = 1, 11 do core.onUpdate(1) end
+check(count("rlsmpRetry") == r0, "no retry before 12 s of silence")
+for _ = 1, 3 do core.onUpdate(1) end
+check(count("rlsmpRetry") == r0 + 1 and core.getState() == "downloading", "12 s without a new chunk: the save is asked for again")
+local retryMsg
+for k = #sentData, 1, -1 do if sentData[k].name == "rlsmpRetry" then retryMsg = sentData[k].data break end end
+check(retryMsg.attempt == 1, "...attempt 1")
+-- the new transfer arrives and completes: the join goes on
+local h5, ch5 = transfer.describe(json.encode({files = {["info.json"] = "{}"}}), 4)
+h5.id, h5.kind, h5.extra = 701, "profile", {profile = "rlsmpabc1"}
+handlers.rlsmpChunkBegin(json.encode(h5))
+for i = 1, #ch5 do handlers.rlsmpChunk(json.encode({id = 701, i = i, d = ch5[i]})) end
+check(core.getState() == "starting", "the second download finishes: RLS starts")
+-- a server that never answers: three retries, then the join fails
+core.onServerLeave()
+core.onWorldReadyState(2)
+handlers.rlsmpChunkBegin(json.encode(h4))
+handlers.rlsmpChunk(json.encode({id = 700, i = 1, d = ch4[1]}))
+local r1 = count("rlsmpRetry")
+for _ = 1, 400 do core.onUpdate(1) end
+check(count("rlsmpRetry") == r1 + 3, "at most three retries, got " .. (count("rlsmpRetry") - r1) .. " state " .. core.getState())
+check(core.getState() == "failed", "...then the join gives up")
+-- no answer to the hello: hello again (twice) before the 60 s give-up
+core.onServerLeave()
+core.onWorldReadyState(2)
+local hs = hellos()
+for _ = 1, 45 do core.onUpdate(1) end
+local repeats = 0 for _, d in ipairs(sentData) do if d.name == "rlsmpHello" and d.data.again then repeats = repeats + 1 end end
+check(repeats >= 2, "silence after the hello: it is sent again (repeats so far " .. repeats .. ")")
+local again
+for k = #sentData, 1, -1 do if sentData[k].name == "rlsmpHello" then again = sentData[k].data break end end
+check(again.again == 2, "...marked as a repeat")
 print("core_start_test: " .. passed .. " checks passed")

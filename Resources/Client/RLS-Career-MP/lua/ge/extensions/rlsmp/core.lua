@@ -39,6 +39,10 @@ local heartbeatTimer = 0
 local HEARTBEAT_EVERY = 1     -- seconds between download progress heartbeats (net.heartbeat)
 local staleCars, staleTimer   -- cars the server says already left (crash recovery), removed shortly after the career starts
 local watch = downloadWatch.new()   -- spots a download that stopped
+local retries = 0                    -- times this join asked the server to send the save again (smaller and slower each time)
+local helloRetries = 0
+local HELLO_AGAIN_AFTER = 20
+local RETRY_AFTER, MAX_RETRIES = 12, 3   -- seconds without a new chunk before asking again
 
 -- Lines tagged [rlsmp-timing] show where join time goes (send them with the log if joining feels slow).
 local function timing(what)
@@ -84,6 +88,7 @@ end
 
 local function sendHello()
   downloadWatch.reset(watch)
+  retries, helloRetries = 0, 0
   pending = nil   -- set again only when this attempt's profile download completes
   setState("hello_sent")
   net.send("rlsmpHello", {v = transfer.PROTOCOL, build = transfer.BUILD})
@@ -221,6 +226,25 @@ function M.onUpdate(dtReal)
       resendTimer = 0
     end
     if logNow then timing(string.format("download %d/%d chunks", got, total)) end
+    -- No answer to the hello (a friend's log: the launcher link broke right after it): say hello again, the server then sends (again) with smaller chunks.
+    if state == "hello_sent" and watch.idle >= HELLO_AGAIN_AFTER and helloRetries < 2 then
+      helloRetries = helloRetries + 1
+      timing(string.format("no answer to the hello for %d s: saying hello again (%d of 2)", HELLO_AGAIN_AFTER, helloRetries))
+      downloadWatch.reset(watch)
+      net.send("rlsmpHello", {v = transfer.PROTOCOL, build = transfer.BUILD, again = helloRetries})
+      return
+    end
+    -- The server stopped sending (seen in two logs: 29 of 191 pieces, then nothing, not even to the resend requests): ask for the whole
+    -- save again. The server sends it with smaller chunks, a bit slower each time (server/net.lua setPace).
+    if state == "downloading" and watch.idle >= RETRY_AFTER and retries < MAX_RETRIES and not (total > 0 and got >= total) then
+      retries = retries + 1
+      timing(string.format("download stalled at %d/%d chunks: asking the server to send the save again (attempt %d of %d)", got, total, retries, MAX_RETRIES))
+      net.dropIncoming()
+      downloadWatch.reset(watch)
+      resendTimer = 0
+      net.send("rlsmpRetry", {attempt = retries})
+      return
+    end
     if verdict == "stalled" then
       log("E", "RLS-Career-MP", string.format("Save download stalled at %d/%d chunks", got, total))
       fail("download_stalled", "Your save stopped downloading. Please leave and rejoin the server.")
@@ -280,4 +304,5 @@ end
 
 M.onInit = function() setExtensionUnloadMode(M, "manual") end
 
+require("rlsmp/lib/perf").wrap("core", M)
 return M

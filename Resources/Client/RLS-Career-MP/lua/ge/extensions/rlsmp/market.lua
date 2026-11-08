@@ -224,4 +224,5 @@ M._drops = function() return drops end
 M._marks = function() return marks end
 M.onInit = function() setExtensionUnloadMode(M, "manual") end
 
+require("rlsmp/lib/perf").wrap("market", M)
 return M

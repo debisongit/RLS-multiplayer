@@ -162,4 +162,5 @@ function M.report() return p3.report() end
 function M.onExtensionLoaded() p3.log("I", "rlsmp_trafficFill loaded") end
 M.onInit = function() setExtensionUnloadMode(M, "manual") end
 
+require("rlsmp/lib/perf").wrap("trafficFill", M)
 return M

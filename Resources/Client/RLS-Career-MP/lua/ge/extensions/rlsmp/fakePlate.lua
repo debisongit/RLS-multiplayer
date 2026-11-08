@@ -293,4 +293,5 @@ M._records = function() return records end
 M._check = check
 M.onInit = function() setExtensionUnloadMode(M, "manual") end
 
+require("rlsmp/lib/perf").wrap("fakePlate", M)
 return M

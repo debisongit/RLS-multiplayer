@@ -570,4 +570,5 @@ function M._setReader(fn) readText = fn end
 M._drawWindow = drawWindow
 M.onInit = function() setExtensionUnloadMode(M, "manual") end
 
+require("rlsmp/lib/perf").wrap("trafficMenu", M)
 return M
