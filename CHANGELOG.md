@@ -9,6 +9,14 @@
 - Traffic: premade pool that rotates brands and models (no repeat within 6 picks, max 3 of a brand), respawned cars get a new model and config out of sight (3 a minute), parked car amount raised to 10 (`trafficVariety.parked.amount`). (Claude A)
 - Police chase: cops near you are held before a chase starts, fading-out cops are cancelled, cops re-placed should come from behind. Spawn range is back to the original game behavior by default (`police.bubbleMode`: original, protect, off). (Claude A)
 
+## Unreleased (preload and rarity, build number not bumped)
+- Lag: building a replacement car costs about a second of work in your game (the log shows jbeam, meshes and the vehicle thread loading). New lag protection: no car is built while the last frames were slow (and not for 3 s after a slow frame), never two builds within 6 s, never in a chase. Config `trafficVariety.preload`. (Claude A)
+- Lag: a small reserve (3) of picks is chosen ahead and their data read ahead, one every 4 s in calm moments; the re-roll uses them. No hidden spare car is built, because BeamMP would send it to everybody. 70% of picks come from models that are already on the street or built before (their meshes are loaded). (Claude A)
+- Log lines `preload: prepared ... ready N of M`, `preload: build ... took N ms`, `preload: build postponed: ...` so you can send logs. (Claude A)
+- Variety: everyday cars are now the clear majority (88% common, 10% uncommon like rally/tuner/offroad/workpackage, 2% rare like race/drift/hotrod/junk/exotic), config `trafficVariety.rarity`, sliders on the [ menu amount page. (Claude A)
+- Variety: default road class and night weights (trucks and vans on highways, fewer in the city and at night, small cars like the city); one log line `variety context: zone=... night=...` when it changes. (Claude A)
+- All untested in the game. (Claude A)
+
 ## Unreleased (chase and traffic range, build number not bumped)
 - Police: cops near you are now held BEFORE a chase starts (not only after the game noticed it), so a cop that sees you is not recycled in the half second before the chase flips on. A cop that is already fading out when it gets held fades back in. Untested. (Claude A)
 - Police: every police car gets "respawn away from you" (`spawnDirBias = -1`), so a cop that RLS re-places anyway should arrive from behind, not ahead. This is a guess about vanilla placement, see `docs/RESEARCH_CHASE_RANGE.md`. Roadblocks and police teleports are also refused before the chase is noticed. Untested. (Claude A)

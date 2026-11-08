@@ -81,6 +81,7 @@ local function check(c, m) if not c then error("FAIL: " .. m, 2) end passed = pa
 local function setConfig(over)
   local c = {respawn = {perMinute = 3, waitSeconds = 3, checkSeconds = 0.5, repaintChance = 0}}
   for k, v in pairs(over or {}) do if k == "respawn" then for a, b in pairs(v) do c.respawn[a] = b end else c[k] = v end end
+  c.preload = c.preload or {slowFrameMs = 2000, minGapSeconds = 0, settleSeconds = 0, reserve = 3, prepareSeconds = 1}   -- the tests step 0.5 s per frame
   config = V.sanitize(c)
 end
 local function run(seconds) for _ = 1, math.floor(seconds / 0.5) do S.onUpdate(0.5) T.onUpdate(0.5) end end
@@ -229,5 +230,41 @@ for _ in pairs(seenModels) do nm = nm + 1 end
 for _ in pairs(seenBrands) do nb = nb + 1 end
 check(repeats == 0, "one car respawning 40 times never keeps its model")
 check(nm >= 7 and nb == 4, "over 40 respawns almost all models and all brands show (" .. nm .. " models, " .. nb .. " brands)")
+
+-- 10. preload: the frame guard postpones builds, the reserve is filled ahead and used -------------------------------------------------------------------
+local function runDt(seconds, dt) for _ = 1, math.floor(seconds / dt) do S.onUpdate(dt) T.onUpdate(dt) end end
+reset() addObject(1, "unicycle") addCar(10, "sedan") setConfig({preload = {slowFrameMs = 100, minGapSeconds = 0, settleSeconds = 2, reserve = 0}})
+runDt(2, 0.016)
+S.onUpdate(0.4)                                    -- a hitch
+respawn(10)
+runDt(1.5, 0.016)
+check(#replaceCalls == 0, "right after a slow frame no car is built")
+check(saw("preload: build postponed: slow frame"), "the postponing is logged")
+runDt(1.5, 0.016)
+check(#replaceCalls == 1, "calm again: the re-roll goes ahead")
+check(saw("preload: build "), "the build time is logged")
+
+reset() addObject(1, "unicycle") addCar(10, "sedan") setConfig({preload = {slowFrameMs = 100, minGapSeconds = 0, settleSeconds = 0, reserve = 2, prepareSeconds = 1}})
+runDt(5, 0.1)
+check(T.reserveSize() == 2, "the reserve fills up to its size (" .. T.reserveSize() .. ")")
+check(saw("preload: prepared ") and saw("ready 2 of 2"), "preparing is logged with the ready count")
+respawn(10)
+runDt(1, 0.1)
+check(#replaceCalls == 1 and saw("(pool stage reserve)") and saw("from the reserve"), "the re-roll uses a prepared pick")
+runDt(5, 0.1)
+check(T.reserveSize() == 2, "the reserve is refilled afterwards")
+reset() addObject(1, "unicycle") addCar(10, "sedan") setConfig({preload = {slowFrameMs = 100, minGapSeconds = 0, settleSeconds = 0, reserve = 2, prepareSeconds = 1}})
+runDt(5, 0.1)
+td[10].pursuit = {mode = 2}
+package.loaded["rlsmp/police"] = {isPursuit = function() return true end}
+respawn(10)
+runDt(5, 0.1)
+check(#replaceCalls == 0, "no building in a chase")
+package.loaded["rlsmp/police"] = nil
+reset() addObject(1, "unicycle") addCar(10, "sedan") addCar(11, "van") setConfig({preload = {slowFrameMs = 100, minGapSeconds = 20, settleSeconds = 0, reserve = 0}, respawn = {perMinute = 12}})
+runDt(1, 0.1)
+respawn(10) respawn(11)
+runDt(10, 0.1)
+check(#replaceCalls == 1, "minGapSeconds: two builds are never closer than that")
 
 print(string.format("traffic_reroll_client_test: %d checks passed", passed))

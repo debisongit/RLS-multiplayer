@@ -19,7 +19,7 @@ for _, model in ipairs(models) do
   for i = 1, 4 do entries[#entries + 1] = {model = model, config = "c" .. i} end
 end
 local function infoOf(e) return {type = "Car", brand = brands[e.model]} end
-local cfg = V.sanitize({})
+local cfg = V.sanitize({rarity = {enabled = false}})   -- rarity has its own tests (traffic_rarity_lib_test.lua)
 local ctx = {}
 
 -- sanitize ------------------------------------------------------------------------------------------------

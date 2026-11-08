@@ -33,6 +33,14 @@ M.DEFAULTS = {
   respawn = {enabled = true, perMinute = 3, chance = 1, repaintChance = 0.5, waitSeconds = 3, checkSeconds = 0.5},
   -- Parked cars: how many RLS keeps (its own game setting trafficParkingAmount). 0 = leave the game's own amount alone.
   parked = {amount = 10},
+  -- Rarity: everyday cars are the clear majority. Tier shares (of the picks), and what puts a config into a higher tier (words in the model or config
+  -- name, the config's Config Type and Value when the game tells them).
+  rarity = {enabled = true, common = 0.88, uncommon = 0.10, rare = 0.02,
+    rareWords = {"race", "racer", "racing", "drift", "hotrod", "junk", "drag", "crawler", "trophy", "buggy", "formula", "rocket"},
+    uncommonWords = {"rally", "offroad", "tuner", "pro", "workpackage", "sport", "taxi", "police", "dune", "turbo"},
+    rareModels = {"scintilla", "bolide"}, uncommonValue = 45000, rareValue = 120000},
+  -- Preload: frame guard, a small reserve of picks prepared ahead, bias to models that are already loaded (lib/trafficPreload.lua).
+  preload = {enabled = true, reserve = 3, prepareSeconds = 4, minGapSeconds = 6, slowFrameMs = 45, calmFrames = 45, settleSeconds = 3, warmShare = 0.7, ageMax = 240},
 }
 
 local MAX_ENTRIES = 64
@@ -96,6 +104,35 @@ local function policeSettings(src)
   }
 end
 M.sanitizePolice = policeSettings
+
+local function wordList(src, default, maxLen)
+  local out = {}
+  if type(src) == "table" then
+    for _, w in ipairs(src) do
+      if type(w) == "string" and w ~= "" and #w <= 32 and #out < maxLen then out[#out + 1] = string.lower(w) end
+    end
+  else
+    for i, w in ipairs(default) do out[i] = w end
+  end
+  return out
+end
+
+local function raritySettings(src)
+  src = type(src) == "table" and src or {}
+  local d = M.DEFAULTS.rarity
+  return {
+    enabled = src.enabled ~= false,
+    common = number(src.common, d.common, 0, 1),
+    uncommon = number(src.uncommon, d.uncommon, 0, 1),
+    rare = number(src.rare, d.rare, 0, 1),
+    rareWords = wordList(src.rareWords, d.rareWords, 24),
+    uncommonWords = wordList(src.uncommonWords, d.uncommonWords, 24),
+    rareModels = wordList(src.rareModels, d.rareModels, 24),
+    uncommonValue = number(src.uncommonValue, d.uncommonValue, 0, 100000000),
+    rareValue = number(src.rareValue, d.rareValue, 0, 100000000),
+  }
+end
+M.sanitizeRarity = raritySettings
 
 local function poolSettings(src)
   src = type(src) == "table" and src or {}
@@ -166,6 +203,8 @@ function M.sanitize(src)
     pool = poolSettings(src.pool),
     respawn = respawnSettings(src.respawn),
     parked = parkedSettings(src.parked),
+    rarity = raritySettings(src.rarity),
+    preload = require("rlsmp/lib/trafficPreload").sanitize(src.preload),
   }
 end
 
@@ -201,6 +240,51 @@ function M.weight(entry, info, ctx, cfg)
   if info.mod then w = w * (cfg.mods[model] or 1) end
   if w ~= w or w < 0 then return 0 end
   return w
+end
+
+-- Rarity -------------------------------------------------------------------------------------------------------------------------------------------
+-- "common", "uncommon" or "rare" for a config. entry = {model, config, ctype =, value =} (the last two only when the game told them).
+function M.tierOf(entry, rc)
+  local model = string.lower(tostring(entry.model))
+  local name = model .. "_" .. string.lower(tostring(entry.config))
+  local tokens = {}
+  for t in name:gmatch("[%a%d]+") do tokens[t] = true end
+  local function hit(words)
+    for _, w in ipairs(words) do
+      if tokens[w] or (#w >= 5 and name:find(w, 1, true)) then return true end
+    end
+    return false
+  end
+  local value = tonumber(entry.value)
+  local ctype = type(entry.ctype) == "string" and string.lower(entry.ctype) or ""
+  for _, m in ipairs(rc.rareModels) do if m == model then return "rare" end end
+  if ctype == "race" or ctype == "drift" or (value and value >= rc.rareValue and rc.rareValue > 0) or hit(rc.rareWords) then return "rare" end
+  if (value and value >= rc.uncommonValue and rc.uncommonValue > 0) or hit(rc.uncommonWords) then return "uncommon" end
+  return "common"
+end
+
+-- A function entry -> multiplier that makes the tiers' share of the picks what the settings say (shares are renormalised over the tiers that
+-- exist in this list). nil when rarity is off or there is nothing to scale.
+function M.rarityPlan(entries, infoOf, ctx, cfg)
+  local rc = cfg.rarity
+  if not (rc and rc.enabled) then return nil end
+  -- the selectors give every MODEL one share (split over its configs), so the tier sums count each entry as weight / configs of its model
+  local sum, tier, perModel = {common = 0, uncommon = 0, rare = 0}, {}, {}
+  for _, e in ipairs(entries) do perModel[e.model] = (perModel[e.model] or 0) + 1 end
+  for _, e in ipairs(entries) do
+    local t = M.tierOf(e, rc)
+    tier[e] = t
+    sum[t] = sum[t] + M.weight(e, infoOf and infoOf(e) or nil, ctx, cfg) / perModel[e.model]
+  end
+  local present = 0
+  for t, w in pairs(sum) do if w > 0 and rc[t] > 0 then present = present + rc[t] end end
+  if present <= 0 then return nil end
+  local factor = {}
+  for t, w in pairs(sum) do factor[t] = (w > 0 and rc[t] > 0) and (rc[t] / present / w) or 0 end
+  return function(e)
+    local t = tier[e] or M.tierOf(e, rc)
+    return factor[t]
+  end
 end
 
 local function keyOf(entry) return tostring(entry.model) .. "/" .. tostring(entry.config) end
@@ -273,6 +357,8 @@ function M.select(candidates, amount, infoOf, ctx, cfg, rnd, mem)
     end
   end
   if #pool == 0 then return out, 0 end
+  local plan = M.rarityPlan((function() local l = {} for i, p in ipairs(pool) do l[i] = p.entry end return l end)(), infoOf, ctx, cfg)
+  if plan then for _, p in ipairs(pool) do p.w = p.w * plan(p.entry) * 1000 end end
 
   local cap = math.max(1, math.ceil(amount * cfg.maxShare))
   local perModel = {}
@@ -289,7 +375,11 @@ function M.select(candidates, amount, infoOf, ctx, cfg, rnd, mem)
     if p.w <= 0 or (useCap and (perModel[p.entry.model] or 0) >= cap) then return 0 end
     if not mem then return p.w end
     local w = p.w / nModel[p.entry.model] * M.popFactor(p.entry.pop, cfg.pool.popPower)
-    if useCap then w = w * M.poolFactor(mem, p.entry.model, p.brand, cfg, distinct) end
+    if useCap then
+      local f = M.poolFactor(mem, p.entry.model, p.brand, cfg, distinct)
+      if plan and f > 1 and M.tierOf(p.entry, cfg.rarity) ~= "common" then f = 1 end   -- no "unused for long" boost for uncommon / rare cars
+      w = w * f
+    end
     return w
   end
 
@@ -351,6 +441,8 @@ end
 function M.pickOne(mem, candidates, infoOf, ctx, cfg, rnd, current, census)
   rnd = rnd or math.random
   current = current or {}
+  local plan = M.rarityPlan(type(candidates) == "table" and candidates or {}, infoOf, ctx, cfg)
+  local function rf(e) return plan and plan(e) * 1000 or 1 end
   local groups, order = {}, {}
   for _, e in ipairs(type(candidates) == "table" and candidates or {}) do
     if type(e) == "table" and e.model and e.config and not (e.model == current.model and e.config == current.config) then
@@ -362,7 +454,8 @@ function M.pickOne(mem, candidates, infoOf, ctx, cfg, rnd, current, census)
         order[#order + 1] = g
       end
       g.entries[#g.entries + 1] = e
-      g.pop = g.pop + M.popFactor(e.pop, cfg.pool.popPower)
+      g.pop = g.pop + M.popFactor(e.pop, cfg.pool.popPower) * rf(e)
+      if plan and M.tierOf(e, cfg.rarity) == "common" then g.everyday = true end
     end
   end
   local usable, others = {}, 0
@@ -394,9 +487,14 @@ function M.pickOne(mem, candidates, infoOf, ctx, cfg, rnd, current, census)
   end
 
   local function notCurrent(g) return g.model ~= current.model end
+  local function pf(g, ...)   -- round-robin factor; models with no everyday config get no "unused for long" boost
+    local f = M.poolFactor(mem, g.model, g.brand, cfg, others, ...)
+    if plan and f > 1 and not g.everyday then f = 1 end
+    return f
+  end
   local stages = {
-    function(g) return notCurrent(g) and M.poolFactor(mem, g.model, g.brand, cfg, others, census) or 0 end,
-    function(g) return notCurrent(g) and M.poolFactor(mem, g.model, g.brand, cfg, others, nil, true) or 0 end,
+    function(g) return notCurrent(g) and pf(g, census) or 0 end,
+    function(g) return notCurrent(g) and pf(g, nil, true) or 0 end,
     function(g) return (notCurrent(g) and g.model ~= lastModel) and 1 or 0 end,
     function(g) return notCurrent(g) and 1 or 0 end,
     function(g) return 1 end,
@@ -410,7 +508,15 @@ function M.pickOne(mem, candidates, infoOf, ctx, cfg, rnd, current, census)
         if e.config ~= mem.lastConfig[g.model] and e.config ~= current.config then fresh[#fresh + 1] = e end
       end
       local list = #fresh > 0 and fresh or g.entries
-      local entry = list[math.min(#list, math.floor(rnd() * #list) + 1)]
+      local entry
+      local total = 0
+      if plan then for _, e in ipairs(list) do total = total + rf(e) end end
+      if total > 0 then
+        local r = rnd() * total
+        for _, e in ipairs(list) do entry = e r = r - rf(e) if r <= 0 then break end end
+      else
+        entry = list[math.min(#list, math.floor(rnd() * #list) + 1)]
+      end
       M.poolNote(mem, entry, g.brand)
       return entry, stage
     end

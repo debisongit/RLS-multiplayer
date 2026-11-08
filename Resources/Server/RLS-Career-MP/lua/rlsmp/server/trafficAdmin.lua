@@ -67,6 +67,19 @@ local STATIC = {
   ["trafficVariety.respawn.repaintChance"] = {"number", 0, 1},
   ["trafficVariety.respawn.waitSeconds"] = {"number", 0.5, 30},
   ["trafficVariety.parked.amount"] = {"number", 0, 30, true},
+  ["trafficVariety.rarity.enabled"] = {"bool"},
+  ["trafficVariety.rarity.common"] = {"number", 0, 1},
+  ["trafficVariety.rarity.uncommon"] = {"number", 0, 1},
+  ["trafficVariety.rarity.rare"] = {"number", 0, 1},
+  ["trafficVariety.rarity.uncommonValue"] = {"number", 0, 100000000, true},
+  ["trafficVariety.rarity.rareValue"] = {"number", 0, 100000000, true},
+  ["trafficVariety.preload.enabled"] = {"bool"},
+  ["trafficVariety.preload.reserve"] = {"number", 0, 8, true},
+  ["trafficVariety.preload.prepareSeconds"] = {"number", 1, 60},
+  ["trafficVariety.preload.minGapSeconds"] = {"number", 0, 120},
+  ["trafficVariety.preload.slowFrameMs"] = {"number", 10, 2000},
+  ["trafficVariety.preload.settleSeconds"] = {"number", 0, 60},
+  ["trafficVariety.preload.warmShare"] = {"number", 0, 1},
   ["weather.enabled"] = {"bool"},
   ["weather.force"] = {"enum", values = {[""] = true, clear = true, partlyCloudy = true, overcast = true, drizzle = true, rain = true, storm = true}},
   ["police.antiTeleport"] = {"bool"},
@@ -289,6 +302,8 @@ function M.snapshot()
   local pool = type(v.pool) == "table" and v.pool or {}
   local rs = type(v.respawn) == "table" and v.respawn or {}
   local pk = type(v.parked) == "table" and v.parked or {}
+  local ra = type(v.rarity) == "table" and v.rarity or {}
+  local pl = type(v.preload) == "table" and v.preload or {}
   local extra = copyRuled({theft = true, fence = true, market = true})
   -- A method without an "enabled" key is ON (theft.lua: enabled ~= false); show it that way, or the menu would list every method as off.
   for name, m in pairs(type(extra.theft) == "table" and type(extra.theft.methods) == "table" and extra.theft.methods or {}) do
@@ -311,7 +326,10 @@ function M.snapshot()
       pool = {enabled = pool.enabled, avoidLast = pool.avoidLast, brandWindow = pool.brandWindow, brandMax = pool.brandMax, streetMax = pool.streetMax,
         configsPerModel = pool.configsPerModel, popPower = pool.popPower},
       respawn = {enabled = rs.enabled, perMinute = rs.perMinute, chance = rs.chance, repaintChance = rs.repaintChance, waitSeconds = rs.waitSeconds},
-      parked = {amount = pk.amount}},
+      parked = {amount = pk.amount},
+      rarity = {enabled = ra.enabled, common = ra.common, uncommon = ra.uncommon, rare = ra.rare, uncommonValue = ra.uncommonValue, rareValue = ra.rareValue},
+      preload = {enabled = pl.enabled, reserve = pl.reserve, prepareSeconds = pl.prepareSeconds, minGapSeconds = pl.minGapSeconds,
+        slowFrameMs = pl.slowFrameMs, settleSeconds = pl.settleSeconds, warmShare = pl.warmShare}},
     weather = {enabled = w.enabled, force = w.force, mix = copyMap(w.mix), periodMinutes = w.periodMinutes},
     police = {enabled = p.enabled, antiTeleport = p.antiTeleport, blockRoadblocks = p.blockRoadblocks, bubbleMode = p.bubbleMode,
       plateFlagSeconds = p.plateFlagSeconds, descriptionSeconds = p.descriptionSeconds,

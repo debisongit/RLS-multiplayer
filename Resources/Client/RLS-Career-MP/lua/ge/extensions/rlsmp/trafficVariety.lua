@@ -18,6 +18,7 @@ local net = require("rlsmp/lib/net")
 local mp = require("rlsmp/lib/mp")
 local p3 = require("rlsmp/lib/p3")
 local V = require("rlsmp/lib/trafficVariety")
+local PL = require("rlsmp/lib/trafficPreload")
 
 local MOD_CONFIGS_PER_MODEL = 4   -- how many eligible configs of a modded model join the candidate pool
 
@@ -39,6 +40,7 @@ local brandCache = {}       -- model name -> Brand string or false
 local premadeList           -- the premade pool: list of {model, config, pop}; nil until built
 local premadeJob            -- the build in progress: {models, i, out, params, filter}
 local clock = 0
+local warm = {}             -- models whose meshes are probably loaded (on the street now, or built this session)
 
 local function careerActive() return overhaul_career_career ~= nil and overhaul_career_career.isActive() end
 
@@ -148,6 +150,8 @@ local function context()
     end
   end
   ctx.zoneSource = source
+  p3.logOnChange("variety-context", tostring(ctx.zone) .. "/" .. tostring(ctx.night), "I",
+    string.format("variety context: zone=%s night=%s (road class from %s)", tostring(ctx.zone), tostring(ctx.night), source))
   return ctx
 end
 
@@ -248,7 +252,7 @@ local function build(original, amount, params)
   p3.logOnChange("variety-zone", ctx.zoneSource, "I", "probe: road class source = " .. ctx.zoneSource)
   p3.count(parked and "variety groups (parked)" or "variety groups (traffic)")
   local names = {}
-  for _, e in ipairs(group) do names[#names + 1] = tostring(e.model) .. "/" .. tostring(e.config) end
+  for _, e in ipairs(group) do names[#names + 1] = tostring(e.model) .. "/" .. tostring(e.config) warm[e.model] = true end
   p3.log("I", string.format("variety %s group: want=%d pool=%d mods=%d premade=%d picked=%d distinct models=%d relaxed=%d zone=%s night=%s cars=%s",
     parked and "parked" or "traffic", want, #pool, #mods, usePool and #(premadeList or {}) or 0, #group, V.distinctModels(group), relaxed,
     tostring(ctx.zone), tostring(ctx.night), table.concat(names, ",")))
@@ -400,7 +404,9 @@ local function stepPremade()
           local good, eligible = pcall(j.filter.isConfigEligible, name, c, j.params)
           if good and eligible then
             local info = data.configs[c]
-            j.out[#j.out + 1] = {model = name, config = c, pop = type(info) == "table" and tonumber(info.Population) or nil}
+            local known = type(info) == "table"
+            j.out[#j.out + 1] = {model = name, config = c, pop = known and tonumber(info.Population) or nil,
+              ctype = known and type(info["Config Type"]) == "string" and info["Config Type"] or nil, value = known and tonumber(info.Value) or nil}
             taken = taken + 1
           end
         end
@@ -507,7 +513,7 @@ function M.onServerLeave()
   config, provisional, typeCache, missingMods, probed = nil, false, {}, {}, false
   policeCache, policeKeys = nil, {}
   recent, recentSeen = {}, {}
-  mem, brandCache, premadeList, premadeJob = V.newPool(), {}, nil, nil
+  mem, brandCache, premadeList, premadeJob, warm = V.newPool(), {}, nil, nil, {}
 end
 
 function M.getConfig() return config end
@@ -518,6 +524,7 @@ function M.infoOf(e) return {type = typeOfModel(e.model), mod = config ~= nil an
 function M.brandOf(model) return brandOfModel(model) end
 function M.premadeCount() return premadeList and #premadeList or 0 end
 function M.getMemory() return mem end
+function M.noteWarm(model) if type(model) == "string" then warm[model] = true end end
 
 -- One replacement for a traffic car that is being re-rolled: a different model (different config too) from the premade pool, round robin.
 -- current = {model, config}; census = {brand = cars of that brand on the street now}. nil = leave the car alone.
@@ -526,7 +533,17 @@ function M.pickReplacement(current, census)
   local list = {}
   for _, e in ipairs(premadeList or {}) do list[#list + 1] = e end
   if #list == 0 then for _, e in ipairs(recent) do list[#list + 1] = e end end   -- no premade pool: only what the game offered lately
-  local ok, entry, stage = pcall(V.pickOne, mem, list, M.infoOf, context(), config, math.random, current, census)
+  local ok, entry, stage
+  local pc = config.preload
+  if pc and pc.enabled then
+    -- warm bias: most picks come from models that are already loaded (cheaper to build); nothing is noted in the memory when it finds nothing
+    local preferred = PL.preferWarm(list, warm, pc.warmShare, math.random)
+    if preferred ~= list then
+      ok, entry, stage = pcall(V.pickOne, mem, preferred, M.infoOf, context(), config, math.random, current, census)
+      if ok and entry then p3.count("pool picks (warm model)") end
+    end
+  end
+  if not (ok and entry) then ok, entry, stage = pcall(V.pickOne, mem, list, M.infoOf, context(), config, math.random, current, census) end
   if not ok then p3.log("W", "pickReplacement failed: " .. tostring(entry)) return nil end
   if entry then p3.count("pool picks (stage " .. tostring(stage) .. ")") end
   return entry, stage

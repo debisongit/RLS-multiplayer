@@ -19,11 +19,13 @@ local M = {}
 local S = require("rlsmp/lib/trafficSwap")
 local mp = require("rlsmp/lib/mp")
 local p3 = require("rlsmp/lib/p3")
+local PL = require("rlsmp/lib/trafficPreload")
 
 local tracker = S.newTracker()
 local clock, timer = 0, 0
 local pending                 -- a live swap waiting for its new car: {oldId, before = {id = true}, at, entry}
 local liveOff = false         -- switched off after too many failures
+local guard = PL.newGuard()   -- frame guard: slow frames, time of the last build
 
 local function careerActive() return overhaul_career_career ~= nil and overhaul_career_career.isActive() end
 -- Extensions are looked up by their global name first (how core.lua finds them), then by module path.
@@ -43,6 +45,23 @@ local function settings()
   local cfg = v and v.getConfig and v.getConfig()
   if cfg and cfg.enabled and cfg.swap and cfg.swap.enabled and mp.isMPSession() and careerActive() then return cfg end
   return nil
+end
+
+-- Preload settings (the server's), or the defaults before it spoke.
+local function preloadCfg()
+  local v = variety()
+  local cfg = v and v.getConfig and v.getConfig()
+  return cfg and cfg.preload or PL.sanitize({})
+end
+
+-- May a car be built now? Not while frames are slow, not within minGapSeconds of the last build, not in a chase, not with physics paused.
+function M.canBuild()
+  local pc = preloadCfg()
+  if not pc.enabled then return true end
+  if be and be.getEnabled and be:getEnabled() == false then return false, "paused" end
+  local police = ext("police")
+  if police and police.isPursuit and police.isPursuit() == true then return false, "chase" end
+  return PL.canBuild(guard, clock, pc)
 end
 
 local function objectOf(id)
@@ -156,6 +175,12 @@ function M.replace(id, entry, maxFailures, onDone)
   maxFailures = tonumber(maxFailures) or 3
   if liveOff then return false, "switched off after failures" end
   if pending then return false, "busy" end
+  local can, why = M.canBuild()
+  if not can then
+    p3.count("build postponed (" .. tostring(why) .. ")")
+    p3.logOnChange("preload-postpone", why, "I", "preload: build postponed: " .. tostring(why))
+    return false, why
+  end
   local rg = package.loaded["rlsmp/lib/replaceGuard"]
   local vanilla = rg and rg.getVanilla and rg.getVanilla()
   local obj = objectOf(id)
@@ -176,8 +201,14 @@ function M.replace(id, entry, maxFailures, onDone)
       end
     end
   end
+  local t0 = os.clock()
   local ok, err = pcall(vanilla, entry.model, {config = entry.config, autoEnterVehicle = false}, obj)
+  local ms = (os.clock() - t0) * 1000
+  PL.built(guard, clock)
   if not ok then fail(maxFailures, err) return false, "error" end
+  p3.log("I", string.format("preload: build %s/%s took %.0f ms in the call (%s)", tostring(entry.model), tostring(entry.config), ms,
+    entry.fromReserve and "from the reserve" or "picked on the spot"))
+  p3.count(entry.fromReserve and "builds (reserve)" or "builds (on the spot)")
   pending = {oldId = id, before = before, at = clock, entry = entry, oldModel = oldModel, onDone = onDone, maxFailures = maxFailures, at0 = at0}
   resolvePending()
   return true
@@ -234,6 +265,7 @@ function M.onUpdate(dtReal)
   end
   dtReal = dtReal or 0
   clock = clock + dtReal
+  PL.feed(guard, dtReal, clock, preloadCfg())
   resolvePending()                                                 -- a swap started by the respawn re-roll finishes here even when watching is off
   local cfg = settings()
   if not cfg then return end
@@ -245,12 +277,13 @@ function M.onUpdate(dtReal)
 end
 
 function M.onServerLeave()
-  tracker, pending, liveOff, clock, timer = S.newTracker(), nil, false, 0, 0
+  tracker, pending, liveOff, clock, timer, guard = S.newTracker(), nil, false, 0, 0, PL.newGuard()
 end
 
 function M.report() return p3.report() end
 function M.isLiveOff() return liveOff end
 -- The car's current model and config name, for the respawn re-roll (rlsmp/trafficReroll.lua), which swaps through M.replace.
+M.getClock = function() return clock end
 M.modelOf = modelOf
 M.configOf = configOf
 

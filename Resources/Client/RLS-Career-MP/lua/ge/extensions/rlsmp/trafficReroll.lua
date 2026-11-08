@@ -17,9 +17,11 @@ local R = require("rlsmp/lib/trafficReroll")
 local S = require("rlsmp/lib/trafficSwap")
 local mp = require("rlsmp/lib/mp")
 local p3 = require("rlsmp/lib/p3")
+local PL = require("rlsmp/lib/trafficPreload")
 
 local tracker = R.newTracker()
 local clock, timer = 0, 0
+local queue, prepTimer = PL.newQueue(), 0     -- the reserve: picks made ahead, and the time since the last one
 
 local function careerActive() return overhaul_career_career ~= nil and overhaul_career_career.isActive() end
 local function ext(name) return rawget(_G, "rlsmp_" .. name) or package.loaded["rlsmp/" .. name] end
@@ -66,6 +68,13 @@ function M.check()
   if ts.isBusy() then return nil end
   local due = R.dueIds(tracker, clock, cfg.respawn.waitSeconds)
   if #due == 0 then return nil end
+  local okb, whyb = ts.canBuild()
+  if not okb then
+    p3.count("reroll postponed (" .. tostring(whyb) .. ")")
+    p3.logOnChange("preload-postpone", whyb, "I", "preload: build postponed: " .. tostring(whyb))
+    return nil
+  end
+  p3.logOnChange("preload-postpone", "go", "I", "preload: builds allowed again")
   local pctx, b = ps.context(), ext("bubble")
   for _, id in ipairs(due) do
     local veh = data[id]
@@ -81,12 +90,21 @@ function M.check()
       local current = {model = model, config = name}
       local census = R.census(ids, function(other)
         local m = ts.modelOf(other, data[other])
+        if m and v.noteWarm then v.noteWarm(m) end            -- its meshes are loaded already
         return m and v.brandOf and v.brandOf(m) or nil
       end, id)
-      local entry, stage = v.pickReplacement(current, census)
+      local entry, stage
+      local pc = cfg.preload
+      if pc.enabled then
+        local c0 = v.contextNow and v.contextNow() or {}
+        local ready = PL.take(queue, model, clock, pc.ageMax, tostring(c0.zone) .. "/" .. tostring(c0.night))
+        if ready then entry, stage = {model = ready.model, config = ready.config, pop = ready.pop, fromReserve = true}, "reserve" end
+      end
+      if not entry then entry, stage = v.pickReplacement(current, census) end
       if not entry then p3.count("reroll: nothing to pick") return nil end
       local started, why = ts.replace(id, entry, cfg.swap.maxFailures, function(newId)
         p3.count("reroll done")
+        if v.noteWarm then v.noteWarm(entry.model) end
         if math.random() < cfg.respawn.repaintChance then repaint(newId) end
       end)
       if not started then
@@ -105,18 +123,47 @@ function M.check()
   return nil
 end
 
+-- Reads a pick's data ahead (the game caches model info and the part config file). Returns the milliseconds it took.
+local function prefetch(entry)
+  local t0 = os.clock()
+  if core_vehicles and core_vehicles.getModel then pcall(core_vehicles.getModel, entry.model) end
+  if jsonReadFile then pcall(jsonReadFile, "vehicles/" .. entry.model .. "/" .. entry.config .. ".pc") end
+  return (os.clock() - t0) * 1000
+end
+
+-- Fills the reserve, one pick per prepareSeconds, only when a build would be allowed now (frames fine, no chase, no build running).
+function M.prepare(cfg)
+  local pc = cfg.preload
+  if not pc.enabled or pc.reserve < 1 or PL.size(queue) >= pc.reserve then return nil end
+  local v, ts = ext("trafficVariety"), ext("trafficSwap")
+  if not (v and v.pickReplacement and ts and ts.canBuild and ts.canBuild() and not (ts.isBusy and ts.isBusy())) then return nil end
+  local entry = v.pickReplacement({}, nil)
+  if not entry then return nil end
+  local ms = prefetch(entry)
+  local c0 = v.contextNow and v.contextNow() or {}
+  PL.push(queue, entry, clock, tostring(c0.zone) .. "/" .. tostring(c0.night))
+  p3.count("preload prepared")
+  p3.log("I", string.format("preload: prepared %s/%s in %.1f ms; ready %d of %d", tostring(entry.model), tostring(entry.config), ms, PL.size(queue), pc.reserve))
+  return entry
+end
+
 function M.onUpdate(dtReal)
   local cfg = settings()
   if not cfg then return end
   dtReal = dtReal or 0
-  clock, timer = clock + dtReal, timer + dtReal
+  clock, timer, prepTimer = clock + dtReal, timer + dtReal, prepTimer + dtReal
+  if prepTimer >= cfg.preload.prepareSeconds then
+    prepTimer = 0
+    M.prepare(cfg)
+  end
   if timer >= cfg.respawn.checkSeconds then
     timer = 0
     M.check()
   end
 end
 
-function M.onServerLeave() tracker, clock, timer = R.newTracker(), 0, 0 end
+function M.onServerLeave() tracker, clock, timer, queue, prepTimer = R.newTracker(), 0, 0, PL.newQueue(), 0 end
+function M.reserveSize() return PL.size(queue) end
 function M.report() return p3.report() end
 function M.onExtensionLoaded() p3.log("I", "rlsmp_trafficReroll loaded") end
 M.onInit = function() setExtensionUnloadMode(M, "manual") end
