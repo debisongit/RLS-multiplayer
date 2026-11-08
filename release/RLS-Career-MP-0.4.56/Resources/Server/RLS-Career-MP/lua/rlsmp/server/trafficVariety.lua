@@ -106,6 +106,11 @@ function M.preload()
     slowFrameMs = tonumber(p.slowFrameMs), calmFrames = tonumber(p.calmFrames), settleSeconds = tonumber(p.settleSeconds), warmShare = tonumber(p.warmShare)}
 end
 
+function M.focus()
+  local f = type(cfg.focus) == "table" and cfg.focus or {}
+  return {enabled = f.enabled ~= false, configs = tonumber(f.configs), minutes = tonumber(f.minutes)}
+end
+
 function M.simplified()
   local k = type(cfg.simplified) == "table" and cfg.simplified or {}
   return {enabled = k.enabled == true, parked = k.parked ~= false, traffic = k.traffic == true, nearRadius = tonumber(k.nearRadius),
@@ -151,6 +156,7 @@ function M.payload()
     parked = M.parked(),
     rarity = M.rarity(),
     preload = M.preload(),
+    focus = M.focus(),
     simplified = M.simplified(),
   }
 end

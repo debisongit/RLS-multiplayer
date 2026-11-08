@@ -287,6 +287,11 @@ r = lastResult()
 check(cfg.police.respawnRebuildSeconds == 120 and cfg.police.copRespawnDistance == 600, "rebuild interval and cop respawn distance: in range accepted")
 check(admin.snapshot().police.respawnRebuildSeconds == 120 and admin.snapshot().police.copRespawnDistance == 600, "...and in the snapshot")
 cfg.police.respawnRebuildSeconds, cfg.police.copRespawnDistance = 90, 450
+set(0, {{p = {"trafficVariety", "focus", "configs"}, v = 9}, {p = {"trafficVariety", "focus", "configs"}, v = 1}, {p = {"trafficVariety", "focus", "minutes"}, v = 30}, {p = {"trafficVariety", "focus", "enabled"}, v = false}})
+r = lastResult()
+check(cfg.trafficVariety.focus.configs == 1 and cfg.trafficVariety.focus.minutes == 30 and cfg.trafficVariety.focus.enabled == false, "focus settings: in range accepted")
+check(admin.snapshot().trafficVariety.focus.configs == 1 and admin.snapshot().trafficVariety.focus.minutes == 30, "...and in the snapshot")
+cfg.trafficVariety.focus = {enabled = true, configs = 2, minutes = 20}
 set(0, {{p = {"fence", "phone"}, v = false}, {p = {"fence", "gambleBust"}, v = 0.1}, {p = {"fence", "gambleBase"}, v = 0.5}})
 r = lastResult()
 check(r and r.applied == 1 and #r.rejected == 2 and cfg.fence.phone == false and admin.snapshot().fence.phone == false, "fence.phone can be switched; the gamble settings are gone from the menu's allowlist")

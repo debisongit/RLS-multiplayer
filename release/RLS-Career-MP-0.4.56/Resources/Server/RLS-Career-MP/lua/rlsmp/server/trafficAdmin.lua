@@ -80,6 +80,9 @@ local STATIC = {
   ["trafficVariety.rarity.rare"] = {"number", 0, 1},
   ["trafficVariety.rarity.uncommonValue"] = {"number", 0, 100000000, true},
   ["trafficVariety.rarity.rareValue"] = {"number", 0, 100000000, true},
+  ["trafficVariety.focus.enabled"] = {"bool"},
+  ["trafficVariety.focus.configs"] = {"number", 1, 6, true},
+  ["trafficVariety.focus.minutes"] = {"number", 1, 600},
   ["trafficVariety.preload.enabled"] = {"bool"},
   ["trafficVariety.preload.minGapSeconds"] = {"number", 0, 120},
   ["trafficVariety.preload.slowFrameMs"] = {"number", 10, 2000},
@@ -334,6 +337,7 @@ function M.snapshot()
   local pk = type(v.parked) == "table" and v.parked or {}
   local ra = type(v.rarity) == "table" and v.rarity or {}
   local pl = type(v.preload) == "table" and v.preload or {}
+  local fo = type(v.focus) == "table" and v.focus or {}
   local sm = type(v.simplified) == "table" and v.simplified or {}
   local mpr = type(config.modPrice) == "table" and config.modPrice or {}
   local extra = copyRuled({theft = true, fence = true, market = true})
@@ -362,6 +366,7 @@ function M.snapshot()
       respawn = {enabled = rs.enabled, mode = rs.mode, perMinute = rs.perMinute, chance = rs.chance, repaintChance = rs.repaintChance, waitSeconds = rs.waitSeconds},
       parked = {amount = pk.amount},
       rarity = {enabled = ra.enabled, common = ra.common, uncommon = ra.uncommon, rare = ra.rare, uncommonValue = ra.uncommonValue, rareValue = ra.rareValue},
+      focus = {enabled = fo.enabled, configs = fo.configs, minutes = fo.minutes},
       preload = {enabled = pl.enabled, minGapSeconds = pl.minGapSeconds,
         slowFrameMs = pl.slowFrameMs, settleSeconds = pl.settleSeconds, warmShare = pl.warmShare},
       simplified = {enabled = sm.enabled, parked = sm.parked, traffic = sm.traffic, nearRadius = sm.nearRadius, perMinute = sm.perMinute}},
