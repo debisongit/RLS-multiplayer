@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.4.57 (untested in-game)
+- Cops are held only during a chase again. Since 0.4.36 every cop within 300 m was held (never recycled) even with no chase, so patrol cars stayed around you. The old behaviour is `police.holdNearBeforeChase = true` in `config.json`. (Claude A)
+
 ## 0.4.56 (untested in-game)
 - Less lag from car configs (owner's request): traffic cars now use the SAME 1 or 2 configs (different models first) and the choice changes only every 20 minutes. Every new model/config has to load its parts and meshes (about 0.25 s each in the owner's log, 23 builds in one session); a config that is already on the street loads much faster. New server setting `trafficVariety.focus` (`enabled`, `configs` 1 to 6, default 2, `minutes`, default 20), also in the traffic menu. The choice uses the normal weights (road class, day or night, rarity). Fills and re-rolls build only focus configs and skip a rebuild into the config a car already has. Parked cars and police are not touched. (Claude B)
 

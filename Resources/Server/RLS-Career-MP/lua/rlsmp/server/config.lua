@@ -122,6 +122,8 @@ M.defaults = {
     --   own active radius AND has a clear line to it; "protect" = the old strict rule (450 m, or a clear line up to 1 km);
     -- "off" = no protection at all.
     bubbleMode = "original",
+    -- false = cops near you are only held while a chase runs (they get recycled normally otherwise). true = hold every cop within 300 m all the time.
+    holdNearBeforeChase = false,
     -- Police records (server plateRecords.lua), shared by all cops on the server:
     -- a flagged plate (plate text + car model) lasts this many real seconds; a new plate text clears it at once.
     plateFlagSeconds = 7200,

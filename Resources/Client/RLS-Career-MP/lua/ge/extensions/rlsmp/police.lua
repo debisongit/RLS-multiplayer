@@ -37,7 +37,7 @@ local CHECK_EVERY = 0.5   -- seconds between pursuit checks
 local FREEZE_RADIUS = 300 -- metres: police this close to the player's car are frozen
 local RELEASE_RADIUS = 350 -- metres: frozen units further than this (and not in the pursuit data) are released
 
-local settings = {antiTeleport = true, blockRoadblocks = true, noFineInStolenCar = true}
+local settings = {antiTeleport = true, blockRoadblocks = true, noFineInStolenCar = true, holdNearBeforeChase = false}
 local pursuit = false
 local timer = 0
 local frozen = {}         -- police vehicle id -> its enableRespawn before we touched it (held near the player, chase or not)
@@ -131,6 +131,9 @@ end
 local function tied(id, veh, named, pos, wasFrozen)
   if veh.role and veh.role.state == "disabled" and not named[id] then return false end   -- a wreck may leave
   if named[id] then return true end
+  -- Cops near you are only held DURING a chase by default. Held cops are never recycled, so holding every cop within 300 m all the
+  -- time keeps patrol cars around you for good. police.holdNearBeforeChase = true turns the old behaviour back on.
+  if not pursuit and not settings.holdNearBeforeChase then return false end
   if not pos then return pursuit end         -- no position known: in a chase freeze all (safe side)
   if not hasXYZ(veh.pos) then return wasFrozen end
   return distance(veh.pos, pos) <= (wasFrozen and RELEASE_RADIUS or FREEZE_RADIUS)
@@ -389,6 +392,7 @@ local function onConfig(data)
   p3.log("I", string.format("config received antiTeleport=%s blockRoadblocks=%s", tostring(data.antiTeleport), tostring(data.blockRoadblocks)))
   if type(data.antiTeleport) == "boolean" then settings.antiTeleport = data.antiTeleport end
   if type(data.blockRoadblocks) == "boolean" then settings.blockRoadblocks = data.blockRoadblocks end
+  if type(data.holdNearBeforeChase) == "boolean" then settings.holdNearBeforeChase = data.holdNearBeforeChase end
   if type(data.noFineInStolenCar) == "boolean" then settings.noFineInStolenCar = data.noFineInStolenCar end
   if type(data.bubbleMode) == "string" then
     local b = rawget(_G, "rlsmp_bubble") or package.loaded["rlsmp/bubble"]

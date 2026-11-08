@@ -36,6 +36,7 @@ function M.payload()
     copCount = tonumber(cfg.copCount),
     copTopUpSeconds = tonumber(cfg.copTopUpSeconds),
     bubbleMode = cfg.bubbleMode,
+    holdNearBeforeChase = cfg.holdNearBeforeChase == true,
     range = M.range(),
   }
 end

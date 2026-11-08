@@ -46,7 +46,10 @@ check(saw("RLSMP-P3|rlsmp_police loaded"), "loaded line")
 
 -- 1. No pursuit: a cop near the player is held already (before any chase), a far one is not
 tick()
-check(traffic[10].rlsmpHold == true and not police.isPursuit(), "no pursuit yet: the cop 100 m away is already held")
+check(traffic[10].rlsmpHold ~= true and not police.isPursuit(), "default: with no chase a cop 100 m away is NOT held (it can be recycled)")
+handlers["rlsmpPoliceConfig"](json.encode({antiTeleport = true, holdNearBeforeChase = true}))
+tick()
+check(traffic[10].rlsmpHold == true and not police.isPursuit(), "holdNearBeforeChase on: the cop 100 m away is held before any chase")
 check(traffic[11].rlsmpHold ~= true, "...the one 1000 m away is not")
 check(traffic[10].respawn.spawnDirBias == -1 and traffic[11].respawn.spawnDirBias == -1, "police get spawnDirBias -1 (re-placed behind)")
 check(traffic[12].respawn == nil and traffic[12].rlsmpHold ~= true, "civilians untouched")
