@@ -169,6 +169,14 @@ local function configsOf(model, key)
   return out
 end
 
+local function marketIndex()
+  local ge = overhaul_career_economy_globalEconomy
+  if not (ge and ge.getVehicleMarketIndex) then return nil end
+  local ok, v = pcall(ge.getVehicleMarketIndex)
+  v = ok and tonumber(v) or nil
+  return (v and v > 0 and v < 10) and v or nil
+end
+
 local function valueCtx()
   local vc = overhaul_career_market_valueCalculator
   return {
@@ -176,10 +184,26 @@ local function valueCtx()
     valuation = vc and vc.getVehicleValuation,
     quick = vc and vc.getQuickVehicleValue,
     estimate = function(info) return MPrice.estimate(SV.specOf(info)) end,
+    market = marketIndex(),     -- RLS's used-car market moves over time, so the price must be asked again later
   }
 end
 
 local valueCache = {}
+
+-- Value of one model + config (names = config names to match). The cache key holds the market index, so a changed market asks again.
+local function resolveValue(model, names, key)
+  local ctx = valueCtx()
+  local ck = model .. "|" .. tostring(names[2] or names[1]) .. "|" .. string.format("%.2f", ctx.market or 0)
+  local r = valueCache[ck]
+  if not r then
+    local ok, res = pcall(SV.resolve, model, names, configsOf(model, key), ctx)
+    r = ok and res or {value = 0, source = "error " .. tostring(res)}
+    if ctx.valuation then valueCache[ck] = r end   -- RLS's calculator not loaded yet: ask again next time
+    say("I", string.format("theft value: model %s config %s -> %s (%s), source %s, age %s, market %s, value %s", model, tostring(names[2] or names[1]),
+      tostring(r.configKey), tostring(r.matched), tostring(r.source), tostring(r.age), tostring(r.market), tostring(r.value)))
+  end
+  return r
+end
 
 -- Model, config, value and year of a parked car. value = what a used car of this kind sells for (lib/stolenValue.lua: RLS's own
 -- valuation of the real or typical config, else quick value, else our estimate). year = first year of the config.
@@ -187,19 +211,19 @@ function M.carInfo(o)
   local model, config, key = T.realModel(jbeamOf(o), o.partConfig)
   if not model then return nil end
   local full = T.configKey(o.partConfig)
-  local ck = model .. "|" .. tostring(full)
-  local r = valueCache[ck]
-  if not r then
-    local ctx = valueCtx()
-    local ok, res = pcall(SV.resolve, model, {key, full}, configsOf(model, key), ctx)
-    r = ok and res or {value = 0, source = "error " .. tostring(res)}
-    if ctx.valuation then valueCache[ck] = r end   -- RLS's calculator not loaded yet: ask again next time
-    say("I", string.format("theft value: model %s config %s -> %s (%s), source %s, age %s, value %s", model, tostring(full),
-      tostring(r.configKey), tostring(r.matched), tostring(r.source), tostring(r.age), tostring(r.value)))
-  end
+  local r = resolveValue(model, {key, full}, key)
   -- a simplified car whose name matched a real config: spawn that config
   if not config and r.configKey and r.matched ~= "typical" then config = "vehicles/" .. model .. "/" .. r.configKey .. ".pc" end
-  return {model = model, config = config, configKey = r.configKey or key, value = r.value or 0, year = r.year}
+  return {model = model, config = config, configKey = r.configKey or key, value = r.value or 0, year = r.year, source = r.source}
+end
+
+-- Value again for a stolen car (model + config path as the record stored them), with today's market. Returns value, source.
+function M.valueFor(model, config)
+  if type(model) ~= "string" or model == "" then return nil end
+  local key = T.configKey(config)
+  local r = resolveValue(model, {key, key}, key)
+  if (r.value or 0) <= 0 then return nil end
+  return r.value, r.source
 end
 
 local function plateOf(o)
@@ -232,6 +256,26 @@ function M.witnesses(pos)
   return n
 end
 
+-- Rebuild data (for putting the car back after a rejoin, see rlsmp/recall.lua): paints and rotation as plain numbers.
+local function paintTable(c, m)
+  if type(c) ~= "table" and type(c) ~= "userdata" then return nil end
+  local out = {x = c.x or c.r or 0, y = c.y or c.g or 0, z = c.z or c.b or 0, w = c.w or c.a or 1}
+  if type(m) == "table" then
+    out.m = {}
+    for k, v in pairs(m) do if type(k) == "string" and type(v) == "number" then out.m[k] = v end end
+  end
+  return out
+end
+local function paintFrom(t)
+  if type(t) ~= "table" or not createVehiclePaint then return nil end
+  return createVehiclePaint({x = t.x, y = t.y, z = t.z, w = t.w}, t.m)
+end
+local function lookOf(o)
+  local mt = o.getMetallicPaintData and o:getMetallicPaintData() or {}
+  return {paintTable(o.color, mt[1]), paintTable(o.colorPalette0, mt[2]), paintTable(o.colorPalette1, mt[3])}
+end
+local function rotTable(q) return q and {x = q.x, y = q.y, z = q.z, w = q.w} or nil end
+
 -- Turn a parked car into a normal car we can drive. Returns the new vehicle object and the snapshot, or nil + why.
 -- Order matters: snapshot -> delete the parked car -> spawn -> ignoreParking / never isParked -> converted set -> off the
 -- walk blacklist. Entering happens a moment later (M.onUpdate) so the new car is ready.
@@ -244,11 +288,12 @@ function M.convertParked(id)
   local function paint(c, m) if createVehiclePaint and c then return createVehiclePaint(c, m) end return nil end
   local p = o:getPosition()
   local snap = {
-    model = info.model, config = info.config, value = info.value, year = info.year,
+    model = info.model, config = info.config, value = info.value, year = info.year, source = info.source,
     pos = p, rot = quatFromDir and quatFromDir(vec3(o:getDirectionVector()), vec3(o:getDirectionVectorUp())) or nil,
     paint = paint(o.color, metallic[1]), paint2 = paint(o.colorPalette0, metallic[2]), paint3 = paint(o.colorPalette1, metallic[3]),
     licenseText = plateOf(o), color = colorOf(o), at = {x = p.x, y = p.y, z = p.z},
   }
+  snap.look, snap.rotT = lookOf(o), rotTable(snap.rot)
   say("I", string.format("converting parked %s (%s, config %s) plate %s", tostring(id), tostring(info.model),
     tostring(info.configKey), tostring(snap.licenseText)))
   o:delete()
@@ -271,9 +316,27 @@ function M.convertParked(id)
     say("W", "the stolen car has no readable plate: the server cannot record it, so it will never be reported")
   end
   stolen[newId] = {vehId = newId, plate = T.cleanPlate(snap.licenseText) or snap.licenseText, model = snap.model, config = snap.config, color = snap.color,
-    value = snap.value, year = snap.year, t = os.time(), reported = false}
+    value = snap.value, year = snap.year, source = snap.source, t = os.time(), reported = false, look = snap.look}
   pendingEnter = {id = newId, at = clock + 0.5}
   return veh, snap
+end
+
+-- The server asks for a fresh price of the player's stolen cars (every theft.repriceMinutes, and for old records): we answer with today's value.
+-- The car need not exist any more: model + config come from the server's record when we do not have it.
+local function onReprice(d)
+  if not active() or type(d) ~= "table" or type(d.cars) ~= "table" then return end
+  for _, c in ipairs(d.cars) do
+    if type(c) == "table" and type(c.plate) == "string" then
+      local mine
+      for _, rec in pairs(stolen) do if rec.plate == c.plate then mine = rec end end
+      local value, source = M.valueFor(mine and mine.model or c.model, mine and mine.config or c.config)
+      if value then
+        if mine then mine.value, mine.source = value, source end
+        net.send("rlsmpTheftValue", {plate = c.plate, value = value, source = source})
+        say("I", string.format("theft value: repriced %s %s -> %s (%s)", tostring(c.model), c.plate, tostring(value), tostring(source)))
+      end
+    end
+  end
 end
 
 -- The stolen cars that still exist in this game (for selling / stripping later).
@@ -283,6 +346,56 @@ function M.stolenCars()
     if objOf(id) then out[#out + 1] = rec end
   end
   table.sort(out, function(a, b) return a.vehId < b.vehId end)
+  return out
+end
+
+-- Put a stolen car back (rlsmp/recall.lua). spec = {plate, model, config, look, value, year, color}; pos {x,y,z}, rot {x,y,z,w} or nil.
+-- Same safe spawn as the theft convert: never isParked, the guard lets the owner in, off the walk blacklist. Returns the vehicle or nil + why.
+function M.spawnStolen(spec, pos, rot)
+  if type(spec) ~= "table" or type(spec.model) ~= "string" or not pos then return nil, "bad record" end
+  local look = type(spec.look) == "table" and spec.look or {}
+  local ok, veh = pcall(core_vehicles.spawnNewVehicle, spec.model, {
+    config = spec.config, pos = vec3(pos.x, pos.y, pos.z), rot = rot and quat and quat(rot.x, rot.y, rot.z, rot.w) or nil,
+    paint = paintFrom(look[1]), paint2 = paintFrom(look[2]), paint3 = paintFrom(look[3]),
+    licenseText = spec.plate, autoEnterVehicle = false, canSpawnAnotherVehicleCheck = false, centeredPosition = true,
+  })
+  if not ok or not veh then return nil, "spawn failed: " .. tostring(veh) end
+  local id = veh:getID()
+  veh.ignoreParking = true
+  if veh.setDynDataFieldbyName then veh:setDynDataFieldbyName("isParked", 0, "false") end
+  veh.playerUsable = true
+  T.markConverted(id)
+  if gameplay_walk and gameplay_walk.removeVehicleFromBlacklist then gameplay_walk.removeVehicleFromBlacklist(id) end
+  stolen[id] = {vehId = id, plate = T.cleanPlate(spec.plate) or spec.plate, model = spec.model, config = spec.config, color = spec.color,
+    value = spec.value, year = spec.year, t = os.time(), reported = false, look = spec.look}
+  return veh
+end
+
+-- Does a car with this plate exist in this game (our stolen map, or any object whose plate text matches)? Returns its id.
+function M.liveByPlate(plate)
+  plate = T.cleanPlate(tostring(plate or ""))
+  if not plate then return nil end
+  for id, rec in pairs(stolen) do
+    if rec.plate == plate and objOf(id) then return id end
+  end
+  for i = 0, (be and be.getObjectCount and be:getObjectCount() or 0) - 1 do
+    local o = be:getObject(i)
+    if o and T.cleanPlate(tostring(plateOf(o) or "")) == plate then return o:getID() end
+  end
+  return nil
+end
+
+-- Where our stolen cars stand now: list of {plate, x, y, z, rot} (recall.lua reports them to the server).
+function M.stolenPlaces()
+  local out = {}
+  for _, rec in ipairs(M.stolenCars()) do
+    local o = objOf(rec.vehId)
+    local p = posOf(o)
+    if p and rec.plate then
+      local q = quatFromDir and quatFromDir(vec3(o:getDirectionVector()), vec3(o:getDirectionVectorUp())) or nil
+      out[#out + 1] = {plate = rec.plate, x = p.x, y = p.y, z = p.z, rot = rotTable(q)}
+    end
+  end
   return out
 end
 
@@ -555,6 +668,7 @@ local function onResult(d)
   local veh, snap = M.convertParked(a.id)
   if not veh then return toast("error", "The car could not be taken (" .. tostring(snap) .. ").") end
   net.send("rlsmpTheftDone", {plate = snap.licenseText, model = snap.model, color = snap.color, value = snap.value, year = snap.year,
+    valueSource = snap.source, config = snap.config, look = snap.look, rot = snap.rotT,
     x = snap.at.x, y = snap.at.y, z = snap.at.z, witnesses = M.witnesses(snap.at)})
 end
 
@@ -660,6 +774,7 @@ function M.onExtensionLoaded()
   net.on("rlsmpTheftGo", onGo)
   net.on("rlsmpTheftResult", onResult)
   net.on("rlsmpTheftReported", onReported)
+  net.on("rlsmpTheftReprice", onReprice)
   net.on("rlsmpFenceAsk", onFenceAsk)
   net.on("rlsmpFenceResult", onFenceResult)
 end

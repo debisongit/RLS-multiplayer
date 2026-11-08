@@ -353,4 +353,45 @@ RLSMP.config.ui.chatCommands = true
 package.loaded["rlsmp.server.plateRecords"] = nil
 package.preload["rlsmp.server.plateRecords"] = function() error("no such module") end
 check(theft.reportHook({plate = "A", model = "b"}) == false, "missing plateRecords is fine")
+
+-- Repricing: old records (no valueSource) get one free correction, then only small steps every theft.repriceMinutes ---------------
+do
+  local r = theft.records()
+  r["OLD 1"] = {plate = "OLD 1", model = "bastion", value = 600, year = 2005, by = "11", t = now, reported = false, config = "vehicles/bastion/sedan_pre_s.pc"}
+  r["OTH 1"] = {plate = "OTH 1", model = "bastion", value = 600, year = 2005, by = "12", t = now, reported = false}
+  cfg.theft.repriceMinutes, cfg.theft.maxRepriceStep = 30, 25
+  cfg.fence.maxValue = 100000
+  local before = #sent
+  theft.repriceAsk(1)
+  local ask = last(1, "rlsmpTheftReprice")
+  local found
+  for _, c in ipairs(ask and ask.cars or {}) do if c.plate == "OLD 1" then found = c end if c.plate == "OTH 1" then error("asked for another player's car") end end
+  check(found and found.model == "bastion" and found.config == "vehicles/bastion/sedan_pre_s.pc", "old record: the owner is asked, with model and config")
+  check(theft.repriceAsk(1) == false, "not asked again within a minute")
+  client(2, "rlsmpTheftValue", {plate = "OLD 1", value = 20000, source = "x"})
+  check(r["OLD 1"].value == 600, "another player cannot set the value")
+  client(1, "rlsmpTheftValue", {plate = "OLD 1", value = 20000, source = "rls valuation"})
+  check(r["OLD 1"].value == 20000 and r["OLD 1"].valueSource == "rls valuation" and r["OLD 1"].vt == now, "old record: first answer is taken (jump allowed)")
+  client(1, "rlsmpTheftValue", {plate = "OLD 1", value = 30000, source = "rls valuation"})
+  check(r["OLD 1"].value == 20000, "too early: ignored")
+  now = now + 31 * 60
+  client(1, "rlsmpTheftValue", {plate = "OLD 1", value = 90000, source = "rls valuation"})
+  check(r["OLD 1"].value == 25000 and r["OLD 1"].prevValue == 20000, "later updates move at most 25 percent")
+  now = now + 31 * 60
+  client(1, "rlsmpTheftValue", {plate = "OLD 1", value = 1000, source = "rls valuation"})
+  check(r["OLD 1"].value == 18750, "and down as well")
+  cfg.fence.modelCaps = {bastion = 18000}
+  now = now + 31 * 60
+  client(1, "rlsmpTheftValue", {plate = "OLD 1", value = 18700, source = "rls valuation"})
+  check(r["OLD 1"].value == 18000, "model cap applies")
+  cfg.fence.modelCaps = nil
+  check(theft.isStale(r["OLD 1"]) == false and theft.fresh(1, r["OLD 1"]), "fresh record: no refresh needed")
+  now = now + 31 * 60
+  check(theft.isStale(r["OLD 1"]), "stale after the refresh time")
+  check(theft.fresh(1, r["OLD 1"]) == false and last(1, "rlsmpTheftReprice") ~= nil, "stale: a quote asks first")
+  now = now + 20
+  check(theft.fresh(1, r["OLD 1"]) == true, "no answer: goes on with the stored value")
+  client(1, "rlsmpTheftDone", {plate = "NEW 1", model = "covet", value = 5000, year = 1990, valueSource = "rls valuation", config = "vehicles/covet/base.pc"})
+  r["OLD 1"], r["OTH 1"] = nil, nil
+end
 print("theft_test: " .. passed .. " checks passed")

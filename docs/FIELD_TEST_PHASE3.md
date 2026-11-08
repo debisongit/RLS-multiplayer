@@ -525,7 +525,7 @@ Known gaps: never played. Drop spot places are only in `config.json`. Changes ma
 3. Send the `[plates]` server log lines and the `plates` client log lines if anything looks wrong.
 
 
-## No fine in a stolen car (build 0.4.48)
+## No fine in a stolen car (build 0.4.50)
 
 1. Steal a car (see the theft section) and get caught for speeding or a chase ending in a citation or arrest. Expected: the message says "Citation: no fine, this car is not registered to you." (or "Arrest: ..."), your money does not drop, and the game log has `police fine NOT charged`.
 2. Do the same in a car from your own garage: the fine is charged as before.

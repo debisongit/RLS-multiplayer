@@ -60,6 +60,7 @@ export function parseCall(code) {
 const rawApi = {
   engineLua(code, callback) {
     luaCode.push(code)
+    if (code.startsWith('setCEFTyping(')) return
     if (fake.raw === 'throws') throw new Error('engineLua exploded')
     if (fake.raw === 'timeout') return
     if (fake.raw === 'missing') return callback({ missing: true })

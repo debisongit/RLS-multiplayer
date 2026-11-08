@@ -144,6 +144,7 @@ function M.sell(pid, plate, mode, opts)
   if not ledger.seeded then return fail("Wait for your first save, then try again.") end
   if busy[pid] then return fail("One at a time.") end
 
+  if theft.fresh and not theft.fresh(pid, rec) then return fail("Checking today's market price. Try again in a few seconds.") end
   local value = valueOf(rec)
   local q = M.quotes(pid, value, rec)
   local pay, taken, busted = q[mode], {}, false
@@ -230,6 +231,7 @@ local function onGarageQuote(pid, d)
   local now = util.now()
   if lastAsk[pid] and now - lastAsk[pid] < 1 then return end
   lastAsk[pid] = now
+  if theft.repriceAsk then theft.repriceAsk(pid) end      -- the quote below uses the stored value; a fresher one is on its way
   local menu = {ok = true, items = items.list(pid)}
   if not garageOn() then
     menu.ok, menu.err = false, "The garage strip is closed on this server."
@@ -353,9 +355,13 @@ end
 function M.summary(pid)
   local out = {}
   if not enabled() then return out end
+  if theft.repriceAsk then theft.repriceAsk(pid) end
   for _, rec in ipairs(mine(pid)) do
     local q = M.quotes(pid, valueOf(rec), rec)
-    out[#out + 1] = {plate = rec.plate, model = rec.model, strip = q.strip, sell = q.sell, resell = q.resell, gamble = q.gamble}
+    local old = tonumber(rec.prevValue)
+    out[#out + 1] = {plate = rec.plate, model = rec.model, strip = q.strip, sell = q.sell, resell = q.resell, gamble = q.gamble,
+      age = rec.vt and math.max(0, util.now() - rec.vt) or nil,       -- seconds since the price was last worked out
+      trend = old and (valueOf(rec) > old and 1 or (valueOf(rec) < old and -1 or 0)) or 0}
   end
   return out
 end

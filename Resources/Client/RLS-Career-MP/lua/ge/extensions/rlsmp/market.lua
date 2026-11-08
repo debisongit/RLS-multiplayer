@@ -180,6 +180,9 @@ function M.uiAct(action, a, b)
   if action == "fence" then
     if rlsmp_theft and rlsmp_theft.fence then rlsmp_theft.fence(a) end
     return true
+  elseif action == "recall" then
+    if rlsmp_recall and rlsmp_recall.bringHere then rlsmp_recall.bringHere(type(a) == "string" and a or nil) end
+    return true
   elseif action == "meetup" then
     if rlsmp_meetup and rlsmp_meetup.startBlack then rlsmp_meetup.startBlack() end
     return true

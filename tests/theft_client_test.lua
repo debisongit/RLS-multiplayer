@@ -361,4 +361,15 @@ check(valuationOpts.logContext == "rlsmpStolen" and valuationOpts.age > 0 and va
 local unknown = mkObj(301, "simple_traffic", 2, 2, {partConfig = "vehicles/simple_traffic/bastion_weird_parked.pc"})
 ci = theft.carInfo(unknown)
 check(ci.value == 21000 and ci.config == nil, "unknown config: typical one of the model, spawn left to the game")
+-- Repricing: the server asks, we answer with today's market (also for a car we no longer have)
+overhaul_career_economy_globalEconomy = {getVehicleMarketIndex = function() return 1.1 end}
+overhaul_career_market_valueCalculator = {getVehicleValuation = function(o) valuationOpts = o return {bookValue = o.catalogBaseValue * 0.7 * (o.applyVehicleBuyMarket and overhaul_career_economy_globalEconomy.getVehicleMarketIndex() or 1)} end}
+local rc = count("rlsmpTheftValue")
+server("rlsmpTheftReprice", {cars = {{plate = "OLD 1", model = "bastion", config = "vehicles/bastion/sedan_pre_s.pc"}, {plate = "X", model = "nomodel"}}})
+local rv = last("rlsmpTheftValue")
+check(count("rlsmpTheftValue") == rc + 1 and rv.plate == "OLD 1" and rv.value == 23100 and rv.source == "rls valuation", "reprice: value with the market index, sent for the car it could price")
+check(valuationOpts.applyVehicleBuyMarket == true, "reprice: market flag on the valuation")
+overhaul_career_economy_globalEconomy = {getVehicleMarketIndex = function() return 0.9 end}
+server("rlsmpTheftReprice", {cars = {{plate = "OLD 1", model = "bastion", config = "vehicles/bastion/sedan_pre_s.pc"}}})
+check(last("rlsmpTheftValue").value == 18900, "reprice: a changed market gives a new value (cache keyed by market)")
 print("theft_client_test: " .. passed .. " checks passed")

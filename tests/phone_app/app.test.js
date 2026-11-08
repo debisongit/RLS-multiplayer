@@ -81,6 +81,20 @@ describe('PhoneBlackMarket', () => {
     await none.find('input').setValue('fay')
     expect(none.findAll('button').find(b => b.text() === 'Invite').attributes('disabled')).toBeDefined()
   })
+  it('the name field takes the keyboard from the game (setCEFTyping) and gives it back on Enter, Esc, blur and close', async () => {
+    const w = await open({ enabled: true, state: member() })
+    const typed = () => luaCode.filter(c => c.startsWith('setCEFTyping'))
+    const input = w.find('input')
+    await input.trigger('pointerdown')
+    expect(typed()).toEqual(['setCEFTyping(true)'])
+    await input.setValue('fay')
+    await input.trigger('keydown', { key: 'Enter' }); await flushPromises()
+    expect(calls[0].slice(0, 2)).toEqual(['invite', 'fay'])
+    await input.trigger('keydown', { key: 'Escape' })
+    expect(typed().at(-1)).toBe('setCEFTyping(false)')
+    await input.trigger('focus'); w.unmount()
+    expect(typed().at(-1)).toBe('setCEFTyping(false)')
+  })
   it('shows a server answer once, hides an old one from an earlier visit, and polls', async () => {
     let seq = 4
     fake.get = () => ({ enabled: true, state: member(), result: { text: 'Paid $400.', seq } })
