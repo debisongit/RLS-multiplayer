@@ -78,6 +78,13 @@ M.defaults = {
     maxPerPlayer = 18,
     -- How often the director looks for players joining or leaving.
     checkSeconds = 1,
+    -- How far from a player a traffic car may be before the game recycles it (docs/RESEARCH_RESPAWN_RANGE.md).
+    -- respawnRange: multiplier on the game's own radius (1 = the game's original, up to 3 = cars stay about three times as far out).
+    -- respawnDelay: seconds a car stays at least after the game placed it, before it may be recycled (0 = off, the game's original).
+    respawnRange = 1.0,
+    respawnDelay = 0,
+    -- Our own removal of stuck cars (client unjam.lua): only a car that stood still `seconds` and is `distance` m or more from EVERY player; one at a time.
+    unjam = {enabled = true, seconds = 120, distance = 400},
   },
 
   -- Phase 3: police pursuits.
@@ -154,8 +161,8 @@ M.defaults = {
     -- Road class limits in m/s: slower than city = city, slower than main = main, else highway.
     zoneSpeedLimits = {city = 17, main = 27},
     -- Live swapping: a traffic car that nobody can see is replaced by a model that fits the road class and day or night better.
-    -- enabled = only watch and log what would happen (changes nothing). live = really replace the cars (EXPERIMENTAL, never tried in the game).
-    swap = {enabled = true, live = true, perMinute = 2, hiddenSeconds = 5, checkSeconds = 2, minRatio = 1.5, maxFailures = 3},
+    -- enabled = only watch and log what would happen (changes nothing). live = really replace the cars (EXPERIMENTAL, OFF by default: it replaces cars that the game did not recycle).
+    swap = {enabled = true, live = false, perMinute = 2, hiddenSeconds = 5, checkSeconds = 2, minRatio = 1.5, maxFailures = 3},
     -- Police cars (RLS's west coast list is only Bastions, 4 of 5 unmarked/undercover). Weight per police model (missing = 1, 0 = never; default Bastion low),
     -- undercoverShare = about this share of police cars may be unmarked/undercover (name contains a word of undercoverWords), maxShare = most of one model in a group.
     police = {enabled = true, models = {bastion = 0.3}, undercoverShare = 0.1, maxShare = 0.4, undercoverWords = {"undercover", "unmarked"}},

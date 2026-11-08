@@ -35,6 +35,11 @@ local STATIC = {
   ["traffic.perPlayerBudget"] = {"number", 0, 100, true},
   ["traffic.minPerPlayer"] = {"number", 0, 50, true},
   ["traffic.maxPerPlayer"] = {"number", 1, 100, true},
+  ["traffic.respawnRange"] = {"number", 0.5, 3},
+  ["traffic.respawnDelay"] = {"number", 0, 600},
+  ["traffic.unjam.enabled"] = {"bool"},
+  ["traffic.unjam.seconds"] = {"number", 30, 1800, true},
+  ["traffic.unjam.distance"] = {"number", 150, 5000, true},
   ["smartTraffic.enabled"] = {"bool"},
   ["smartTraffic.policeReact"] = {"bool"},
   ["trafficVariety.enabled"] = {"bool"},
@@ -324,7 +329,8 @@ function M.snapshot()
   return {
     theft = extra.theft, fence = extra.fence, market = extra.market,
     traffic = {enabled = t.enabled, totalBudget = t.totalBudget, baseBudget = t.baseBudget, perPlayerBudget = t.perPlayerBudget,
-      minPerPlayer = t.minPerPlayer, maxPerPlayer = t.maxPerPlayer},
+      minPerPlayer = t.minPerPlayer, maxPerPlayer = t.maxPerPlayer,
+      respawnRange = t.respawnRange, respawnDelay = t.respawnDelay, unjam = copyMap(t.unjam)},
     smartTraffic = {enabled = s.enabled, policeReact = s.policeReact, mix = copyMap(s.mix)},
     trafficVariety = {enabled = v.enabled, applyToTraffic = v.applyToTraffic, applyToParked = v.applyToParked,
       maxShare = v.maxShare, oversample = v.oversample, maxCandidates = v.maxCandidates,
@@ -404,11 +410,18 @@ local function onSet(pid, data)
     return
   end
   watchers[pid] = true       -- somebody who changes settings has the menu open
+  local t0 = type(config.traffic) == "table" and config.traffic or {}
+  local u0 = type(t0.unjam) == "table" and t0.unjam or {}
+  local before = {["traffic.respawnRange"] = t0.respawnRange, ["traffic.respawnDelay"] = t0.respawnDelay,
+    ["traffic.unjam.enabled"] = u0.enabled, ["traffic.unjam.seconds"] = u0.seconds, ["traffic.unjam.distance"] = u0.distance}
   local applied, rejected, done = M.applyPatch(data)
   local saved = true
   if applied > 0 then
     saved = storage.writeJson(configPath, config, true) == true
     modulesResend()
+    for _, d in ipairs(done) do
+      if d:find("^traffic%.respawn") or d:find("^traffic%.unjam") then util.info("RLSMP-P3 range: " .. d .. " (was " .. tostring(before[d:match("^[^=]+")]) .. ")") end
+    end
     local shown = {}
     for i = 1, math.min(#done, 8) do shown[i] = done[i] end
     util.info(string.format("RLSMP-ADMIN %s (pid %s, account %s) changed %d settings%s: %s%s", tostring(name), tostring(pid), tostring(account), applied,

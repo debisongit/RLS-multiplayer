@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.4.41 (all untested in-game)
+- Traffic respawn range: `traffic.respawnRange` (1.0 = the game's own, up to 3) and `traffic.respawnDelay`, both on the [ menu Amount page. Live swapping is now OFF by default (it replaced cars the game never recycled). Stuck-car cleanup now waits 120 s and only acts on cars 400 m from every player, one at a time. (Claude A)
+
 ## Unreleased: traffic respawn range (all untested in-game)
 - New settings `traffic.respawnRange` (multiplier on the game's own respawn radius, 1.0 = the game's original, up to 3) and `traffic.respawnDelay` (least seconds a car stays after the game placed it, 0 = off); both in the `[` menu under Amount. Log lines start with `range:` and show the values before and after. (Claude A)
 - Stuck-car recycling (`traffic.unjam`) is stricter now: stuck 120 s (was 30) and 400 m or more from every player (own game and the others), still one car at a time; can be switched off. (Claude A)
