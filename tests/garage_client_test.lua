@@ -122,6 +122,11 @@ server("rlsmpGarageMenu", {ok = true, kind = "stolen", plate = "STL 1", model = 
   items = {}, fit = {}, fitted = {}})
 dlg = dialogs[#dialogs]
 check(#dlg.buttons == 4 and dlg.buttons[3].enabled == true and dlg.buttons[3].luaCallback == 'rlsmp_garage.choose("resell")', "with papers: resell is a button, and there is no gamble button")
+server("rlsmpGarageMenu", {ok = true, kind = "stolen", plate = "STL 1", model = "etk800", strip = 3000, sell = 7000, resell = 12000,
+  damage = 0.23, canSell = false, sellWhy = "Too damaged to sell: strip it.", items = {}, fit = {}, fitted = {}})
+dlg = dialogs[#dialogs]
+check(dlg.text:find("Damage 23%%") and dlg.text:find("strip it") and dlg.buttons[1].enabled == true and dlg.buttons[2].enabled == false and dlg.buttons[3].enabled == false,
+  "damaged stolen car: damage shown, only strip stays")
 garage.choose("gamble")
 check(lastSent("rlsmpGarageDo") == nil or lastSent("rlsmpGarageDo").action ~= "gamble", "a gamble request is never sent")
 -- the phone: one thing to do with one stolen car by its plate, no dialog

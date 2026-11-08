@@ -358,6 +358,7 @@ Weights are `{name = number >= 0}` (at most 64 entries, names up to 64 character
 | S→C | `rlsmpTheftResult` | `{ok}` or `{ok = false, err}` (failure roll; non-durable items are used up only on `ok`) |
 | C→S | `rlsmpTheftDone` | `{plate, model, color, value, year, valueSource, config, x, y, z, witnesses}` after the parked car was turned into a real car. `valueSource` (how the value was found, e.g. `rls valuation`) and `config` (`vehicles/<model>/<key>.pc`, may be absent) are stored in the record; a record WITHOUT `valueSource` is from before the value fix |
 | S→C | `rlsmpTheftReprice` | `{cars = [{plate, model, config?}]}` the owner's own stale records. Sent from the 1 s tick, the phone app list and the garage quote, at most once a minute per plate. A record is stale when it has no `valueSource` or its `vt` (time of the last value) is older than `theft.repriceMinutes` (default 30) |
+| C→S | `rlsmpTheftDamage` | `{cars = [{plate, damage}]}` (at most 8) damage 0..1 of the sender's stolen cars, measured by the client (`lib/stolenDamage.lua`: `map.objects[id].damage / 1000`, only for a car within 80 m of the player) when the Black Market app polls, and sent as `damage` with every garage, phone, fence and meetup request. The server keeps `rec.damage` + `rec.dt` on the sender's own record only; a report under 2 s after the last one counts only if the damage went up. Rules (`fence.*`): `maxSellDamage` 0.15 (above: Sell, Resell and both meetup kinds are refused with "Too damaged to sell: strip it."; Strip stays), `damageStripPenalty` 0.5 (strip pays payout x (1 - penalty x damage)), `damageFreshSeconds` 120 (older or missing report: "Stand next to the car so it can be checked."). Also in the Black Market state: each stolen car has `damage`, `canSell`, `why`. A restored car keeps the record's damage (`rlsmpStolenRestore` cars carry `damage`; the client uses the larger of the live and the recorded value) |
 | C→S | `rlsmpTheftValue` | `{plate, value, source}` the client's answer: value from `lib/stolenValue.lua` with RLS's CURRENT used-car market (`overhaul_career_economy_globalEconomy.getVehicleMarketIndex`, applied through `applyVehicleBuyMarket`). The server takes it only for the sender's own record, not earlier than half of `repriceMinutes` after the last one, capped by `fence.maxValue` / `fence.modelCaps`, and moves an existing value by at most `theft.maxRepriceStep` percent (default 25) per update. A record without `valueSource`, or at or below `fence.minValue`, may jump once (still capped). The record keeps `value`, `prevValue`, `valueSource`, `vt`. The first answer also marks the player's game as able to reprice: from then on a quote or a sale with a stale value asks first and fails once with "Checking today's market price" (an old game that never answers is never blocked) |
 | S→C | fence list rows | the Black Market app rows (`rlsmp_market` state `stolen[]`) carry `age` (seconds since the value was set) and `trend` (-1, 0, 1 against the previous value) |
 | S→C | `rlsmpTheftReported` | `{plate}` the car was reported stolen (the client only marks it; police find it by the plate) |
@@ -398,7 +399,7 @@ A stolen car is only a local car of its thief and vanishes when they leave. `rls
 | Direction | Event | Body |
 |---|---|---|
 | C→S | `rlsmpStolenPos` | `{cars = [{plate, x, y, z, rot}]}` where the game's stolen cars stand (about every 30 s, only if moved; owner only; the server accepts one report per plate per `theft.recallReportEvery`, 20 s) |
-| S→C | `rlsmpStolenRestore` | `{auto, cars = [{plate, model, config, look, value, year, color, x, y, z, rot}], spots = [{x, y, z, name}]}`. `auto = true`: once per session after the career loaded, put each car at its place (free spot, no car with that plate, within 5 km of the player, else the nearest drop spot, else beside the player; 3 tries). `auto = false`: answer to the button, beside the player |
+| S→C | `rlsmpStolenRestore` | `{auto, cars = [{plate, model, config, look, value, year, color, damage, x, y, z, rot}], spots = [{x, y, z, name}]}`. `auto = true`: once per session after the career loaded, put each car at its place (free spot, no car with that plate, within 5 km of the player, else the nearest drop spot, else beside the player; 3 tries). `auto = false`: answer to the button, beside the player |
 | C→S | `rlsmpStolenRecall` | `{plate?}` the button "Bring my stolen car here" (garage computer, Black Market app); no plate = all of the player's stolen cars |
 | S→C | `rlsmpStolenRecallResult` | `{ok = false, err}` refused: not in career, theft off, no such stolen car of yours, cooldown (`theft.recallCooldown`, 120 s), fee (`theft.recallFee`, 0) not affordable |
 
@@ -411,7 +412,7 @@ Players use the garage computer buttons ("Garage flow" below) or the Black Marke
 | Direction | Event | Body |
 |---|---|---|
 | S→C | `rlsmpFenceAsk` | `{mode}` from the chat command; the client looks for a stolen car within 8 m of the player (who must be on foot) |
-| C→S | `rlsmpFenceSell` | `{plate, mode}` |
+| C→S | `rlsmpFenceSell` | `{plate, mode, damage?}` |
 | S→C | `rlsmpFenceResult` | `{ok, mode, pay, busted?, takeCar?, err?}`; the client deletes the car only when `takeCar` is true (a sale or a trap) |
 | S→C | `rlsmpWalletSet` | `{money, why = "fence"}` the new balance after a paid sale |
 
@@ -425,10 +426,10 @@ A Marketplace sale (and a black market car sale) is finished at a spot the SERVE
 | Direction | Event | Body |
 |---|---|---|
 | S→C | `rlsmpMeetupAsk` | `{kind = "market"\|"black"}` from the chat command |
-| C→S | `rlsmpMeetupRequest` | `{kind, inv?, plate?, model?, price?}` |
+| C→S | `rlsmpMeetupRequest` | `{kind, inv?, plate?, model?, price?, damage?}`; a plate that is the sender's own stolen record is refused (both kinds) when the car is too damaged or unchecked, see `rlsmpTheftDamage` |
 | S→C | `rlsmpMeetupSet` | `{id, kind, spot, x, y, z, radius, expiresIn}` (client sets the GPS route) |
 | S→C | `rlsmpMeetupDenied` | `{err}` |
-| C→S | `rlsmpMeetupArrive` | `{id}` (stopped in the circle for 2.5 s) |
+| C→S | `rlsmpMeetupArrive` | `{id, damage?}` (stopped in the circle for 2.5 s; `damage` of the stolen car for a black sale, checked again before paying) |
 | S→C | `rlsmpMeetupResult` | `{id, ok, kind, retry?, setup?, cops?, pay?, takeCar?, inv?, err?}` |
 | C→S | `rlsmpMeetupCancel` | `{}` |
 | S→C | `rlsmpMeetupClear` | `{id}` |
@@ -439,9 +440,9 @@ Config `fence.garage` (true) and `fence.garageCooldown` (20 s). No drop spot nee
 
 | Direction | Event | Body |
 |---|---|---|
-| C→S | `rlsmpGarageQuote` | `{plate?, model?, value?, year?}`; without a car it only asks for the item list. At most one per second |
-| S→C | `rlsmpGarageMenu` | `{ok, err?, items = [{name, label, count}], kind = "stolen" or "owned", plate, model, strip, fit = [{name, label}], fitted = [label]}`; `strip` is what stripping pays; for stolen cars also `sell`, `resell` (null without all three papers); `fit` lists papers the player owns and has not fitted |
-| C→S | `rlsmpGarageDo` | `{action = "strip", "sell", "resell", (sell and resell for stolen cars only), "fit:fake_plate", "fit:vin_plate" or "fit:part_number", plate, model, value, year, inventoryId?}` |
+| C→S | `rlsmpGarageQuote` | `{plate?, model?, value?, year?, damage?}`; without a car it only asks for the item list. At most one per second |
+| S→C | `rlsmpGarageMenu` | `{ok, err?, items = [{name, label, count}], kind = "stolen" or "owned", plate, model, strip, fit = [{name, label}], fitted = [label]}`; `strip` is what stripping pays; for stolen cars also `sell`, `resell` (null without all three papers), `damage` (0..1 or null), `canSell` (false = strip only) and `sellWhy` (plain reason); `strip` is already reduced by damage; `fit` lists papers the player owns and has not fitted |
+| C→S | `rlsmpGarageDo` | `{action = "strip", "sell", "resell", (sell and resell for stolen cars only), "fit:fake_plate", "fit:vin_plate" or "fit:part_number", plate, model, value, year, inventoryId?, damage?}` |
 | S→C | `rlsmpGarageResult` | `{ok, action, err?, pay?, takeCar?, inventoryId?, fitted?}`; on a paid sale the client removes the car (RLS `removeVehicle` for an owned car, `rlsmp_theft.removeStolenByPlate` for a stolen one). Followed by `rlsmpWalletSet` |
 
 A plate that is in somebody else's theft record is refused. A stolen car's value comes from the server's record; an ordinary car's value is the client's, capped by `fence.maxValue`. Fitting uses the item up at once and sets `papers[name]` on the stolen record; resell and gamble count fitted papers first.

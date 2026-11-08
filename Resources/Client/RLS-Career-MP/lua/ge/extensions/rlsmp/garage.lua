@@ -60,10 +60,16 @@ local function blockedReason(inventoryId)
   return nil
 end
 
+-- Damage of a stolen car (0..1 or nil), sent with every request so the server can refuse a sale of a wreck.
+local function stolenDamage(t)
+  if t and t.kind == "stolen" and rlsmp_theft and rlsmp_theft.damageOfPlate then return rlsmp_theft.damageOfPlate(t.plate) end
+  return nil
+end
+
 function M.openFor(t)
   if not enabled or not t then return end
   target = t
-  net.send("rlsmpGarageQuote", {plate = t.plate, model = t.model, value = t.value, year = t.year})
+  net.send("rlsmpGarageQuote", {plate = t.plate, model = t.model, value = t.value, year = t.year, damage = stolenDamage(t)})
 end
 
 local function openItems()
@@ -131,10 +137,13 @@ local function onMenu(d)
   if target and d.kind then
     text = string.format("%s %s (%s)\n%s", tostring(d.model or "Car"), tostring(d.plate or ""), tostring(d.kind), text)
     if d.kind == "stolen" and #(d.fitted or {}) > 0 then text = text .. "\nFitted: " .. table.concat(d.fitted, ", ") end
+    if d.kind == "stolen" and tonumber(d.damage) then text = text .. string.format("\nDamage %d%%", math.floor(d.damage * 100 + 0.5)) end
+    if d.kind == "stolen" and d.canSell == false then text = text .. "\n" .. tostring(d.sellWhy or "Too damaged to sell: strip it.") end
     buttons[#buttons + 1] = button(string.format("Strip for $%d (the car is removed)", math.floor(tonumber(d.strip) or 0)), "strip")
     if d.kind == "stolen" then
-      buttons[#buttons + 1] = button(string.format("Sell as it is for $%d", math.floor(tonumber(d.sell) or 0)), "sell")
-      buttons[#buttons + 1] = tonumber(d.resell) and button(string.format("Resell with new papers for $%d", math.floor(d.resell)), "resell")
+      local ok = d.canSell ~= false
+      buttons[#buttons + 1] = button(string.format("Sell as it is for $%d", math.floor(tonumber(d.sell) or 0)), "sell", ok)
+      buttons[#buttons + 1] = tonumber(d.resell) and button(string.format("Resell with new papers for $%d", math.floor(d.resell)), "resell", ok)
         or button("Resell (needs fake plate, VIN plate and part number)", "resell", false)
     end
     for _, f in ipairs(d.fit or {}) do
@@ -161,7 +170,7 @@ function M.doStolen(plate, action)
   if not (action == "strip" or action == "sell" or action == "resell" or action:match("^fit:[%a_]+$")) then return false end
   target = {kind = "stolen", plate = plate, phone = true}
   say("I", string.format("phone: %s for stolen car %s", action, plate))
-  net.send("rlsmpGarageDo", {action = action, plate = plate, phone = true})
+  net.send("rlsmpGarageDo", {action = action, plate = plate, phone = true, damage = rlsmp_theft and rlsmp_theft.damageOfPlate and rlsmp_theft.damageOfPlate(plate) or nil})
   return true
 end
 
@@ -177,7 +186,7 @@ function M.choose(action)
     if why then return toast("warning", why) end
   end
   say("I", string.format("choose %s for %s %s", action, t.kind, tostring(t.plate)))
-  net.send("rlsmpGarageDo", {action = action, plate = t.plate, model = t.model, value = t.value, year = t.year, inventoryId = t.inventoryId})
+  net.send("rlsmpGarageDo", {action = action, plate = t.plate, model = t.model, value = t.value, year = t.year, inventoryId = t.inventoryId, damage = stolenDamage(t)})
 end
 
 local function removeOwned(inventoryId)

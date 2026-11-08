@@ -45,8 +45,8 @@ local function standAt(pid, x, y, chased)
   lastPos[pid] = now
   fire("rlsmpPos", pid, json.encode({x = x, y = y, z = 50, speed = 0, chased = chased == true}))
 end
-local function request(pid, t) sent = {} fire("rlsmpMeetupRequest", pid, json.encode(t)) return lastSent(pid, "rlsmpMeetupSet"), lastSent(pid, "rlsmpMeetupDenied") end
-local function arrive(pid, id) fire("rlsmpMeetupArrive", pid, json.encode({id = id})) return lastSent(pid, "rlsmpMeetupResult") end
+local function request(pid, t) sent = {} fire("rlsmpMeetupRequest", pid, json.encode((function() t.damage = t.damage or 0 return t end)())) return lastSent(pid, "rlsmpMeetupSet"), lastSent(pid, "rlsmpMeetupDenied") end
+local function arrive(pid, id) fire("rlsmpMeetupArrive", pid, json.encode({id = id, damage = 0})) return lastSent(pid, "rlsmpMeetupResult") end
 local function dummyRandom(v) meetup.setRandom(function() return v end) end
 
 join(1, "ann")
@@ -92,7 +92,7 @@ check(set == nil and r, "cancel has a short cooldown")
 now = now + 61
 
 -- a stolen car (theft record) rolls the setup
-theft.records()["STO 222"] = {plate = "STO 222", model = "etk800", color = "red", value = 20000, year = 2003, by = acc, t = now}
+theft.records()["STO 222"] = {plate = "STO 222", model = "etk800", color = "red", value = 20000, year = 2003, by = acc, t = now, damage = 0, dt = now}
 local stolen = {kind = "market", inv = 4, plate = "STO 222", model = "etk800", price = 9000}
 dummyRandom(0)
 set = request(1, stolen)

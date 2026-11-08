@@ -422,6 +422,11 @@ M.defaults = {
     maxValue = 300000,        -- the car value the fence works from is capped here (the value comes from the client)
     modelCaps = {},           -- optional: model name -> highest value accepted for that model, e.g. {bastion = 40000}
     stripRate = 0.45,         -- parts for cash, no papers
+    -- A stolen car that is damaged more than this (0..1, 0.15 = 15 percent) cannot be sold, resold or met up: only stripped. Strip pays less the more it is
+    -- damaged: payout x (1 - damageStripPenalty x damage). The damage is measured by the owner's game; a sale needs a report younger than damageFreshSeconds.
+    maxSellDamage = 0.15,
+    damageStripPenalty = 0.5,
+    damageFreshSeconds = 120,
     resellRate = 0.70,        -- fake plate + VIN plate + part number, all used up
     -- Strip / sell / resell can also be done from the Black Market phone app, for any stolen car (no drop spot, the garage rules). false = only the garage computer
     -- and the drop spot.

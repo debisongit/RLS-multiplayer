@@ -79,6 +79,7 @@ local function carInfo(inv, id)
 end
 
 local function ask(body)
+  if body.plate and rlsmp_theft and rlsmp_theft.damageOfPlate then body.damage = rlsmp_theft.damageOfPlate(body.plate) end   -- stolen cars only
   if rlsmp_positions and rlsmp_positions.reportNow then rlsmp_positions.reportNow() end
   net.send("rlsmpMeetupRequest", body)
 end
@@ -230,7 +231,7 @@ local function onAsk(d)
       if not car and at and rlsmp_theft.nearestStolen then car = rlsmp_theft.nearestStolen(at, 8) end
     end
     if not car or not car.plate then return toast("warning", "Sit in (or stand next to) the stolen car you want to sell.") end
-    held = {kind = "black", carId = car.vehId}
+    held = {kind = "black", carId = car.vehId, plate = car.plate}
     return ask({kind = "black", plate = car.plate, model = car.model, price = car.value})
   end
   local inv = inventory()
@@ -273,7 +274,8 @@ function M.onUpdate(dtReal)
   if L.step(hold, dt, L.dist2d(p, m), speed, m.radius) then
     sentAt = clock
     if rlsmp_positions and rlsmp_positions.reportNow then rlsmp_positions.reportNow() end
-    net.send("rlsmpMeetupArrive", {id = m.id})
+    local hp = m.held and m.held.plate
+    net.send("rlsmpMeetupArrive", {id = m.id, damage = hp and rlsmp_theft and rlsmp_theft.damageOfPlate and rlsmp_theft.damageOfPlate(hp) or nil})
   end
 end
 

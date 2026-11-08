@@ -167,6 +167,7 @@ function M.uiGet()
   if not enabled then return {enabled = false} end
   if now() - askedAt >= ASK_EVERY then
     askedAt = now()
+    if rlsmp_theft and rlsmp_theft.reportDamage then rlsmp_theft.reportDamage() end    -- the list shows the damage the server just heard
     net.send("rlsmpMarketGet", {})
   end
   return {enabled = true, state = appState, result = appResult}

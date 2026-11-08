@@ -348,6 +348,50 @@ function M.fresh(pid, rec)
   return false
 end
 
+-- Damage of a stolen car (0..1), measured by the owner's game and reported (rlsmpTheftDamage, and with every sale request). A damaged car can
+-- only be stripped, never sold (fence.maxSellDamage). Stored on the record as rec.damage + rec.dt. See docs/RESEARCH_STOLEN_DAMAGE.md.
+function M.maxSellDamage() return clamp(n(fenceCfg and fenceCfg.maxSellDamage, 0.15), 0, 1) end
+function M.damageFreshSeconds() return math.max(10, n(fenceCfg and fenceCfg.damageFreshSeconds, 120)) end
+
+-- The owner's own record only. Rate limited: a report within 2 s of the last one counts only if the damage went UP.
+function M.noteDamage(pid, plate, damage)
+  damage = n(damage, nil)
+  if damage == nil then return false end
+  plate = M.cleanPlate(plate)
+  local rec = plate and stolen[plate]
+  if not rec or rec.by ~= accountOf(pid) then return false end
+  damage = math.floor(clamp(damage, 0, 1) * 100 + 0.5) / 100
+  local now = util.now()
+  local old = n(rec.damage, nil)
+  if old ~= nil and now - n(rec.dt, 0) < 2 and damage <= old then return false end
+  local changed = old == nil or math.abs(damage - old) >= 0.05 or (damage > M.maxSellDamage()) ~= (old > M.maxSellDamage())
+  rec.damage, rec.dt = damage, now
+  if changed then save() end         -- a small change stays in memory until the next save (the time is only needed while the server runs)
+  return true
+end
+
+-- nil when the record may be sold; else the plain message and a code ("damaged" | "unchecked").
+function M.sellBlock(rec)
+  local d = n(rec and rec.damage, nil)
+  if d == nil or util.now() - n(rec.dt, 0) > M.damageFreshSeconds() then return "Stand next to the car so it can be checked.", "unchecked" end
+  if d > M.maxSellDamage() then return "Too damaged to sell: strip it.", "damaged" end
+  return nil
+end
+
+-- What strip pays when the car is damaged: payout x (1 - fence.damageStripPenalty x damage).
+function M.stripFactor(rec)
+  local d = clamp(n(rec and rec.damage, 0), 0, 1)
+  return 1 - clamp(n(fenceCfg and fenceCfg.damageStripPenalty, 0.5), 0, 1) * d
+end
+
+local function onDamage(pid, d)
+  if type(d) ~= "table" or type(d.cars) ~= "table" or not enabled() then return end
+  for i, c in ipairs(d.cars) do
+    if i > 8 then break end
+    if type(c) == "table" then M.noteDamage(pid, c.plate, c.damage) end
+  end
+end
+
 local function onValue(pid, d)
   if type(d) ~= "table" or not enabled() then return end
   local plate = M.cleanPlate(d.plate)
@@ -693,6 +737,7 @@ function M.init(config, pluginRoot)
   net.onClient("rlsmpTheftFinish", onFinish)
   net.onClient("rlsmpTheftDone", onDone)
   net.onClient("rlsmpTheftValue", onValue)
+  net.onClient("rlsmpTheftDamage", onDamage)
   net.onClient("rlsmpTheftCancel", onCancel)
   net.onClient("rlsmpTheftHint", onHint)
   net.onClient("rlsmpTheftInspect", onInspect)

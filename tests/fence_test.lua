@@ -58,7 +58,7 @@ local function standAt(pid, x, y, chased)
 end
 local function sell(pid, plate, mode) fire("rlsmpFenceSell", pid, json.encode({plate = plate, mode = mode})) return lastSent(pid, "rlsmpFenceResult") end
 local function rec(plate, by, value)
-  theft.records()[plate] = {plate = plate, model = "etk800", color = "red", value = value, year = 2003, by = by, t = now, reported = false}
+  theft.records()[plate] = {plate = plate, model = "etk800", color = "red", value = value, year = 2003, by = by, t = now, reported = false, damage = 0, dt = now}
 end
 
 join(1, "ann") join(2, "bob") join(3, "cid")

@@ -164,6 +164,7 @@ rules("theft.", {
 rules("fence.", {
   enabled = {"bool"}, maxValue = {"number", 0, 100000000, true}, minValue = {"number", 0, 1000000, true},
   stripRate = {"number", 0, 1}, resellRate = {"number", 0, 1}, phone = {"bool"},
+  maxSellDamage = {"number", 0, 1}, damageStripPenalty = {"number", 0, 1}, damageFreshSeconds = {"number", 10, 3600, true},
   ["rep.strip"] = {"number", 0, 25, true}, ["rep.sell"] = {"number", 0, 25, true}, ["rep.resell"] = {"number", 0, 25, true},
 })
 rules("market.", {

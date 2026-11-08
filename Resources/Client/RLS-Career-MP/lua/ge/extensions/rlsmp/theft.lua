@@ -30,6 +30,7 @@ local mp = require("rlsmp/lib/mp")
 local T = require("rlsmp/lib/theft")
 local SV = require("rlsmp/lib/stolenValue")
 local MPrice = require("rlsmp/lib/modPrice")
+local SD = require("rlsmp/lib/stolenDamage")
 
 local TAG = "RLSMP-THEFT"
 local SCAN_EVERY = 0.5
@@ -358,6 +359,39 @@ local function onReprice(d)
   end
 end
 
+-- Damage of the stolen cars (docs/RESEARCH_STOLEN_DAMAGE.md). The live car's map.objects[id].damage as a 0..1 fraction; only when the car is
+-- within SD.REACH of the player (nil = cannot be checked: the server then needs a fresh report before a sale). A restored car keeps rec.damage.
+function M.damageOf(rec)
+  if not rec then return nil end
+  local o = objOf(rec.vehId)
+  local me = be and be.getPlayerVehicleID and objOf(be:getPlayerVehicleID(0))
+  local a, b = posOf(o), posOf(me)
+  if not (a and b) or T.dist(a, b) > SD.REACH then return nil end
+  local obj = map and map.objects and map.objects[rec.vehId]
+  return SD.combine(SD.fraction(obj and obj.damage or 0), rec.damage)
+end
+
+function M.damageOfPlate(plate)
+  for _, rec in pairs(stolen) do
+    if rec.plate == plate then return M.damageOf(rec) end
+  end
+  return nil
+end
+
+-- Tell the server the damage of every stolen car we can check (app list, garage tile, popups, before a sale).
+local damageSentAt = -math.huge
+function M.reportDamage()
+  if not active() or os.clock() - damageSentAt < 2 then return end
+  local cars = {}
+  for _, rec in pairs(stolen) do
+    local d = rec.plate and M.damageOf(rec)
+    if d then cars[#cars + 1] = {plate = rec.plate, damage = d} end
+  end
+  if #cars == 0 then return end
+  damageSentAt = os.clock()
+  net.send("rlsmpTheftDamage", {cars = cars})
+end
+
 -- The stolen cars that still exist in this game (for selling / stripping later).
 function M.stolenCars()
   local out = {}
@@ -395,7 +429,7 @@ function M.spawnStolen(spec, pos, rot)
   T.markConverted(id)
   if gameplay_walk and gameplay_walk.removeVehicleFromBlacklist then gameplay_walk.removeVehicleFromBlacklist(id) end
   stolen[id] = {vehId = id, plate = T.cleanPlate(spec.plate) or spec.plate, model = spec.model, config = spec.config, color = spec.color,
-    value = spec.value, year = spec.year, t = os.time(), reported = false, look = spec.look}
+    value = spec.value, year = spec.year, t = os.time(), reported = false, look = spec.look, damage = tonumber(spec.damage)}
   return veh
 end
 
@@ -754,7 +788,7 @@ local function onFenceAsk(d)
   fenceCarId = rec.vehId
   if rlsmp_positions and rlsmp_positions.reportNow then rlsmp_positions.reportNow() end   -- the server wants a fresh position for the drop spot check
   say("I", string.format("fence %s: car %s plate %s", tostring(d.mode), tostring(rec.vehId), tostring(rec.plate)))
-  net.send("rlsmpFenceSell", {plate = rec.plate, mode = d.mode})
+  net.send("rlsmpFenceSell", {plate = rec.plate, mode = d.mode, damage = M.damageOf(rec)})
 end
 
 -- The Black Market phone app button (rlsmp_market.uiAct "fence"): same as the server's ask, started here. Mode is one of our fixed words.

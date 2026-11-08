@@ -106,11 +106,13 @@
             <article v-for="c in stolenList" :key="c.plate" class="stolen">
               <strong>{{ c.model }} {{ c.plate }}</strong>
               <small v-if="c.age != null" class="hint">Price {{ c.trend > 0 ? 'up ▲' : (c.trend < 0 ? 'down ▼' : 'steady') }}, updated {{ Math.floor(c.age / 60) < 1 ? 'just now' : Math.floor(c.age / 60) + ' min ago' }}</small>
+              <small v-if="c.damage != null" class="hint">Damage {{ Math.round(c.damage * 100) }}%</small>
+              <small v-if="c.canSell === false" class="hint">{{ c.why }}</small>
               <small v-if="fittedList(c).length" class="hint">Fitted: {{ fittedList(c).join(', ') }}</small>
               <div class="fence">
                 <button type="button" class="primary" bng-nav-item :disabled="busy" @click="act('stolenDo', c.plate, 'strip')">Strip {{ money(c.strip) }}</button>
-                <button type="button" class="primary" bng-nav-item :disabled="busy" @click="act('stolenDo', c.plate, 'sell')">Sell {{ money(c.sell) }}</button>
-                <button type="button" class="primary" bng-nav-item :disabled="busy || !c.resell" @click="act('stolenDo', c.plate, 'resell')">
+                <button type="button" class="primary" bng-nav-item :disabled="busy || c.canSell === false" @click="act('stolenDo', c.plate, 'sell')">Sell {{ money(c.sell) }}</button>
+                <button type="button" class="primary" bng-nav-item :disabled="busy || !c.resell || c.canSell === false" @click="act('stolenDo', c.plate, 'resell')">
                   {{ c.resell ? 'Resell ' + money(c.resell) : 'Resell (needs 3 papers)' }}
                 </button>
               </div>
@@ -124,7 +126,8 @@
               <p class="hint">A buyer waits at {{ state.meetup.spot }}.</p>
               <button type="button" bng-nav-item :disabled="busy" @click="act('meetupCancel')">Drop the meetup</button>
             </template>
-            <button v-else type="button" bng-nav-item :disabled="busy" @click="act('meetup')">Sell by meetup (sit in the car or stand next to it)</button>
+            <button v-else type="button" bng-nav-item :disabled="busy || anyDamaged" @click="act('meetup')">Sell by meetup (sit in the car or stand next to it)</button>
+            <p v-if="anyDamaged" class="hint">A damaged car cannot be sold, only stripped.</p>
           </template>
         </section>
       </template>
@@ -169,6 +172,7 @@ const items = computed(() => asList(state.value && state.value.items))
 const orderList = computed(() => asList(state.value && state.value.orders))
 const ownedList = computed(() => asList(state.value && state.value.owned))
 const stolenList = computed(() => asList(state.value && state.value.stolen))
+const anyDamaged = computed(() => stolenList.value.length > 0 && stolenList.value.every(c => c.canSell === false))
 const fitList = c => asList(c && c.fit)
 const fittedList = c => asList(c && c.fitted)
 const available = computed(() => items.value.filter(it => !it.locked))

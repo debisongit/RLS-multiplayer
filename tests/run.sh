@@ -32,6 +32,7 @@ lua5.3 tests/fence_test.lua "$(mktemp -d -p "$tmp")"
 lua5.3 tests/recall_test.lua "$(mktemp -d -p "$tmp")"
 lua5.3 tests/fake_plates_test.lua "$(mktemp -d -p "$tmp")"
 lua5.3 tests/meetup_test.lua "$(mktemp -d -p "$tmp")"
+lua5.3 tests/stolen_damage_test.lua "$(mktemp -d -p "$tmp")"
 lua5.3 tests/mod_price_server_test.lua "$(mktemp -d -p "$tmp")"
 lua5.3 tests/no_chat_hints_test.lua
 lua5.3 tests/traffic_test.lua
@@ -91,6 +92,7 @@ luajit tests/recall_client_test.lua
 luajit tests/fake_plate_client_test.lua
 luajit tests/mod_price_lib_test.lua
 luajit tests/stolen_value_lib_test.lua
+luajit tests/stolen_damage_lib_test.lua
 luajit tests/mod_price_client_test.lua
 luajit tests/meetup_client_test.lua
 luajit tests/garage_client_test.lua

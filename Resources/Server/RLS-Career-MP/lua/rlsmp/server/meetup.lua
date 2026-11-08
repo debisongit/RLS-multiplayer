@@ -126,6 +126,12 @@ function M.request(pid, d)
   local kind = d.kind == "black" and "black" or "market"
   local plate = theft.cleanPlate(d.plate)
   local model = type(d.model) == "string" and d.model:sub(1, 40) or nil
+  local srec = plate and theft.records()[plate]
+  if srec and srec.by == s.accountId then              -- a stolen car (either kind of meetup): a wreck can only be stripped
+    theft.noteDamage(pid, plate, d.damage)
+    local why = theft.sellBlock(srec)
+    if why then return deny(pid, why) end
+  end
   m = {accountId = s.accountId, kind = kind, inv = math.floor(num(d.inv, -1)), plate = plate, model = model,
     price = math.max(0, num(d.price, 0))}
   if kind == "black" then
@@ -158,6 +164,8 @@ end
 local function payBlack(pid, s, m)
   local rec = m.plate and theft.records()[m.plate]
   if not rec or rec.by ~= s.accountId then return nil, "That car is not on your stolen list any more." end
+  local why = theft.sellBlock(rec)
+  if why then return nil, why end
   local value = math.floor(num(rec.value, 0))
   if value <= 0 then value = math.floor(num(cfg.fence.minValue, 2000)) end
   value = clamp(value, 0, math.floor(num(cfg.fence.maxValue, 300000)))
@@ -196,6 +204,7 @@ function M.arrive(pid, d)
     return res({ok = false, setup = true, kind = m.kind, cops = m.cops})
   end
   if m.kind == "black" then
+    theft.noteDamage(pid, m.plate, d.damage)
     local pay, err = payBlack(pid, s, m)
     if not pay then return res({ok = false, kind = "black", err = err}) end
     finish(pid, m, num(c().cooldownSeconds, 300))
