@@ -19,6 +19,7 @@ function M.payload()
   return {
     antiTeleport = cfg.antiTeleport == true,
     blockRoadblocks = cfg.blockRoadblocks == true,
+    bubbleMode = cfg.bubbleMode,
   }
 end
 

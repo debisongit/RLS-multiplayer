@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased (chase and traffic range, build number not bumped)
+- Police: cops near you are now held BEFORE a chase starts (not only after the game noticed it), so a cop that sees you is not recycled in the half second before the chase flips on. A cop that is already fading out when it gets held fades back in. Untested. (Claude A)
+- Police: every police car gets "respawn away from you" (`spawnDirBias = -1`), so a cop that RLS re-places anyway should arrive from behind, not ahead. This is a guess about vanilla placement, see `docs/RESEARCH_CHASE_RANGE.md`. Roadblocks and police teleports are also refused before the chase is noticed. Untested. (Claude A)
+- Traffic range: new setting `police.bubbleMode` (menu: Police page). Default `original` = RLS's own spawn and respawn distances; a car is only kept while another player is inside its own radius and sees it. `protect` = the old strict rule (450 m, or line of sight up to 1 km), `off` = no protection. The old rule is what made respawns far and repetitive. Untested. (Claude A)
+- The LEAK log line now says how far the cop was and whether it was ahead of you, and a new log line says when a fade-out was cancelled. (Claude A)
+
 ## 0.4.35 (all untested in-game)
 - Meetup selling: Marketplace sales send you to a meetup spot to drop the car off. Only stolen or fake-paper cars can be a police setup (1 to 2 cops); a fully legal car never is. (Claude A)
 - Garage: Strip and illegal parts buttons in your RLS garage, plus a Black market items button. (Claude A)

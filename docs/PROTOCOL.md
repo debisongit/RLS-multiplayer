@@ -72,11 +72,13 @@ Lua API for other server modules: `get(pid)`, `all()`, `distance(a, b)` (horizon
 
 | Direction | Event | Body |
 |---|---|---|
-| S→C | `rlsmpPoliceConfig` | `{antiTeleport, blockRoadblocks}` sent once when a player finishes loading |
+| S→C | `rlsmpPoliceConfig` | `{antiTeleport, blockRoadblocks, bubbleMode}` sent once when a player finishes loading (and again after a menu change). `bubbleMode` is `"original"` (default) \| `"protect"` \| `"off"`: which traffic cars another player's game may not recycle, see `docs/RESEARCH_CHASE_RANGE.md` |
 
-While the player is chased (their traffic-data `pursuit.mode` >= 1) and `antiTeleport` is on, the client keeps every police unit
-from respawning (`enableRespawn = false`), refuses RLS roadblocks (if `blockRoadblocks`) and
-refuses `gameplay_traffic.forceTeleport` on police units. Everything is restored when the pursuit ends.
+While `antiTeleport` is on (MP career, a chase or not) the client holds every police unit within 300 m of the player (released past 350 m; units
+RLS marks `disabled` are let go) by setting `rlsmpHold` (the bubble's `tryRespawn` wrapper then refuses to recycle it), cancels a fade-out already in progress
+on a held unit, sets `respawn.spawnDirBias = -1` on every police unit (a unit RLS re-places arrives from behind, not ahead), refuses RLS roadblocks
+against the player (if `blockRoadblocks`) and refuses `gameplay_traffic.forceTeleport` on police units. In a chase it also holds the units RLS names
+(nearest seen, roadblock unit). It does not use `enableRespawn = false` (RLS then locks the unit).
 
 ## Plate reading and police records (Phase 3)
 

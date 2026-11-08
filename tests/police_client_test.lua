@@ -17,7 +17,7 @@ overhaul_career_career = {isActive = function() return career end}
 be = {getPlayerVehicleID = function() return playerId end}
 
 local function at(x) return {x = x, y = 0, z = 0} end
-local function cop(id, x) return {id = id, role = {name = "police"}, enableRespawn = true, respawnCount = 0, pos = at(x or 100)} end
+local function cop(id, x) return {id = id, role = {name = "police"}, enableRespawn = true, respawnCount = 0, pos = at(x or 100), respawn = {spawnDirBias = 0.5}} end
 local traffic = {
   [1] = {role = {name = "none"}, pursuit = {mode = 0}, pos = at(0)},
   [2] = {role = {name = "none"}, pursuit = {mode = 0}, pos = at(0)}, -- a second car the player may switch to
@@ -44,9 +44,26 @@ local function tick() police.onUpdate(1) end
 check(saw("RLSMP-P3|probe: RLS police service present = true"), "boot probes use the RLSMP-P3 tag")
 check(saw("RLSMP-P3|rlsmp_police loaded"), "loaded line")
 
--- 1. No pursuit: nothing touched
+-- 1. No pursuit: a cop near the player is held already (before any chase), a far one is not
 tick()
-check(traffic[10].rlsmpHold ~= true and not police.isPursuit(), "no pursuit -> respawn untouched")
+check(traffic[10].rlsmpHold == true and not police.isPursuit(), "no pursuit yet: the cop 100 m away is already held")
+check(traffic[11].rlsmpHold ~= true, "...the one 1000 m away is not")
+check(traffic[10].respawn.spawnDirBias == -1 and traffic[11].respawn.spawnDirBias == -1, "police get spawnDirBias -1 (re-placed behind)")
+check(traffic[12].respawn == nil and traffic[12].rlsmpHold ~= true, "civilians untouched")
+check(not saw("FROZE police"), "a hold before a chase writes no FROZE line")
+-- the cop was already fading out when the offence happened: it fades back in (per frame)
+traffic[10].state, traffic[10].alpha = "fadeOut", 0.6
+police.onUpdate(0.01)
+check(traffic[10].state == "fadeIn" and saw("CANCELLED fade-out of held police id=10"), "fade-out of a held cop cancelled")
+traffic[11].state, traffic[11].alpha = "fadeOut", 0.6
+police.onUpdate(0.01)
+check(traffic[11].state == "fadeOut", "an unheld far cop keeps fading")
+traffic[11].state = nil
+-- roadblock and teleport are refused even before the pursuit is noticed
+check(overhaul_integration_services_police.setupRoadblock(1) == nil and roadblocks == 0, "roadblock against the player refused before the pursuit is seen")
+check(overhaul_integration_services_police.setupRoadblock(77) ~= nil and roadblocks == 1, "roadblock against another car allowed outside a chase")
+roadblocks = 0
+check(gameplay_traffic.forceTeleport(10) == false and teleports == 0, "police teleport refused before the pursuit is seen")
 
 -- 2. Player chased (found by polling, the hook is only a fast start)
 traffic[1].pursuit.mode = 2
@@ -60,10 +77,11 @@ check(traffic[12].rlsmpHold ~= true, "civilians untouched")
 check(saw("RLSMP-P3|probe: player vehicle in traffic data = true"), "probe: player in traffic data")
 check(saw("RLSMP-P3|pursuit START mode=2 antiTeleport=true blockRoadblocks=true"), "pursuit START line")
 check(saw("RLSMP-P3|patched setupRoadblock = true") and saw("RLSMP-P3|patched forceTeleport = true"), "patched lines")
-check(saw("RLSMP-P3|FROZE police id=10 respawnCount=0 was enableRespawn=true"), "FROZE line")
+check(saw("RLSMP-P3|FROZE police id=13") == false, "no line for a unit that is not there yet")
+check(saw("RLSMP-P3|pursuit START"), "start line")
 
 -- 3. Roadblocks and police teleports refused, others pass
-check(overhaul_integration_services_police.setupRoadblock() == nil and roadblocks == 0, "roadblock refused")
+check(overhaul_integration_services_police.setupRoadblock(1) == nil and roadblocks == 0, "roadblock refused")
 check(saw("RLSMP-P3|BLOCKED setupRoadblock from tests/police_client_test.lua:"), "BLOCKED line names the caller")
 check(gameplay_traffic.forceTeleport(10) == false and teleports == 0, "cop teleport refused")
 check(gameplay_traffic.forceTeleport(12) == true and teleports == 1, "civilian teleport allowed")
@@ -77,19 +95,23 @@ check(traffic[13].rlsmpHold == true, "late police unit frozen")
 traffic[10].respawnCount = 1
 tick()
 check(police.getLeaks() == 1, "re-placed unit counted")
-check(saw("RLSMP-P3|LEAK police id=10"), "LEAK line")
+check(saw("RLSMP-P3|LEAK police id=10") and saw("dist=100 ahead="), "LEAK line says how far and whether ahead")
 tick()
 check(police.getLeaks() == 1, "counted once")
 
 -- 6. RLS resets pursuit.mode directly and never calls the hook with 0 -> still released
 traffic[1].pursuit.mode = 0
+traffic[13].pos = at(2000)    -- drove far away during the chase
 tick()
 check(not police.isPursuit(), "pursuit end seen through traffic data")
 check(saw("RLSMP-P3|pursuit END after"), "pursuit END line")
-check(saw("RLSMP-P3|RELEASED police id=10"), "RELEASED line")
-check(traffic[10].rlsmpHold ~= true and traffic[11].rlsmpHold ~= true and traffic[13].rlsmpHold ~= true, "respawn restored")
-check(overhaul_integration_services_police.setupRoadblock() ~= nil and roadblocks == 1, "roadblocks work again")
-check(gameplay_traffic.forceTeleport(10) == true, "cop teleport allowed again")
+check(traffic[10].rlsmpHold == true, "a cop still near you stays held after the chase")
+check(traffic[13].rlsmpHold ~= true, "...a far one is released")
+traffic[10].role.state = "disabled"   -- RLS parks cops in 'disabled' after a chase (or when wrecked)
+tick()
+check(traffic[10].rlsmpHold ~= true, "a disabled (wrecked / cooling down) cop is let go")
+traffic[10].role.state = nil
+check(overhaul_integration_services_police.setupRoadblock(1) == nil, "roadblocks stay refused for the player")
 
 -- 7. Player switches vehicle mid-chase: the new player vehicle is chased, state follows
 traffic[1].pursuit.mode = 1
@@ -98,7 +120,7 @@ check(police.isPursuit() and traffic[10].rlsmpHold == true, "hook starts at once
 playerId = 2
 traffic[1].pursuit.mode = 0
 tick()
-check(not police.isPursuit() and traffic[10].rlsmpHold ~= true, "switching away from the chased car ends it")
+check(not police.isPursuit(), "switching away from the chased car ends it")
 traffic[2].pursuit.mode = 3
 tick()
 check(police.isPursuit() and traffic[10].rlsmpHold == true, "new player vehicle chased -> frozen again")
@@ -111,7 +133,9 @@ traffic[10].enableRespawn = false
 traffic[1].pursuit.mode = 1
 tick()
 traffic[1].pursuit.mode = 0
+traffic[10].pos = at(1000)
 tick()
+traffic[10].pos = at(100)
 check(traffic[10].enableRespawn == false and traffic[10].rlsmpHold == nil, "a unit that already had respawn off keeps it off, and the hold flag is gone")
 traffic[10].enableRespawn = true
 
@@ -198,7 +222,7 @@ map = nil
 traffic[1].pos = at(0)
 traffic[1].pursuit.mode = 0
 tick()
-check(not police.isPursuit() and traffic[10].rlsmpHold ~= true and traffic[14].rlsmpHold ~= true, "all released at the end")
+check(not police.isPursuit() and traffic[14].rlsmpHold ~= true and traffic[10].rlsmpHold == true, "far units released at the end, the one 200 m away stays held")
 traffic[13] = cop(13, 50)
 
 -- 14. RLS (or vanilla) replaces a wrapped function: we wrap the new one, keep it as the original, once
@@ -220,6 +244,15 @@ check(not saw("rewrapped"), "no rewrap while our wrapper is still in place")
 check(gameplay_traffic.forceTeleport(12) == "new" and newTeleports == 2, "wrapped once: one call, one count")
 traffic[1].pursuit.mode = 0
 tick()
-check(overhaul_integration_services_police.setupRoadblock().new == true and newRoadblocks == 1, "after the chase the new roadblock function runs")
+check(overhaul_integration_services_police.setupRoadblock(77).new == true and newRoadblocks == 1, "after the chase the new roadblock function runs (another car as target)")
+
+-- 15. The bubble mode comes with the police config; leaving restores the respawn direction
+local gotMode
+package.loaded["rlsmp/bubble"] = {setMode = function(m) gotMode = m end}
+handlers["rlsmpPoliceConfig"](json.encode({antiTeleport = true, bubbleMode = "protect"}))
+check(gotMode == "protect" and saw("traffic bubble mode = protect"), "bubbleMode forwarded to the bubble")
+check(traffic[10].respawn.spawnDirBias == -1, "bias is set before leaving")
+police.onServerLeave()
+check(traffic[10].respawn.spawnDirBias == 0.5, "leaving puts the original respawn direction back")
 
 print(string.format("police_client_test: %d checks passed", passed))

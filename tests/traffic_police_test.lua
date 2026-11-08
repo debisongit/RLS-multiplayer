@@ -32,6 +32,7 @@ tick()
 local m = take()
 check(#m == 1 and m[1].name == "rlsmpPoliceConfig" and m[1].data.antiTeleport == true
   and m[1].data.blockRoadblocks == true, "settings sent on load")
+check(m[1].data.bubbleMode == "original", "the traffic bubble mode is sent and defaults to original (RLS's own distances)")
 tick()
 check(#take() == 0, "sent only once")
 stages[0] = nil

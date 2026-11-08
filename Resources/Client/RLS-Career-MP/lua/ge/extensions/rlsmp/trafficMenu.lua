@@ -299,6 +299,13 @@ local function sectionPolice(ui)
   checkbox(ui, "Police cannot appear in front of a chased player", {"police", "antiTeleport"})
   checkbox(ui, "No roadblocks", {"police", "blockRoadblocks"})
   ui.Separator()
+  ui.TextWrapped("Traffic cars near other players. Original = RLS's own spawn and respawn distances (a car only stays while another player is inside its own radius and sees it). Protect = strict old rule (450 m, or a clear line up to 1 km), can make respawns far and repetitive. Off = no protection.")
+  local mode = L.get(st, {"police", "bubbleMode"}, "original")
+  for _, c in ipairs({{"original", "Original"}, {"protect", "Protect"}, {"off", "Off"}}) do
+    if c[1] ~= "original" then ui.SameLine() end
+    if ui.Button((mode == c[1] and "> " or "") .. c[2]) then L.set(st, {"police", "bubbleMode"}, c[1]) end
+  end
+  ui.Separator()
   ui.TextWrapped("Plate reading: a cop close to you and slow reads your plate. A flagged plate (after an escape, an arrest or a reported theft) gets a chase. The remembered car description (model and colour) only catches the player who made it.")
   checkbox(ui, "Plate reading on", {"police", "plateReading", "enabled"})
   num(ui, "A cop reads from (m)", {"police", "plateReading", "rangeMeters"}, 3, 50, "%.0f")

@@ -26,6 +26,10 @@ check(class.tryRespawn == w, "wrapped only once")
 inst:tryRespawn()
 check(respawned == 1, "disabled: RLS decides")
 b.enable(true)
+check(b.getMode() == "original", "default mode is original")
+b.setMode("nonsense")
+check(b.getMode() == "original", "unknown mode ignored")
+b.setMode("protect")
 inst.pos = V(0, 0)         -- 1000 m from the other player, no line of sight
 inst:tryRespawn()
 check(respawned == 2, "far from every player and out of sight: may be recycled")
@@ -64,4 +68,40 @@ check(respawned == keep, "held police unit is not recycled")
 inst.rlsmpHold = nil
 inst:tryRespawn()
 check(respawned == keep + 10, "released unit goes back to RLS")
+-- mode "original": RLS's own distances; only a player inside the car's own radius with a clear line keeps it
+b.setMode("original")
+remote["1-3"] = {gameVehicleID = 30, isLocal = false}
+inst.respawn.finalRadius = 100 inst.pos = V(700, 0)   -- 300 m from the other player: farther than the car's own 100 m radius
+sees = true
+local n = respawned
+inst:tryRespawn()
+check(respawned > n, "original: 300 m away with a clear line is NOT a reason to stay (not in its radius)")
+inst.respawn.finalRadius = 350
+n = respawned
+inst:tryRespawn()
+check(respawned == n, "original: inside the car's radius with a clear line: stays")
+sees = false
+inst:tryRespawn()
+check(respawned > n, "original: inside the radius but no line (hidden): may go")
+inst.pos = V(-1500, 0) sees = true
+inst.respawn.finalRadius = 100 inst.focusDist = 5000
+n = respawned
+inst:tryRespawn()
+check(respawned > n, "original: a car far away is recycled whatever a remote player could see")
+-- mode "off": RLS alone, but a held police unit still stays
+b.setMode("off")
+inst.pos = V(950, 0) sees = true inst.respawn.finalRadius = 500
+n = respawned
+inst:tryRespawn()
+check(respawned > n, "off: no protection")
+inst.rlsmpHold = true
+local m = respawned
+inst:tryRespawn()
+check(respawned == m, "off: held police still held")
+inst.rlsmpHold = nil
+-- stayFor stays strict in every mode (unjam and the model swap rely on it)
+b.setMode("original")
+local near = {pos = V(700, 0)}
+check(b.stayFor(near) == true, "stayFor: 300 m from another player stays, whatever the mode")
+b.setMode("original")
 print("bubble_test: " .. passed .. " checks passed")

@@ -14,6 +14,14 @@
 --  * `gameplay_traffic.forceTeleport` on a police unit is refused.
 -- Everything is restored when the pursuit ends. Outside multiplayer RLS runs untouched.
 --
+-- Added after the owner's log (cop fading out 0.5 s after the chase started, then re-placed):
+--  * police close to the player are held ALREADY BEFORE a chase (same radii), so a cop that sees the offence is not
+--    recycled in the gap before the pursuit mode flips;
+--  * a held cop that is already fading out is told to fade back in (every frame, the fade lasts only about 0.25 s);
+--  * every police unit gets `respawn.spawnDirBias = -1` ("away from you", RLS comment) so a cop that is re-placed
+--    anyway (a reinforcement) arrives from behind, not ahead. Restored when we stop watching;
+--  * roadblocks and police `forceTeleport` are refused at any time, not only after the pursuit was noticed.
+--
 -- The pursuit state is read from the player's traffic data every check, not only from the RLS hook,
 -- because RLS resets `pursuit.mode` directly in several places (evade, arrest, vehicle switch).
 -- A respawn-count watch warns if a unit is re-placed anyway (a path we do not block).
@@ -31,7 +39,8 @@ local RELEASE_RADIUS = 350 -- metres: frozen units further than this (and not in
 local settings = {antiTeleport = true, blockRoadblocks = true}
 local pursuit = false
 local timer = 0
-local frozen = {}         -- police vehicle id -> its enableRespawn before we touched it
+local frozen = {}         -- police vehicle id -> its enableRespawn before we touched it (held near the player, chase or not)
+local biased = {}         -- police vehicle id -> its spawnDirBias before we set it to -1
 local seenRespawns = {}   -- police vehicle id -> respawnCount when the pursuit started
 local leaks = 0           -- units re-placed during a pursuit despite the freeze
 local hookMode = 0        -- last pursuit mode the RLS hook reported for the player (fallback)
@@ -42,9 +51,14 @@ local function isMP()
   return MPCoreNetwork ~= nil and MPCoreNetwork.isMPSession ~= nil and MPCoreNetwork.isMPSession()
 end
 
-local function active()
-  return pursuit and settings.antiTeleport and isMP()
+-- Watching police at all (also before a chase).
+local function watching()
+  return settings.antiTeleport and isMP()
     and overhaul_career_career ~= nil and overhaul_career_career.isActive()
+end
+
+local function active()
+  return pursuit and watching()
 end
 
 local function isPolice(veh)
@@ -55,15 +69,23 @@ local function release(id, veh)
   if frozen[id] ~= nil then
     if veh then veh.rlsmpHold = nil end   -- see rlsmp/bubble.lua: its tryRespawn wrapper honours this flag
     p3.count("units released")
-    p3.log("I", string.format("RELEASED police id=%s enableRespawn back to %s", tostring(id), tostring(frozen[id])))
+    if pursuit then p3.log("I", string.format("RELEASED police id=%s enableRespawn back to %s", tostring(id), tostring(frozen[id]))) end
     frozen[id] = nil
+  end
+end
+
+local function unbias(id, veh)
+  if biased[id] ~= nil then
+    if veh and type(veh.respawn) == "table" then veh.respawn.spawnDirBias = biased[id] or nil end
+    biased[id] = nil
   end
 end
 
 local function releaseAll()
   local traffic = gameplay_traffic and gameplay_traffic.getTrafficData and gameplay_traffic.getTrafficData() or {}
   for id in pairs(frozen) do release(id, traffic[id]) end
-  frozen, seenRespawns = {}, {}
+  for id in pairs(biased) do unbias(id, traffic[id]) end
+  frozen, seenRespawns, biased = {}, {}, {}
 end
 
 local function playerTraffic()
@@ -106,29 +128,48 @@ end
 
 -- Should this police unit be frozen right now? `wasFrozen` widens the radius (release gap).
 local function tied(id, veh, named, pos, wasFrozen)
+  if veh.role and veh.role.state == "disabled" and not named[id] then return false end   -- a wreck may leave
   if named[id] then return true end
-  if not pos then return true end            -- no position known: freeze all (safe side)
+  if not pos then return pursuit end         -- no position known: in a chase freeze all (safe side)
   if not hasXYZ(veh.pos) then return wasFrozen end
   return distance(veh.pos, pos) <= (wasFrozen and RELEASE_RADIUS or FREEZE_RADIUS)
 end
 
--- Freeze respawn for police tied to the chase, release the rest, watch for units re-placed anyway.
+-- Where is this unit compared with the player: "dist=120 ahead=yes". Only for the LEAK line.
+local function whereIs(veh, pos, playerVeh)
+  if not (pos and hasXYZ(veh.pos)) then return "position unknown" end
+  local dir = playerVeh and playerVeh.dirVec
+  local ahead = "?"
+  if hasXYZ(dir) then
+    ahead = ((veh.pos.x - pos.x) * dir.x + (veh.pos.y - pos.y) * dir.y) > 0 and "yes" or "no"
+  end
+  return string.format("dist=%.0f ahead=%s", distance(veh.pos, pos), ahead)
+end
+
+-- Hold police near the player (before and during a chase) and the ones tied to it, release the rest, watch for units re-placed anyway.
 local function freezePolice()
   local playerId, traffic = playerTraffic()
   if not traffic then return end
   local named, pos = pursuitIds(playerId, traffic), playerPos(playerId, traffic)
+  if not pursuit then named = {} end
   p3.logOnChange("playerPosKnown", pos ~= nil, "I", "probe: player position known = " .. tostring(pos ~= nil))
   -- Units that left the traffic data: forget them (nothing to restore).
   for id in pairs(frozen) do
     if traffic[id] == nil then
-      p3.log("I", string.format("GONE police id=%s left the traffic data while frozen", tostring(id)))
-      frozen[id], seenRespawns[id] = nil, nil
+      p3.log("I", string.format("GONE police id=%s left the traffic data while held", tostring(id)))
+      frozen[id], seenRespawns[id], biased[id] = nil, nil, nil
     end
   end
+  for id in pairs(biased) do if traffic[id] == nil then biased[id] = nil end end
   local policeNow = 0
   for id, veh in pairs(traffic) do
     if id ~= playerId and isPolice(veh) then
       policeNow = policeNow + 1
+      -- A unit that RLS re-places is put "away from you" (behind), not ahead.
+      if type(veh.respawn) == "table" and veh.respawn.spawnDirBias ~= -1 then
+        if biased[id] == nil then biased[id] = veh.respawn.spawnDirBias or false end
+        veh.respawn.spawnDirBias = -1
+      end
       local isTied = tied(id, veh, named, pos, frozen[id] ~= nil)
       if not isTied then
         if frozen[id] ~= nil then
@@ -139,9 +180,11 @@ local function freezePolice()
         if frozen[id] == nil then
           frozen[id] = veh.enableRespawn ~= false
           seenRespawns[id] = veh.respawnCount
-          p3.count("units frozen")
-          p3.log("I", string.format("FROZE police id=%s respawnCount=%s was enableRespawn=%s",
-            tostring(id), tostring(veh.respawnCount), tostring(frozen[id])))
+          p3.count(pursuit and "units frozen" or "units held before a chase")
+          if pursuit then
+            p3.log("I", string.format("FROZE police id=%s respawnCount=%s was enableRespawn=%s state=%s alpha=%s",
+              tostring(id), tostring(veh.respawnCount), tostring(frozen[id]), tostring(veh.state), tostring(veh.alpha)))
+          end
         end
         -- NOT enableRespawn=false: RLS turns such a car into state 'locked', and then its pursuit logic (lane rules, wreck handling) stops running.
         -- Instead the tryRespawn wrapper in rlsmp/bubble.lua refuses to recycle a car with this flag.
@@ -150,14 +193,31 @@ local function freezePolice()
         if type(count) == "number" and type(seenRespawns[id]) == "number" and count > seenRespawns[id] then
           leaks = leaks + 1
           seenRespawns[id] = count
-          p3.count("LEAKS (re-placed while frozen)")
-          p3.log("W", string.format("LEAK police id=%s was re-placed during the pursuit (respawnCount %s)", tostring(id), tostring(count)))
+          p3.count("LEAKS (re-placed while held)")
+          p3.log("W", string.format("LEAK police id=%s was re-placed while held, pursuit=%s (respawnCount %s, %s)",
+            tostring(id), tostring(pursuit), tostring(count), whereIs(veh, pos, traffic[playerId])))
         end
       end
     end
   end
   local most = p3.get("most police at once")
   if policeNow > most then p3.count("most police at once", policeNow - most) end
+end
+
+-- Every frame: a held unit that is already fading out (RLS decided just before we held it) fades back in.
+-- The fade takes about 0.25 s, so the 0.5 s check would miss it.
+local function rescueFading()
+  if next(frozen) == nil then return end
+  local _, traffic = playerTraffic()
+  if not traffic then return end
+  for id in pairs(frozen) do
+    local veh = traffic[id]
+    if veh and veh.state == "fadeOut" and (tonumber(veh.alpha) or 0) > 0 then
+      veh.state = "fadeIn"
+      p3.count("fade-outs cancelled")
+      p3.log("I", string.format("CANCELLED fade-out of held police id=%s alpha=%s", tostring(id), tostring(veh.alpha)))
+    end
+  end
 end
 
 -- Wrap table[name]; `refuse(...)` returning true means "block this call".
@@ -174,7 +234,7 @@ local function wrap(tbl, name, label, refuse, refusedValue)
   end
   local original = tbl[name]
   local wrapper = function(...)
-    if active() and refuse(...) then
+    if watching() and refuse(...) then
       local site = p3.caller()
       p3.count(label .. " BLOCKED")
       p3.countCaller(label .. " BLOCKED", site)
@@ -200,7 +260,10 @@ local function patch()
       p3.logOnChange("patchfail " .. key, true, "W", "patched " .. key .. " = false (not available yet, will retry)")
     end
   end
-  note("setupRoadblock", wrap(police, "setupRoadblock", "setupRoadblock", function() return settings.blockRoadblocks end, nil))
+  -- RLS can call this the moment the offence happens, before our 0.5 s check saw the pursuit: refuse it for the player (or an unknown target) at any time.
+  note("setupRoadblock", wrap(police, "setupRoadblock", "setupRoadblock", function(targetId)
+    return settings.blockRoadblocks and (pursuit or targetId == nil or targetId == be:getPlayerVehicleID(0))
+  end, nil))
   note("forceTeleport", wrap(gameplay_traffic, "forceTeleport", "forceTeleport(police)", function(id)
     local veh = gameplay_traffic.getTrafficData and gameplay_traffic.getTrafficData()[id]
     return isPolice(veh)
@@ -233,7 +296,7 @@ local function setPursuit(on)
     p3.count("pursuits ended")
     p3.log("I", string.format("pursuit END after %.0fs, units frozen at end=%d, leaks so far=%d",
       os.time() - pursuitStart, (function() local n = 0 for _ in pairs(frozen) do n = n + 1 end return n end)(), leaks))
-    releaseAll()
+    if watching() then freezePolice() end   -- units tied only to the chase are released, the ones near you stay held
   end
 end
 
@@ -241,8 +304,9 @@ end
 local function sync()
   if not isMP() or not be or not overhaul_career_career or not overhaul_career_career.isActive() then return end
   setPursuit(playerPursuitMode() >= 1)
-  if pursuit then patch() end   -- retry wrappers until RLS's police service exists
-  if pursuit and active() then freezePolice() end
+  if not watching() then return end
+  patch()   -- retry wrappers until RLS's police service exists (installed before a chase, not after)
+  freezePolice()
 end
 
 -- RLS fires this through extensions.hook whenever a pursuit level changes: just a fast start.
@@ -255,6 +319,7 @@ function M.onPursuitModeUpdate(targetId, data)
 end
 
 function M.onUpdate(dtReal)
+  if watching() then rescueFading() end
   timer = timer + (dtReal or 0)
   if timer < CHECK_EVERY then return end
   timer = 0
@@ -273,6 +338,11 @@ local function onConfig(data)
   p3.log("I", string.format("config received antiTeleport=%s blockRoadblocks=%s", tostring(data.antiTeleport), tostring(data.blockRoadblocks)))
   if type(data.antiTeleport) == "boolean" then settings.antiTeleport = data.antiTeleport end
   if type(data.blockRoadblocks) == "boolean" then settings.blockRoadblocks = data.blockRoadblocks end
+  if type(data.bubbleMode) == "string" then
+    local b = rawget(_G, "rlsmp_bubble") or package.loaded["rlsmp/bubble"]
+    if b and b.setMode then b.setMode(data.bubbleMode) end
+    p3.log("I", "traffic bubble mode = " .. data.bubbleMode)
+  end
   if not settings.antiTeleport then releaseAll() end
 end
 

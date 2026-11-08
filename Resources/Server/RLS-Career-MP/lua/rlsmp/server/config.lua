@@ -87,6 +87,11 @@ M.defaults = {
     antiTeleport = true,
     -- Refuse RLS roadblocks (they put police cars on the road ahead of you).
     blockRoadblocks = true,
+    -- Which traffic cars another player's game may not recycle (client rlsmp/bubble.lua):
+    -- "original" = RLS's own spawn and respawn distances, a car is only kept while another player is within its
+    --   own active radius AND has a clear line to it; "protect" = the old strict rule (450 m, or a clear line up to 1 km);
+    -- "off" = no protection at all.
+    bubbleMode = "original",
     -- Police records (server plateRecords.lua), shared by all cops on the server:
     -- a flagged plate (plate text + car model) lasts this many real seconds; a new plate text clears it at once.
     plateFlagSeconds = 7200,

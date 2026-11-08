@@ -5,16 +5,33 @@
 -- In multiplayer a car next to your friend could vanish because it is far from you. This wraps tryRespawn:
 -- a car may only be recycled when it is more than BUBBLE metres from EVERY other player and none of them has a clear line to it.
 -- Other players' own traffic cars (hidden name tags) do not count, only the players themselves.
+--
+-- Modes (server setting police.bubbleMode, default "original"):
+--  * "original": RLS's own distances stay. A car is only kept while another player is closer than the car's OWN active radius
+--    (what RLS would use for the local player) AND has a clear line to it. Nothing else changes where cars vanish or appear.
+--  * "protect": the old strict rule: kept while within BUBBLE metres of another player, or a clear line up to SIGHT metres.
+--  * "off": no protection (RLS decides alone).
+-- Police units tied to a chase (rlsmpHold, set by rlsmp/police.lua) are never recycled in any mode.
+-- M.stayFor (used by unjam and the model swap, our own recycling) always uses the strict rule.
 
 local M = {}
 
 local mp = require("rlsmp/lib/mp")
+local p3 = require("rlsmp/lib/p3")
 
 local BUBBLE = 450
+local SIGHT = 1000
+local DEFAULT_RADIUS = 200   -- used when a car has no active radius (should not happen)
+local MODES = {original = true, protect = true, off = true}
 local enabled = false
+local mode = "original"
 
 function M.enable(on) enabled = on == true end
 function M.isEnabled() return enabled end
+function M.setMode(m)
+  if MODES[m] then mode = m end
+end
+function M.getMode() return mode end
 
 -- Positions of the other players' cars (and walking characters).
 local function playerPositions()
@@ -36,7 +53,16 @@ function M.mustStay(carPos, players, canSee)
   for _, p in ipairs(players) do
     if carPos:squaredDistance(p) < limit then return true end
     -- line of sight only matters up to about a kilometre (a ray cast per player is not free)
-    if canSee and carPos:squaredDistance(p) < 1000 * 1000 and canSee(p, carPos) then return true end
+    if canSee and carPos:squaredDistance(p) < SIGHT * SIGHT and canSee(p, carPos) then return true end
+  end
+  return false
+end
+
+-- "original" mode: keep the car only if another player is inside its own active radius and has a clear line to it.
+function M.mustStayOriginal(carPos, radius, players, canSee)
+  local limit = (tonumber(radius) or DEFAULT_RADIUS) ^ 2
+  for _, p in ipairs(players) do
+    if carPos:squaredDistance(p) < limit and (not canSee or canSee(p, carPos)) then return true end
   end
   return false
 end
@@ -67,15 +93,20 @@ function M.install()
   local original = class.tryRespawn
   local wrapper
   wrapper = function(self, ...)
-    if enabled and self.rlsmpHold then return end   -- a police unit tied to the player's chase (rlsmp/police.lua) must not be recycled
+    if enabled and self.rlsmpHold then p3.count("bubble: police held") return end   -- a police unit tied to the player's chase (rlsmp/police.lua) must not be recycled
     -- RLS's own cheap gates first: nothing to decide unless RLS is about to recycle this car
     local aboutToGo = self.enableRespawn and type(self.respawn) == "table" and self.focusDist and (tonumber(self.respawn.finalRadius) or math.huge) < self.focusDist
-    if enabled and aboutToGo and mp.isMPSession() and self.pos then
+    if enabled and aboutToGo and mode ~= "off" and mp.isMPSession() and self.pos then
       local players = playerPositions()
-      if #players > 0 and M.mustStay(self.pos, players, self.checkRayCast and function(a, b) return self:checkRayCast(a, b) end or nil) then
-        return
+      if #players > 0 then
+        local canSee = self.checkRayCast and function(a, b) return self:checkRayCast(a, b) end or nil
+        local keep
+        if mode == "protect" then keep = M.mustStay(self.pos, players, canSee)
+        else keep = M.mustStayOriginal(self.pos, self.respawn.finalRadius, players, canSee) end
+        if keep then p3.count("bubble: kept for another player") return end
       end
     end
+    p3.count("bubble: passed to RLS")
     return original(self, ...)
   end
   wrappers[class] = wrapper
