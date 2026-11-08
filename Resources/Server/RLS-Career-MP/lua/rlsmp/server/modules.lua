@@ -21,6 +21,7 @@ return {
   "rlsmp.server.plateRecords",
   "rlsmp.server.trafficVariety",
   "rlsmp.server.weather",
+  "rlsmp.server.modPrice",
   "rlsmp.server.trafficAdmin",
   "rlsmp.server.smartTraffic",
   "rlsmp.server.vehicles",

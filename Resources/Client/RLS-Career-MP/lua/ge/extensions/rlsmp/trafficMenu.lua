@@ -451,6 +451,12 @@ local function sectionMarket(ui)
     intInput(ui, "  reputation needed", {"market", "tiers", name, "minRep"}, 0, 100)
     checkbox(ui, "  not for sale", {"market", "tiers", name, "off"})
   end
+  ui.Separator()
+  ui.Text("Mod car prices in the car shop (fixed prices per model are in config.json, modPrice.overrides)")
+  checkbox(ui, "Fair prices for mod cars", {"modPrice", "enabled"})
+  intInput(ui, "Highest price", {"modPrice", "max"}, 1000, 100000000)
+  intInput(ui, "Lowest price", {"modPrice", "min"}, 100, 100000)
+  num(ui, "Keep the author's price when within", {"modPrice", "tolerance"}, 0, 2, "%.2f")
 end
 
 local SECTIONS = {cars = sectionCars, where = sectionWhere, behaviour = sectionBehaviour, amount = sectionAmount, swap = sectionSwap,

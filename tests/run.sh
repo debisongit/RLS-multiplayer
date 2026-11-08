@@ -30,6 +30,7 @@ lua5.3 tests/market_test.lua "$(mktemp -d -p "$tmp")"
 lua5.3 tests/theft_test.lua "$(mktemp -d -p "$tmp")"
 lua5.3 tests/fence_test.lua "$(mktemp -d -p "$tmp")"
 lua5.3 tests/meetup_test.lua "$(mktemp -d -p "$tmp")"
+lua5.3 tests/mod_price_server_test.lua "$(mktemp -d -p "$tmp")"
 lua5.3 tests/no_chat_hints_test.lua
 lua5.3 tests/traffic_test.lua
 lua5.3 tests/traffic_police_test.lua
@@ -78,6 +79,8 @@ luajit tests/plate_read_lib_test.lua
 luajit tests/plates_client_test.lua
 luajit tests/market_client_test.lua
 luajit tests/theft_client_test.lua
+luajit tests/mod_price_lib_test.lua
+luajit tests/mod_price_client_test.lua
 luajit tests/meetup_client_test.lua
 luajit tests/garage_client_test.lua
 # Optional: the Black Market phone app view (needs `cd tests/phone_app && npm install` once; skipped without it).

@@ -335,6 +335,12 @@ M.defaults = {
     fallbackDamagePerSpeedSq = 15,
   },
 
+  -- Fair car shop prices for MODDED cars (client rlsmp_modPrice, lib/modPrice.lua): the price is estimated from power, weight, top speed, drivetrain
+  -- and class; the mod author's value is kept when it is within +-tolerance of the estimate. Only models in trafficVariety.mods (or whose files were
+  -- downloaded from this server) are touched; the car shop only, not selling. overrides = fixed catalog price per "model" or "model/config".
+  -- Example: overrides = {mycar = 45000, ["mycar/sport"] = 60000}
+  modPrice = {enabled = true, max = 2000000, min = 800, tolerance = 0.35, overrides = {}},
+
   -- Shared dealership stock: everyone sees the same cars for sale (the first player's listings, kept in shop.json).
   -- OFF until tested in-game. Only listings that exist when a player joins are shared; RLS still adds new ones per PC.
   shop = {

@@ -105,6 +105,10 @@ local STATIC = {
   ["police.plateReading.afterEscapeChance"] = {"number", 0, 1},
   ["police.plateReading.skipChance"] = {"number", 0, 1},
 }
+STATIC["modPrice.enabled"] = {"bool"}
+STATIC["modPrice.max"] = {"number", 1000, 100000000, true}
+STATIC["modPrice.min"] = {"number", 100, 100000, true}
+STATIC["modPrice.tolerance"] = {"number", 0, 2}
 for _, name in ipairs(PERSONALITIES) do STATIC["smartTraffic.mix." .. name] = {"number", 0, 100} end
 for _, name in ipairs(CONDITIONS) do STATIC["weather.mix." .. name] = {"number", 0, 100} end
 
@@ -320,6 +324,7 @@ function M.snapshot()
   local ra = type(v.rarity) == "table" and v.rarity or {}
   local pl = type(v.preload) == "table" and v.preload or {}
   local sm = type(v.simplified) == "table" and v.simplified or {}
+  local mpr = type(config.modPrice) == "table" and config.modPrice or {}
   local extra = copyRuled({theft = true, fence = true, market = true})
   -- A method without an "enabled" key is ON (theft.lua: enabled ~= false); show it that way, or the menu would list every method as off.
   for name, m in pairs(type(extra.theft) == "table" and type(extra.theft.methods) == "table" and extra.theft.methods or {}) do
@@ -328,6 +333,7 @@ function M.snapshot()
   end
   return {
     theft = extra.theft, fence = extra.fence, market = extra.market,
+    modPrice = {enabled = mpr.enabled, max = mpr.max, min = mpr.min, tolerance = mpr.tolerance},
     traffic = {enabled = t.enabled, totalBudget = t.totalBudget, baseBudget = t.baseBudget, perPlayerBudget = t.perPlayerBudget,
       minPerPlayer = t.minPerPlayer, maxPerPlayer = t.maxPerPlayer,
       respawnRange = t.respawnRange, respawnDelay = t.respawnDelay, unjam = copyMap(t.unjam)},
@@ -376,7 +382,7 @@ local function tooFast(pid)
 end
 
 local function modulesResend()
-  for _, name in ipairs({"smartTraffic", "trafficVariety", "trafficPolice", "theft", "plateRecords"}) do
+  for _, name in ipairs({"smartTraffic", "trafficVariety", "trafficPolice", "theft", "plateRecords", "modPrice"}) do
     local ok, mod = pcall(require, "rlsmp.server." .. name)
     if ok and type(mod) == "table" and mod.resend then mod.resend() end
   end
