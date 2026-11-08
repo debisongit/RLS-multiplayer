@@ -216,6 +216,8 @@ M.defaults = {
     -- chase. warmShare of the picks come from models
     -- that are already loaded (on the street or built this session). No spare car is ever built or hidden: BeamMP would send it to everybody.
     preload = {enabled = true, minGapSeconds = 6, slowFrameMs = 45, calmFrames = 45, settleSeconds = 3, warmShare = 0.7},
+    -- Traffic uses the SAME `configs` model/configs (1 to 6) for `minutes`, then another choice (the game lags when many different configs load; lib/trafficFocus.lua).
+    focus = {enabled = true, configs = 2, minutes = 20},
     -- Simplified (cheap "simple_traffic" stand-in) cars, see docs/RESEARCH_SIMPLIFIED.md. OFF by default and never tried in the game.
     -- parked: a stand-in parked car at a stealable spot becomes a real car when a player is within nearRadius (m, at least 120); traffic: a respawned
     -- traffic car farther than nearRadius from every player may come back as a stand-in, and a stand-in that comes within nearRadius is made real.

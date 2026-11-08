@@ -21,6 +21,7 @@ local V = require("rlsmp/lib/trafficVariety")
 local PL = require("rlsmp/lib/trafficPreload")
 local SM = require("rlsmp/lib/simplified")
 local F = require("rlsmp/lib/trafficFill")
+local FO = require("rlsmp/lib/trafficFocus")
 
 local MOD_CONFIGS_PER_MODEL = 4   -- how many eligible configs of a modded model join the candidate pool
 
@@ -42,6 +43,7 @@ local brandCache = {}       -- model name -> Brand string or false
 local premadeList           -- the premade pool: list of {model, config, pop}; nil until built
 local premadeJob            -- the build in progress: {models, i, out, params, filter}
 local clock = 0
+local focus = FO.newState()   -- the few configs traffic uses for now (lib/trafficFocus.lua)
 local warm = {}             -- models whose meshes are probably loaded (on the street now, or built this session)
 
 local function careerActive() return overhaul_career_career ~= nil and overhaul_career_career.isActive() end
@@ -279,6 +281,19 @@ local function build(original, amount, params)
   end
   local group, relaxed = V.select(candidates, want, infoOf, ctx, config, nil, usePool and mem or nil)
   if #group == 0 then return nil end
+  if not parked and config.focus.enabled then
+    -- the same few configs for a while: choose them (normal weights) when none are set or their time is over, then every car of the group is one of them
+    if FO.due(focus, config.focus, clock) then
+      local chosen = V.select(candidates, math.max(6, config.focus.configs * 3), infoOf, ctx, config, nil, usePool and mem or nil)
+      if FO.set(focus, config.focus, chosen, clock) then
+        local names = {}
+        for _, e in ipairs(focus.entries) do names[#names + 1] = FO.key(e) end
+        p3.log("I", string.format("focus: traffic uses %s for the next %.0f minutes (choice number %d)", table.concat(names, " and "), config.focus.minutes, focus.rotations))
+      end
+    end
+    local entries = FO.current(focus, config.focus)
+    if entries then group = FO.group(entries, #group, math.random) relaxed = 0 p3.count("focus groups") end
+  end
   probe(params, pool, group)
   p3.logOnChange("variety-zone", ctx.zoneSource, "I", "probe: road class source = " .. ctx.zoneSource)
   p3.count(parked and "variety groups (parked)" or "variety groups (traffic)")
@@ -577,9 +592,31 @@ local function onConfig(data)
   p3.log("I", string.format("police variety: enabled=%s undercoverShare=%.2f maxShare=%.2f", tostring(config.police.enabled), config.police.undercoverShare, config.police.maxShare))
 end
 
+-- The focus time is over: choose the next configs from the premade pool (or what the game offered lately) with the normal weights.
+local lastFocusTry = -math.huge
+local function rotateFocus()
+  if clock - lastFocusTry < 5 then return end
+  lastFocusTry = clock
+  local list = {}
+  for _, e in ipairs(premadeList or {}) do list[#list + 1] = e end
+  if #list == 0 then for _, e in ipairs(recent) do list[#list + 1] = e end end
+  if #list == 0 then return end
+  list = V.dropExcluded(list, config.excludeWords)
+  local ok, chosen = pcall(V.select, list, math.max(6, config.focus.configs * 3), M.infoOf, context(), config, nil, mem)
+  if not ok or type(chosen) ~= "table" then return end
+  if FO.set(focus, config.focus, chosen, clock) then
+    local names = {}
+    for _, e in ipairs(focus.entries) do names[#names + 1] = FO.key(e) end
+    p3.log("I", string.format("focus: traffic uses %s for the next %.0f minutes (choice number %d)", table.concat(names, " and "), config.focus.minutes, focus.rotations))
+  end
+end
+
 function M.onUpdate(dtReal)
   M.install()
   clock = clock + (dtReal or 0)
+  if config and config.enabled and config.focus and config.focus.enabled and focus.entries and FO.due(focus, config.focus, clock) and mp.isMPSession() and careerActive() then
+    rotateFocus()
+  end
   if not premadeList and mp.isMPSession() and careerActive() and (config == nil or config.pool.enabled) then
     startPremade()
     stepPremade()
@@ -591,6 +628,7 @@ function M.onServerLeave()
   policeCache, policeKeys = nil, {}
   recent, recentSeen = {}, {}
   mem, brandCache, premadeList, premadeJob, warm = V.newPool(), {}, nil, nil, {}
+  focus = FO.newState()
 end
 
 function M.getConfig() return config end
@@ -607,6 +645,16 @@ function M.noteWarm(model) if type(model) == "string" then warm[model] = true en
 -- current = {model, config}; census = {brand = cars of that brand on the street now}. nil = leave the car alone.
 function M.pickReplacement(current, census)
   if not (config and config.enabled and config.pool.enabled) then return nil end
+  if config.focus and config.focus.enabled and not FO.due(focus, config.focus, clock) then
+    -- a car for the focus configs; none when the old car is one of them already (a rebuild into the same config helps nobody)
+    local entries = FO.current(focus, config.focus)
+    if entries then
+      local e = entries[math.random(#entries)]
+      if type(current) == "table" and current.model == e.model and current.config == e.config then return nil end
+      p3.count("pool picks (focus)")
+      return e, "focus"
+    end
+  end
   local list = {}
   for _, e in ipairs(premadeList or {}) do list[#list + 1] = e end
   if #list == 0 then for _, e in ipairs(recent) do list[#list + 1] = e end end   -- no premade pool: only what the game offered lately

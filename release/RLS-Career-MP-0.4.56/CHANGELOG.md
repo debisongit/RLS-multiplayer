@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.4.56 (untested in-game)
+- Less lag from car configs (owner's request): traffic cars now use the SAME 1 or 2 configs (different models first) and the choice changes only every 20 minutes. Every new model/config has to load its parts and meshes (about 0.25 s each in the owner's log, 23 builds in one session); a config that is already on the street loads much faster. New server setting `trafficVariety.focus` (`enabled`, `configs` 1 to 6, default 2, `minutes`, default 20), also in the traffic menu. The choice uses the normal weights (road class, day or night, rarity). Fills and re-rolls build only focus configs and skip a rebuild into the config a car already has. Parked cars and police are not touched. (Claude B)
+
 ## 0.4.55 (untested in-game)
 - Fewer freezes when the police re-places: the owner's log showed a full car build (about 1 s freeze) for EVERY cop RLS re-placed, many times a minute. Now a re-placed cop is only rebuilt as another model at most once per `police.respawnRebuildSeconds` (default 90); in between a cop RLS put in FRONT of you is moved to the road behind you along the way you drove (no build), a cop put behind you is left alone. (Claude B)
 - The unseen car in front of you: the log shows RLS put the re-placed cop 170 to 400 m ahead, out of sight, while the replacement was being built. A car's auto brake reacts to such a car. The cop in front is now removed the moment it is found, before the new one is built. (Claude B)

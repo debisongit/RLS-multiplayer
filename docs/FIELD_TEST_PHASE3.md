@@ -561,6 +561,14 @@ Known gaps: never played. What `roadBehind` does with one car and a gap is a gue
 Known gaps: never played; the phone can sell a car that is far away (a stolen car is paid for without being delivered), see `fence.phone`.
 
 
+## Same few configs for 20 minutes (build 0.4.56)
+
+1. Join, wait for the traffic. The log has `focus: traffic uses A/x and B/y for the next 20 minutes (choice number 1)`. Look at the traffic: only those two configs (plus parked cars, police and other players).
+2. Drive 20 minutes: a second `focus:` line with `choice number 2`. Cars that respawn out of sight turn into the new configs one by one (the re-roll must be on for that, `trafficVariety.respawn`).
+3. Compare the lag with before. Send the `focus:` lines and any `build:` lines with their ms.
+4. Settings (traffic page): same few configs on/off, how many, minutes.
+Known gaps: never played; traffic that already exists keeps its old configs until it respawns (only with re-roll/fill on).
+
 ## Fewer freezes, no unseen cop in front, chase on foot (build 0.4.55)
 
 1. Drive for 10 minutes on a road with traffic. Count the freezes. Log lines to send: `police respawn:` (re-placed / was in front, moved N m behind / building / done) and `police top-up:`.

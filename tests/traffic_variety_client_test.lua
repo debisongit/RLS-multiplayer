@@ -68,7 +68,7 @@ local original = vanilla
 
 local passed = 0
 local function check(c, m) if not c then error("FAIL: " .. m, 2) end passed = passed + 1 end
-local function server(tbl) handlers["rlsmpTrafficVariety"](json.encode(tbl)) end
+local function server(tbl) if tbl.focus == nil then tbl.focus = {enabled = false} end handlers["rlsmpTrafficVariety"](json.encode(tbl)) end   -- focus has its own scenario at the end
 local function countModel(group, model) local k = 0 for _, e in ipairs(group) do if e.model == model then k = k + 1 end end return k end
 local TRAFFIC = {filters = {Type = {Car = 1}, ["Config Type"] = {other = 1}}}
 local PARKED = {filters = {Type = {propparked = 1}, ["Config Type"] = {other = 1}}}
@@ -467,6 +467,37 @@ do
   gameplay_traffic = nil
   server({enabled = true})
   check(#core_multiSpawn.createGroup(4, TRAFFIC) == 4, "no minimum known: the game's size")
+end
+
+
+-- 0.4.55: focus: the same 1 or 2 configs for 20 minutes ----------------------------------------------------------------
+do
+  T.onServerLeave()
+  catalogue = {}
+  add("etk800", 4) add("sunburst", 4) add("pickup", 4) add("van", 4) add("vivace", 4)
+  server({enabled = true, focus = {enabled = true, configs = 2, minutes = 20}})
+  local f1 = core_multiSpawn.createGroup(10, TRAFFIC)
+  local keys = {}
+  for _, e in ipairs(f1) do keys[e.model .. "/" .. tostring(e.config)] = (keys[e.model .. "/" .. tostring(e.config)] or 0) + 1 end
+  local n = 0 for _ in pairs(keys) do n = n + 1 end
+  check(#f1 == 10 and n == 2, "focus: a group of ten cars has exactly two configs, got " .. n)
+  check(saw("focus: traffic uses"), "the choice is logged")
+  local f2 = core_multiSpawn.createGroup(10, TRAFFIC)
+  local same = true
+  for _, e in ipairs(f2) do if not keys[e.model .. "/" .. tostring(e.config)] then same = false end end
+  check(same, "the next group uses the same two configs")
+  local first = T.pickReplacement({}, {})
+  check(first and keys[first.model .. "/" .. tostring(first.config)], "a replacement / fill car is one of them")
+  local cur = {model = first.model, config = first.config}
+  local rejected = 0
+  for _ = 1, 30 do if T.pickReplacement(cur, {}) == nil then rejected = rejected + 1 end end
+  check(rejected > 0, "a car that already has a focus config is not rebuilt into the same one")
+  check(core_multiSpawn.createGroup(10, PARKED) ~= nil, "parked groups are not touched by the focus")
+  for _ = 1, 20 * 60 / 5 + 4 do T.onUpdate(5) end
+  check(saw("choice number 2"), "after 20 minutes another choice is made")
+  server({enabled = true, focus = {enabled = false}})
+  local spread = core_multiSpawn.createGroup(10, TRAFFIC)
+  check(#spread == 10, "focus off: normal groups again")
 end
 
 print(string.format("traffic_variety_client_test: %d checks passed", passed))
