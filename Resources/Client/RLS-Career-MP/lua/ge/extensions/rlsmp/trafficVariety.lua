@@ -3,7 +3,8 @@
 --
 -- RLS/the game builds a traffic (or parked) group with core_multiSpawn.createGroup(amount, params). We wrap it: ask for a
 -- bigger pool of candidates, add models from server-shipped mods (names + weights from the server), and pick the group with the
--- weights of lib/trafficVariety.lua (per model Type, per road class, day or night, per mod). Police groups are never touched.
+-- weights of lib/trafficVariety.lua (per model Type, per road class, day or night, per mod).
+-- Police groups get their own re-pick (config `police`: Bastion weight low, undercover share cap, max share per model), see buildPolice.
 -- Anything unexpected (no result, an error, settings not received yet) gives the game its untouched group.
 --
 -- The wrapper is registered with RLS's own wrapperLifetime.registerForwarder, so RLS's patch refresh sees it as part of the chain
@@ -21,8 +22,10 @@ local V = require("rlsmp/lib/trafficVariety")
 local MOD_CONFIGS_PER_MODEL = 4   -- how many eligible configs of a modded model join the candidate pool
 
 local config            -- sanitized settings from the server; nil until it speaks
-local ours, installedOn -- our createGroup wrapper and the core_multiSpawn table it lives on
-local layer             -- state of our newest wrapper; older layers (kept in the chain by RLS's wrappers) become plain passthroughs
+local hooks = {createGroup = {}, fitGroup = {}}   -- per wrapped function: ours (our wrapper), on (the table it lives on), layer (state of our newest wrapper;
+                                                  -- older layers kept in the chain by RLS's wrappers become plain passthroughs)
+local policeCache       -- police pool: list of {model, config}; policeKeys: "model/config" -> true
+local policeKeys = {}
 local building = 0      -- > 0 while a group is being built: any other layer of ours that is called meanwhile just passes through
 local wl                -- RLS's wrapperLifetime once it could be loaded
 local tries = 0         -- install() calls, so a failed require is only retried now and then
@@ -224,6 +227,75 @@ local function build(original, amount, params)
   return group
 end
 
+-- Every police config the game knows (Config Type "Police"), that can be spawned and passes RLS's own filter. Built once (cached).
+-- RLS's career police normally come from the level's police.vehGroup.json (autoLoadFromFile) and then core_multiSpawn.fitGroup, NOT from createGroup,
+-- and that file lists only Bastions; so we build the pool from the game's model list.
+local POLICE_PARAMS = {filters = {["Config Type"] = {police = 1, other = 0}}}
+local function policePool()
+  if policeCache then return policeCache end
+  local out, keys, models = {}, {}, {}
+  local filter = rawget(_G, "overhaul_integration_patches_trafficConfigFilter")
+  local ok, list = pcall(core_vehicles.getModelList)
+  for name in pairs(ok and type(list) == "table" and type(list.models) == "table" and list.models or {}) do models[#models + 1] = name end
+  table.sort(models)
+  for _, name in ipairs(models) do
+    local good, data = pcall(core_vehicles.getModel, name)
+    if good and type(data) == "table" and type(data.configs) == "table" then
+      local names = {}
+      for cfg, info in pairs(data.configs) do
+        local t = type(info) == "table" and (info["Config Type"] or info.configType)
+        if type(t) == "string" and string.lower(t) == "police" then names[#names + 1] = cfg end
+      end
+      table.sort(names)
+      for _, cfg in ipairs(names) do
+        local eligible = true
+        if filter and filter.isConfigEligible then
+          local g, e = pcall(filter.isConfigEligible, name, cfg, POLICE_PARAMS)
+          eligible = not g or e ~= false
+        end
+        if eligible and spawnable(name) then out[#out + 1] = {model = name, config = cfg} keys[name .. "/" .. cfg] = true end
+      end
+    end
+  end
+  local census, per = {}, {}
+  for _, e in ipairs(out) do
+    per[e.model] = (per[e.model] or 0) + 1
+    if V.isUndercover(e.config, config.police.undercoverWords) then per[e.model .. " (undercover)"] = (per[e.model .. " (undercover)"] or 0) + 1 end
+  end
+  for k, n in pairs(per) do census[#census + 1] = k .. "=" .. n end
+  table.sort(census)
+  p3.log("I", string.format("police pool: %d configs: %s", #out, table.concat(census, ", ")))
+  policeCache, policeKeys = out, keys
+  return out
+end
+
+-- Is every entry of this list a police config? (the file group RLS hands to fitGroup)
+local function allPolice(group)
+  if type(group) ~= "table" or #group == 0 then return false end
+  policePool()
+  for _, e in ipairs(group) do
+    if type(e) ~= "table" or not policeKeys[tostring(e.model) .. "/" .. tostring(e.config)] then return false end
+  end
+  return true
+end
+
+-- A police group of `amount` cars picked with the police settings, or nil to let the game keep its own.
+local function buildPolice(amount)
+  local pool = policePool()
+  if #pool == 0 then return nil end
+  local want = math.floor(amount)
+  local group, relaxed = V.selectPolice(pool, want, config.police)
+  if #group == 0 then return nil end
+  local picked, undercover = {}, 0
+  for _, e in ipairs(group) do
+    picked[#picked + 1] = e.model .. "/" .. e.config
+    if V.isUndercover(e.config, config.police.undercoverWords) then undercover = undercover + 1 end
+  end
+  p3.count("variety groups (police)")
+  p3.log("I", string.format("variety police group: want=%d pool=%d undercover=%d relaxed=%d cars=%s", want, #pool, undercover, relaxed, table.concat(picked, ",")))
+  return group
+end
+
 -- RLS's wrapperLifetime, loaded once. A failed require is not cached by Lua, so it is only retried every 60th call (~1 s).
 local function lifetime()
   if wl then return wl end
@@ -235,38 +307,67 @@ local function lifetime()
   return nil
 end
 
--- Wraps core_multiSpawn.createGroup; safe to call every frame (nothing happens while our wrapper is still part of the chain).
+-- Wraps core_multiSpawn.createGroup and fitGroup; safe to call every frame (nothing happens while our wrapper is still part of the chain).
 -- RLS's own wrapper is not registered as a forwarder of what it wraps, so when RLS wraps OVER us we are no longer "intact" and wrap
 -- again. The older layer then stays in the chain but is switched off (a plain passthrough), so only one layer ever builds a group.
-function M.install()
-  if not (core_multiSpawn and type(core_multiSpawn.createGroup) == "function") then return false end
-  local lib = lifetime()
-  if not lib then return false end
-  if ours and installedOn == core_multiSpawn
-      and lib.intact({target = core_multiSpawn, key = "createGroup", replacement = ours}) then return true end
-  local original = core_multiSpawn.createGroup
-  if layer then
-    layer.active = false
-    p3.count("rewrapped createGroup")
-    p3.log("W", "rewrapped createGroup (RLS or the game replaced it after we wrapped); the older layer is now a passthrough")
+local function hook(key, lib, make)
+  local slot, target = hooks[key], core_multiSpawn
+  if type(target[key]) ~= "function" then return end
+  if slot.ours and slot.on == target and lib.intact({target = target, key = key, replacement = slot.ours}) then return end
+  local original = target[key]
+  if slot.layer then
+    slot.layer.active = false
+    p3.count("rewrapped " .. key)
+    p3.log("W", "rewrapped " .. key .. " (RLS or the game replaced it after we wrapped); the older layer is now a passthrough")
   end
   local mine = {active = true}
-  layer = mine
-  local function wrapper(amount, params)
-    if not mine.active or building > 0 or not active() or isPoliceIntent(params) or tonumber(amount) == nil or amount < 1 then
+  slot.layer = mine
+  local wrapper = make(mine, original)
+  lib.registerForwarder(wrapper, original)
+  slot.ours, slot.on = wrapper, target
+  target[key] = wrapper
+  p3.log("I", "wrapped core_multiSpawn." .. key .. " (variety)")
+end
+
+local function makeCreateGroup(mine, original)
+  return function(amount, params)
+    if not mine.active or building > 0 or not active() or tonumber(amount) == nil or amount < 1 then
       return original(amount, params)
     end
+    local police = isPoliceIntent(params)
+    if police and not config.police.enabled then return original(amount, params) end
     building = building + 1
-    local ok2, result = pcall(build, original, amount, params)
+    local ok2, result = pcall(function()
+      if police then return buildPolice(amount) end
+      return build(original, amount, params)
+    end)
     building = building - 1
     if ok2 and type(result) == "table" and #result > 0 then return result end
     if not ok2 then p3.log("W", "variety failed, the game's own group is used: " .. tostring(result)) end
     return original(amount, params)
   end
-  lib.registerForwarder(wrapper, original)
-  ours, installedOn = wrapper, core_multiSpawn
-  core_multiSpawn.createGroup = wrapper
-  p3.log("I", "wrapped core_multiSpawn.createGroup (variety)")
+end
+
+-- The file group of the level's police (all Bastions on the west coast) goes through fitGroup(group, count): we replace it by a re-picked group.
+local function makeFitGroup(mine, original)
+  return function(group, count, ...)
+    if mine.active and building == 0 and tonumber(count) ~= nil and count >= 1 and active() and config.police.enabled then
+      building = building + 1
+      local ok2, result = pcall(function() return allPolice(group) and buildPolice(count) or nil end)
+      building = building - 1
+      if ok2 and type(result) == "table" and #result > 0 then return result end
+      if not ok2 then p3.log("W", "variety (police file group) failed, the game's own group is used: " .. tostring(result)) end
+    end
+    return original(group, count, ...)
+  end
+end
+
+function M.install()
+  if not (core_multiSpawn and type(core_multiSpawn.createGroup) == "function") then return false end
+  local lib = lifetime()
+  if not lib then return false end
+  hook("createGroup", lib, makeCreateGroup)
+  hook("fitGroup", lib, makeFitGroup)
   return true
 end
 
@@ -277,12 +378,14 @@ local function onConfig(data)
   for _ in pairs(config.mods) do mods = mods + 1 end
   p3.log("I", string.format("traffic variety settings received: enabled=%s mods=%d maxShare=%.2f oversample=%.1f traffic=%s parked=%s",
     tostring(config.enabled), mods, config.maxShare, config.oversample, tostring(config.applyToTraffic), tostring(config.applyToParked)))
+  p3.log("I", string.format("police variety: enabled=%s undercoverShare=%.2f maxShare=%.2f", tostring(config.police.enabled), config.police.undercoverShare, config.police.maxShare))
 end
 
 function M.onUpdate() M.install() end
 
 function M.onServerLeave()
   config, provisional, typeCache, missingMods, probed = nil, false, {}, {}, false
+  policeCache, policeKeys = nil, {}
   recent, recentSeen = {}, {}
 end
 

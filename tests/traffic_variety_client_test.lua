@@ -323,4 +323,68 @@ for _ = 1, 20 do catalogue[#catalogue + 1] = {model = "neverasked", config = "c1
 g = core_multiSpawn.createGroup(5, TRAFFIC)
 check(#g == 5 and g[1].model == "neverasked", "no file system to ask: models are not filtered")
 
+-- 10. police groups: re-picked (file group through fitGroup, and createGroup), settings, safety -----------------------------------------------
+do
+  local bastionCfgs = {"police_v8_awd_A", "police_redtail", "police_unmarked_v8_awd_A_Red", "police_unmarked_v8_awd_A_Blue", "undercover_redtail"}
+  local function polCfgs(list) local t = {} for _, c in ipairs(list) do t[c] = {["Config Type"] = "Police"} end return t end
+  local police = {bastion = polCfgs(bastionCfgs), fullsize = polCfgs({"police"}), sunburst = polCfgs({"police"}), etk800 = {c1 = {["Config Type"] = "Factory"}}}
+  local oldGetModel = core_vehicles.getModel
+  core_vehicles.getModelList = function() return {models = {bastion = {}, fullsize = {}, sunburst = {}, etk800 = {}}} end
+  core_vehicles.getModel = function(name) if police[name] then return {configs = police[name]} end return oldGetModel(name) end
+  local fitCalls = 0
+  local function fit(group, count) fitCalls = fitCalls + 1 local out = {} for i = 1, count do out[i] = group[(i - 1) % #group + 1] end return out end
+  core_multiSpawn.fitGroup = fit
+  T.onServerLeave()
+  T.onExtensionLoaded()   -- installs the fitGroup wrapper too
+  check(saw("wrapped core_multiSpawn.fitGroup (variety)"), "fitGroup is wrapped")
+  local fileGroup = {}
+  for _, c in ipairs(bastionCfgs) do fileGroup[#fileGroup + 1] = {model = "bastion", config = c} end
+  server({enabled = true})
+  local bastions, undercover, cars = 0, 0, 0
+  logged = {}
+  for _ = 1, 300 do
+    local pg = core_multiSpawn.fitGroup(fileGroup, 2)
+    check(#pg == 2, "police file group: the wanted size")
+    for _, e in ipairs(pg) do
+      cars = cars + 1
+      if e.model == "bastion" then bastions = bastions + 1 end
+      if e.config:find("unmarked") or e.config:find("undercover") then undercover = undercover + 1 end
+    end
+  end
+  check(fitCalls == 0, "the file group is replaced, the game's fitGroup is not needed")
+  check(bastions / cars < 0.4 and undercover / cars < 0.15, "police file group: fewer Bastions and few undercover (b=" .. bastions .. " u=" .. undercover .. " of " .. cars .. ")")
+  check(saw("police pool: 7 configs: bastion (undercover)=3, bastion=5, fullsize=1, sunburst=1"), "the police pool is logged")
+  check(saw("variety police group: want=2"), "police group is logged")
+  -- createGroup with the police intent (no file) is re-picked too
+  vanillaCalls = {}
+  local cg = core_multiSpawn.createGroup(3, POLICE)
+  check(#cg == 3 and #vanillaCalls == 0, "createGroup police intent: re-picked from the police pool")
+  -- a non-police list is passed to the game's fitGroup untouched
+  local other = {{model = "etk800", config = "c1"}, {model = "sunburst", config = "c2"}}
+  local fg = core_multiSpawn.fitGroup(other, 4)
+  check(#fg == 4 and fitCalls == 1, "a non-police group goes to the game's fitGroup")
+  -- switched off: the game's own groups
+  server({enabled = true, police = {enabled = false}})
+  vanillaCalls, fitCalls = {}, 0
+  core_multiSpawn.createGroup(5, POLICE)
+  core_multiSpawn.fitGroup(fileGroup, 3)
+  check(#vanillaCalls == 1 and vanillaCalls[1] == 5 and fitCalls == 1, "police.enabled = false: the game's own police groups")
+  -- an error while picking gives the game's group
+  server({enabled = true})
+  local oldList = core_vehicles.getModelList
+  T.onServerLeave()
+  server({enabled = true})
+  core_vehicles.getModelList = function() error("boom") end
+  fitCalls = 0
+  local safe = core_multiSpawn.fitGroup(fileGroup, 3)
+  check(#safe == 3 and fitCalls == 1, "no police pool (model list fails): the game's fitGroup answers")
+  core_vehicles.getModelList = oldList
+  -- a Bastion weight of 0 and only Bastions known: nothing to pick, the game keeps its group
+  T.onServerLeave()
+  server({enabled = true, police = {models = {bastion = 0, fullsize = 0, sunburst = 0}}})
+  fitCalls = 0
+  core_multiSpawn.fitGroup(fileGroup, 3)
+  check(fitCalls == 1, "all police weighted 0: the game's group")
+end
+
 print(string.format("traffic_variety_client_test: %d checks passed", passed))

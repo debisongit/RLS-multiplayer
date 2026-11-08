@@ -120,6 +120,18 @@ f:close()
 check(onDisk.smartTraffic.mix.drunk == 5 and onDisk.trafficVariety.models.pickup == 3 and onDisk.weather.force == "rain", "saved to config.json")
 check(onDisk.traffic ~= nil and onDisk.serverTag == cfg.serverTag, "(the file is the whole config)")
 
+-- police variety settings are editable and in the snapshot ---------------------------------------------------------------------------------------------
+take()
+set(1, {{p = {"trafficVariety", "police", "models", "bastion"}, v = 0.1}, {p = {"trafficVariety", "police", "undercoverShare"}, v = 0.2},
+  {p = {"trafficVariety", "police", "maxShare"}, v = 0.5}, {p = {"trafficVariety", "police", "enabled"}, v = true}})
+r = lastResult()
+check(r and r.applied == 4 and #r.rejected == 0, "police variety settings apply")
+check(cfg.trafficVariety.police.models.bastion == 0.1 and cfg.trafficVariety.police.undercoverShare == 0.2, "...and are stored")
+check(admin.snapshot().trafficVariety.police.models.bastion == 0.1 and admin.snapshot().trafficVariety.police.maxShare == 0.5, "...and are in the snapshot for the menu")
+set(1, {{p = {"trafficVariety", "police", "undercoverShare"}, v = 5}, {p = {"trafficVariety", "police", "undercoverWords"}, v = 1}})
+r = lastResult()
+check(r and r.applied == 0 and #r.rejected == 2, "out-of-range share and the word list are refused")
+
 -- modules resend to everybody, admins get the fresh state ------------------------------------------------------------------------------------------
 sent = {}
 _G[handlers["rlsmpSmartTrafficTick"]]()

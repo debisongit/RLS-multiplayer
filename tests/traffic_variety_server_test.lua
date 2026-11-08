@@ -95,4 +95,12 @@ tick()
 m = take()
 check(#m == 1 and m[1].data.enabled == false, "switched off: sent with enabled = false")
 
+-- police variety settings are part of the payload
+stages[0] = "loaded"
+tv.resend()
+tick()
+m = take()
+local pol = m[1] and m[1].data.police or {}
+check(#m >= 1 and pol.enabled == true and pol.models.bastion == 0.3 and pol.undercoverShare == 0.1 and pol.maxShare == 0.4 and pol.undercoverWords[2] == "unmarked", "police variety settings are sent (Bastion low, 10% undercover)")
+
 print(string.format("traffic_variety_server_test: %d checks passed", passed))

@@ -25,6 +25,8 @@ M.DEFAULTS = {
   applyToParked = true,
   zoneSpeedLimits = {city = 17, main = 27},   -- m/s: slower than city = "city", slower than main = "main", else "highway"
   swap = {enabled = false, live = false, perMinute = 2, hiddenSeconds = 5, checkSeconds = 2, minRatio = 1.5, maxFailures = 3},
+  -- Police groups: weight per model (Bastion low), at most `undercoverShare` of the cars undercover, at most `maxShare` of a group one model.
+  police = {enabled = true, models = {bastion = 0.3}, undercoverShare = 0.1, maxShare = 0.4, undercoverWords = {"undercover", "unmarked"}},
 }
 
 local MAX_ENTRIES = 64
@@ -67,6 +69,28 @@ local function swapSettings(src)
 end
 M.sanitizeSwap = swapSettings
 
+-- Police settings. A missing `models` means the default (Bastion low); a sent table (even empty) is used as it is.
+local function policeSettings(src)
+  src = type(src) == "table" and src or {}
+  local d = M.DEFAULTS.police
+  local words = {}
+  if type(src.undercoverWords) == "table" then
+    for _, w in ipairs(src.undercoverWords) do
+      if type(w) == "string" and w ~= "" and #w <= 32 and #words < 8 then words[#words + 1] = string.lower(w) end
+    end
+  else
+    for i, w in ipairs(d.undercoverWords) do words[i] = w end
+  end
+  return {
+    enabled = src.enabled ~= false,
+    models = type(src.models) == "table" and weightMap(src.models) or {bastion = d.models.bastion},
+    undercoverShare = number(src.undercoverShare, d.undercoverShare, 0, 1),
+    maxShare = number(src.maxShare, d.maxShare, 0.05, 1),
+    undercoverWords = words,
+  }
+end
+M.sanitizePolice = policeSettings
+
 -- Turns whatever the server sent (or a hand-edited config.json) into a safe settings table.
 function M.sanitize(src)
   src = type(src) == "table" and src or {}
@@ -95,6 +119,7 @@ function M.sanitize(src)
     applyToParked = src.applyToParked ~= false,
     zoneSpeedLimits = {city = city, main = main},
     swap = swapSettings(src.swap),
+    police = policeSettings(src.police),
   }
 end
 
@@ -207,6 +232,69 @@ function M.select(candidates, amount, infoOf, ctx, cfg, rnd)
     out[#out + 1] = pool[i].entry
     relaxed = relaxed + 1
   end
+  return out, relaxed
+end
+
+-- Is this config name an undercover / unmarked one (any of the words in its name)?
+function M.isUndercover(configName, words)
+  local name = string.lower(tostring(configName or ""))
+  for _, w in ipairs(words or {}) do
+    if name:find(w, 1, true) then return true end
+  end
+  return false
+end
+
+-- Picks `amount` police entries from `candidates` ({model, config}). pc = sanitized police settings. Police groups are tiny (1 to 3 cars),
+-- so the undercover cap is rounded at random: amount x share = 0.2 cars means 1 undercover car in 20 % of the groups, 10 % of the cars on average.
+-- Stages: unique + both caps, unique without the model cap, repeats, and only if there is no plain car at all, undercover cars without a cap.
+-- A model with weight 0 is never used. Returns the group and how many cars came from a relaxed stage.
+function M.selectPolice(candidates, amount, pc, rnd)
+  rnd = rnd or math.random
+  amount = math.floor(tonumber(amount) or 0)
+  local out, relaxed = {}, 0
+  if amount < 1 or type(candidates) ~= "table" then return out, 0 end
+  local pool, seen = {}, {}
+  for _, e in ipairs(candidates) do
+    if type(e) == "table" and e.model and e.config and not seen[keyOf(e)] then
+      seen[keyOf(e)] = true
+      local w = pc.models[e.model]
+      if w == nil then w = 1 end
+      if w > 0 then pool[#pool + 1] = {entry = e, w = w, uc = M.isUndercover(e.config, pc.undercoverWords)} end
+    end
+  end
+  if #pool == 0 then return out, 0 end
+  local x = amount * pc.undercoverShare
+  local ucCap = math.floor(x) + ((rnd() < x - math.floor(x)) and 1 or 0)
+  local modelCap = math.max(1, math.ceil(amount * pc.maxShare))
+  local perModel, ucCount = {}, 0
+  local function stage(list, useModelCap, useUcCap, unique)
+    while #out < amount do
+      local total = 0
+      for _, p in ipairs(list) do
+        if not (useModelCap and (perModel[p.entry.model] or 0) >= modelCap) and not (useUcCap and p.uc and ucCount >= ucCap) then total = total + p.w end
+      end
+      if total <= 0 then return end
+      local r, chosen = rnd() * total, nil
+      for i, p in ipairs(list) do
+        if not (useModelCap and (perModel[p.entry.model] or 0) >= modelCap) and not (useUcCap and p.uc and ucCount >= ucCap) then
+          chosen = i
+          r = r - p.w
+          if r <= 0 then break end
+        end
+      end
+      local p = unique and table.remove(list, chosen) or list[chosen]
+      out[#out + 1] = p.entry
+      perModel[p.entry.model] = (perModel[p.entry.model] or 0) + 1
+      if p.uc then ucCount = ucCount + 1 end
+      if not (useModelCap and useUcCap and unique) then relaxed = relaxed + 1 end
+    end
+  end
+  local left = {}
+  for i, p in ipairs(pool) do left[i] = p end
+  stage(left, true, true, true)
+  stage(left, false, true, true)
+  stage(pool, false, true, false)
+  stage(pool, false, false, false)
   return out, relaxed
 end
 

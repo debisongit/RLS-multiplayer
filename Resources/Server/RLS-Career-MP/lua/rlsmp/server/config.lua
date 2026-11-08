@@ -147,6 +147,9 @@ M.defaults = {
     -- Live swapping: a traffic car that nobody can see is replaced by a model that fits the road class and day or night better.
     -- enabled = only watch and log what would happen (changes nothing). live = really replace the cars (EXPERIMENTAL, never tried in the game).
     swap = {enabled = true, live = true, perMinute = 2, hiddenSeconds = 5, checkSeconds = 2, minRatio = 1.5, maxFailures = 3},
+    -- Police cars (RLS's west coast list is only Bastions, 4 of 5 unmarked/undercover). Weight per police model (missing = 1, 0 = never; default Bastion low),
+    -- undercoverShare = about this share of police cars may be unmarked/undercover (name contains a word of undercoverWords), maxShare = most of one model in a group.
+    police = {enabled = true, models = {bastion = 0.3}, undercoverShare = 0.1, maxShare = 0.4, undercoverWords = {"undercover", "unmarked"}},
   },
 
   smartTraffic = {

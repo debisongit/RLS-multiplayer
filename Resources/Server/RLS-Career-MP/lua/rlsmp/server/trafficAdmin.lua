@@ -45,6 +45,9 @@ local STATIC = {
   ["trafficVariety.maxCandidates"] = {"number", 10, 300, true},
   ["trafficVariety.zoneSpeedLimits.city"] = {"number", 1, 100},
   ["trafficVariety.zoneSpeedLimits.main"] = {"number", 1, 200},
+  ["trafficVariety.police.enabled"] = {"bool"},
+  ["trafficVariety.police.undercoverShare"] = {"number", 0, 1},
+  ["trafficVariety.police.maxShare"] = {"number", 0.05, 1},
   ["trafficVariety.swap.enabled"] = {"bool"},
   ["trafficVariety.swap.live"] = {"bool"},
   ["trafficVariety.swap.perMinute"] = {"number", 0, 12, true},
@@ -102,6 +105,7 @@ local DYNAMIC = {
   ["trafficVariety.mods"] = DYNAMIC_WEIGHT,
   ["trafficVariety.day"] = DYNAMIC_WEIGHT,
   ["trafficVariety.night"] = DYNAMIC_WEIGHT,
+  ["trafficVariety.police.models"] = DYNAMIC_WEIGHT,
 }
 
 local config, configPath
@@ -267,6 +271,7 @@ function M.snapshot()
   local pr = type(p.plateReading) == "table" and p.plateReading or {}
   local swap = type(v.swap) == "table" and v.swap or {}
   local limits = type(v.zoneSpeedLimits) == "table" and v.zoneSpeedLimits or {}
+  local vp = type(v.police) == "table" and v.police or {}
   local extra = copyRuled({theft = true, fence = true, market = true})
   -- A method without an "enabled" key is ON (theft.lua: enabled ~= false); show it that way, or the menu would list every method as off.
   for name, m in pairs(type(extra.theft) == "table" and type(extra.theft.methods) == "table" and extra.theft.methods or {}) do
@@ -283,6 +288,7 @@ function M.snapshot()
       typeWeights = copyMap(v.typeWeights), models = copyMap(v.models), mods = copyMap(v.mods),
       zones = copyZones(v.zones), day = copyMap(v.day), night = copyMap(v.night),
       zoneSpeedLimits = {city = limits.city, main = limits.main},
+      police = {enabled = vp.enabled, undercoverShare = vp.undercoverShare, maxShare = vp.maxShare, models = copyMap(vp.models)},
       swap = {enabled = swap.enabled, live = swap.live, perMinute = swap.perMinute, hiddenSeconds = swap.hiddenSeconds,
         minRatio = swap.minRatio, maxFailures = swap.maxFailures}},
     weather = {enabled = w.enabled, force = w.force, mix = copyMap(w.mix), periodMinutes = w.periodMinutes},

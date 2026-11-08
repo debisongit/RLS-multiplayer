@@ -143,4 +143,44 @@ for _ = 1, 400 do
 end
 check(modPicked / 400 > 0.88 and modPicked / 400 < 0.99, "a mod weighted 100 against 6 cars is picked about 94% of the time (" .. modPicked .. "/400)")
 
+-- police settings and picking ---------------------------------------------------------------------------------------------
+local pc = V.sanitize({}).police
+check(pc.enabled == true and pc.models.bastion == 0.3 and pc.undercoverShare == 0.1 and pc.maxShare == 0.4 and #pc.undercoverWords == 2, "police defaults: Bastion low, 10% undercover")
+pc = V.sanitize({police = {enabled = false, models = {bastion = 2, bad = -1, nan = "x"}, undercoverShare = 9, maxShare = 0, undercoverWords = {"Covert", 5, ""}}}).police
+check(pc.enabled == false and pc.models.bastion == 2 and pc.models.bad == 0 and pc.models.nan == nil, "police weights sanitized")
+check(pc.undercoverShare == 1 and pc.maxShare == 0.05 and #pc.undercoverWords == 1 and pc.undercoverWords[1] == "covert", "police numbers clamped, words lowercased")
+check(next(V.sanitize({police = {models = {}}}).police.models) == nil, "an empty models table is used as sent")
+check(V.sanitize({police = "x"}).police.models.bastion == 0.3, "junk police table: defaults")
+check(V.isUndercover("police_unmarked_v8_awd_A_Red", {"unmarked"}) and V.isUndercover("undercover_redtail", {"undercover"}) and not V.isUndercover("police_v8_awd_A", {"unmarked", "undercover"}), "undercover detection by name")
+local policePool = {
+  {model = "bastion", config = "police_v8_awd_A"}, {model = "bastion", config = "police_redtail"}, {model = "bastion", config = "police_unmarked_v8_awd_A_Red"},
+  {model = "bastion", config = "police_unmarked_v8_awd_A_Blue"}, {model = "bastion", config = "undercover_redtail"},
+  {model = "fullsize", config = "police"}, {model = "sunburst", config = "police"}, {model = "etk800", config = "police"},
+}
+rnd = lcg(5)
+local cars, bastions, undercover, groups = 0, 0, 0, 3000
+for _ = 1, groups do
+  local pg = V.selectPolice(policePool, 2, V.sanitize({}).police, rnd)
+  check(#pg == 2, "police group of 2 is full")
+  for _, e in ipairs(pg) do
+    cars = cars + 1
+    if e.model == "bastion" then bastions = bastions + 1 end
+    if V.isUndercover(e.config, {"unmarked", "undercover"}) then undercover = undercover + 1 end
+  end
+end
+check(undercover / cars < 0.14, "groups of 2: undercover about 10% or less (" .. undercover .. "/" .. cars .. ")")
+check(bastions / cars < 0.3, "Bastion is rare with weight 0.3 (" .. bastions .. "/" .. cars .. ")")
+local only = {{model = "bastion", config = "police_unmarked_v8_awd_A_Red"}, {model = "bastion", config = "undercover_redtail"}}
+local og = V.selectPolice(only, 3, V.sanitize({}).police, lcg(1))
+check(#og == 3, "only undercover cars exist: the group is still full (never short)")
+local zero = V.sanitize({police = {models = {bastion = 0}}}).police
+local zg = V.selectPolice(policePool, 4, zero, lcg(2))
+check(#zg == 4 and (function() for _, e in ipairs(zg) do if e.model == "bastion" then return false end end return true end)(), "weight 0 = never")
+check(#V.selectPolice({{model = "bastion", config = "x"}}, 3, zero, lcg(3)) == 0, "everything weighted 0: empty (the game keeps its group)")
+local capped = V.sanitize({police = {maxShare = 0.25, undercoverShare = 0}}).police
+local big = V.selectPolice(policePool, 4, capped, lcg(4))
+local perModel = {}
+for _, e in ipairs(big) do perModel[e.model] = (perModel[e.model] or 0) + 1 end
+check(#big == 4 and (perModel.bastion or 0) <= 1 and (perModel.fullsize or 0) <= 1, "per-model share cap holds while other cars exist")
+
 print(string.format("traffic_variety_lib_test: %d checks passed", passed))

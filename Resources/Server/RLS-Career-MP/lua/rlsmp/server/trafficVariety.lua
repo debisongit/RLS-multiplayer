@@ -47,6 +47,24 @@ function M.swap()
   }
 end
 
+-- Police variety settings; the client sanitizes them again.
+function M.police()
+  local p = type(cfg.police) == "table" and cfg.police or {}
+  local words = {}
+  if type(p.undercoverWords) == "table" then
+    for _, w in ipairs(p.undercoverWords) do
+      if type(w) == "string" and w ~= "" and #w <= 32 and #words < 8 then words[#words + 1] = w end
+    end
+  end
+  return {
+    enabled = p.enabled ~= false,
+    models = weights(p.models),
+    undercoverShare = tonumber(p.undercoverShare),
+    maxShare = tonumber(p.maxShare),
+    undercoverWords = words,
+  }
+end
+
 function M.payload()
   local zones = {}
   if type(cfg.zones) == "table" then
@@ -70,6 +88,7 @@ function M.payload()
     applyToParked = cfg.applyToParked ~= false,
     zoneSpeedLimits = {city = tonumber(limits.city), main = tonumber(limits.main)},
     swap = M.swap(),
+    police = M.police(),
   }
 end
 

@@ -260,6 +260,12 @@ local function sectionAmount(ui)
   checkbox(ui, "Vary moving traffic", {"trafficVariety", "applyToTraffic"})
   checkbox(ui, "Vary parked cars", {"trafficVariety", "applyToParked"})
   checkbox(ui, "Car variety on", {"trafficVariety", "enabled"})
+  ui.Separator()
+  ui.Text("Police cars")
+  checkbox(ui, "Vary police cars", {"trafficVariety", "police", "enabled"})
+  weightSlider(ui, "Bastion (1 = normal, low = fewer)", {"trafficVariety", "police", "models", "bastion"}, 0, 5, 0.3)
+  weightSlider(ui, "Undercover share", {"trafficVariety", "police", "undercoverShare"}, 0, 1, 0.1)
+  weightSlider(ui, "Largest share of one police model", {"trafficVariety", "police", "maxShare"}, 0.05, 1, 0.4)
 end
 
 local function sectionSwap(ui)
