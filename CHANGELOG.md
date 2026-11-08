@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.37 (all untested in-game)
+- Less lag from car changes: a frame guard postpones changes after slow frames, picks are prepared ahead. Hidden spare cars are not possible with BeamMP. (Claude A)
+- Realistic mix: everyday cars about 88%, rare ones (race, drift, hotrod, junk) about 2%; trucks and vans favoured on highways. (Claude A)
+- Cars are never changed or recycled within 120 m of a player or in the camera view; `distance:` log lines every 30 s. Turn the car changing off with `trafficVariety.respawn.enabled=false`. (Claude A)
+
 ## Unreleased (respawn distance, build number not bumped)
 - Traffic on foot: our re-roll, live swap and stuck-car recycling now never touch a car closer than 120 m to any player or in front of the camera (a wide cone, up to 500 m). The old test was only a line from the car to the avatar. (Claude A)
 - New log line `distance:` every 30 s (radius, active amount, respawns in the last minute, nearest respawn distance), plus a line per respawn and a warning when a car fades out near you. (Claude A)

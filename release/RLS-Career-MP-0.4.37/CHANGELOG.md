@@ -1,8 +1,26 @@
 # Changelog
 
+## 0.4.37 (all untested in-game)
+- Less lag from car changes: a frame guard postpones changes after slow frames, picks are prepared ahead. Hidden spare cars are not possible with BeamMP. (Claude A)
+- Realistic mix: everyday cars about 88%, rare ones (race, drift, hotrod, junk) about 2%; trucks and vans favoured on highways. (Claude A)
+- Cars are never changed or recycled within 120 m of a player or in the camera view; `distance:` log lines every 30 s. Turn the car changing off with `trafficVariety.respawn.enabled=false`. (Claude A)
+
+## Unreleased (respawn distance, build number not bumped)
+- Traffic on foot: our re-roll, live swap and stuck-car recycling now never touch a car closer than 120 m to any player or in front of the camera (a wide cone, up to 500 m). The old test was only a line from the car to the avatar. (Claude A)
+- New log line `distance:` every 30 s (radius, active amount, respawns in the last minute, nearest respawn distance), plus a line per respawn and a warning when a car fades out near you. (Claude A)
+- See `docs/RESEARCH_RESPAWN_DISTANCE.md`. Switch for the original behaviour: `trafficVariety.respawn.enabled = false`. (Claude A)
+
 ## 0.4.36 (all untested in-game)
 - Traffic: premade pool that rotates brands and models (no repeat within 6 picks, max 3 of a brand), respawned cars get a new model and config out of sight (3 a minute), parked car amount raised to 10 (`trafficVariety.parked.amount`). (Claude A)
 - Police chase: cops near you are held before a chase starts, fading-out cops are cancelled, cops re-placed should come from behind. Spawn range is back to the original game behavior by default (`police.bubbleMode`: original, protect, off). (Claude A)
+
+## Unreleased (preload and rarity, build number not bumped)
+- Lag: building a replacement car costs about a second of work in your game (the log shows jbeam, meshes and the vehicle thread loading). New lag protection: no car is built while the last frames were slow (and not for 3 s after a slow frame), never two builds within 6 s, never in a chase. Config `trafficVariety.preload`. (Claude A)
+- Lag: a small reserve (3) of picks is chosen ahead and their data read ahead, one every 4 s in calm moments; the re-roll uses them. No hidden spare car is built, because BeamMP would send it to everybody. 70% of picks come from models that are already on the street or built before (their meshes are loaded). (Claude A)
+- Log lines `preload: prepared ... ready N of M`, `preload: build ... took N ms`, `preload: build postponed: ...` so you can send logs. (Claude A)
+- Variety: everyday cars are now the clear majority (88% common, 10% uncommon like rally/tuner/offroad/workpackage, 2% rare like race/drift/hotrod/junk/exotic), config `trafficVariety.rarity`, sliders on the [ menu amount page. (Claude A)
+- Variety: default road class and night weights (trucks and vans on highways, fewer in the city and at night, small cars like the city); one log line `variety context: zone=... night=...` when it changes. (Claude A)
+- All untested in the game. (Claude A)
 
 ## Unreleased (chase and traffic range, build number not bumped)
 - Police: cops near you are now held BEFORE a chase starts (not only after the game noticed it), so a cop that sees you is not recycled in the half second before the chase flips on. A cop that is already fading out when it gets held fades back in. Untested. (Claude A)

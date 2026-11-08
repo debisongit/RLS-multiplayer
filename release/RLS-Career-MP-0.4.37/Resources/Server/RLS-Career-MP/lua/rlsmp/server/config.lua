@@ -137,9 +137,13 @@ M.defaults = {
     mods = {},
     -- Extra multipliers per road class (city, main, highway; from the road's speed limit) and per day or night, per Type.
     -- Example: zones = {highway = {Truck = 2}}, night = {Truck = 0.5}
-    zones = {},
+    -- Defaults: trucks and vans on highways, fewer in the city, fewer at night; small cars like the city (model names that do not exist are ignored).
+    zones = {
+      city = {Truck = 0.5, van = 0.8, semi = 0.2, md_series = 0.5, covet = 1.5, sunburst2 = 1.4, miramar = 1.4, vivace = 1.3, bx = 1.3},
+      highway = {Truck = 2, van = 2, semi = 3, md_series = 2, pickup = 1.5, covet = 0.6, bx = 0.5},
+    },
     day = {},
-    night = {},
+    night = {Truck = 0.6, semi = 0.4},
     -- A group is picked from oversample x its size candidates; no model fills more than maxShare of a group.
     oversample = 2,
     maxShare = 0.25,
@@ -167,6 +171,17 @@ M.defaults = {
     -- career starts (never lowers a higher one, gives the old value back on leaving). 0 = leave it alone. Every parked car is a car BeamMP syncs to the others
     -- and counts for the server's per-player car limit (MaxCars in ServerConfig.toml), so raise that too. Car theft needs parked cars to steal.
     parked = {amount = 10},
+    -- Rarity: everyday cars are the clear majority. Shares of the picks per tier (renormalised over the tiers that exist). A config is "rare" when its model or
+    -- config name has a rareWords word / is in rareModels / has Config Type Race or Drift / a Value of rareValue or more; "uncommon" for uncommonWords or
+    -- uncommonValue; else common. Words of 5+ letters match inside names ("offroad" in "offroada331972"), shorter ones whole words only.
+    rarity = {enabled = true, common = 0.88, uncommon = 0.10, rare = 0.02,
+      rareWords = {"race", "racer", "racing", "drift", "hotrod", "junk", "drag", "crawler", "trophy", "buggy", "formula", "rocket"},
+      uncommonWords = {"rally", "offroad", "tuner", "pro", "workpackage", "sport", "taxi", "police", "dune", "turbo"},
+      rareModels = {"scintilla", "bolide"}, uncommonValue = 45000, rareValue = 120000},
+    -- Preload (lag): no car is built while the frames are slow (slowFrameMs, then settleSeconds of calm), not within minGapSeconds of the last build, not in a
+    -- chase. `reserve` picks are made ahead and their data read ahead (one per prepareSeconds, only in calm moments); warmShare of the picks come from models
+    -- that are already loaded (on the street or built this session). No spare car is ever built or hidden: BeamMP would send it to everybody.
+    preload = {enabled = true, reserve = 3, prepareSeconds = 4, minGapSeconds = 6, slowFrameMs = 45, calmFrames = 45, settleSeconds = 3, warmShare = 0.7, ageMax = 240},
   },
 
   smartTraffic = {

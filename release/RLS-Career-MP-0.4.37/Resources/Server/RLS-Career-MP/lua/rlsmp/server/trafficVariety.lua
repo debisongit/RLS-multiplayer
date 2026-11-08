@@ -83,6 +83,29 @@ function M.parked()
   return {amount = tonumber(k.amount)}
 end
 
+local function wordList(src)
+  local out = {}
+  if type(src) ~= "table" then return nil end
+  for _, w in ipairs(src) do
+    if type(w) == "string" and w ~= "" and #w <= 32 and #out < 24 then out[#out + 1] = w end
+  end
+  return out
+end
+
+function M.rarity()
+  local r = type(cfg.rarity) == "table" and cfg.rarity or {}
+  return {enabled = r.enabled ~= false, common = tonumber(r.common), uncommon = tonumber(r.uncommon), rare = tonumber(r.rare),
+    rareWords = wordList(r.rareWords), uncommonWords = wordList(r.uncommonWords), rareModels = wordList(r.rareModels),
+    uncommonValue = tonumber(r.uncommonValue), rareValue = tonumber(r.rareValue)}
+end
+
+function M.preload()
+  local p = type(cfg.preload) == "table" and cfg.preload or {}
+  return {enabled = p.enabled ~= false, reserve = tonumber(p.reserve), prepareSeconds = tonumber(p.prepareSeconds), minGapSeconds = tonumber(p.minGapSeconds),
+    slowFrameMs = tonumber(p.slowFrameMs), calmFrames = tonumber(p.calmFrames), settleSeconds = tonumber(p.settleSeconds), warmShare = tonumber(p.warmShare),
+    ageMax = tonumber(p.ageMax)}
+end
+
 function M.payload()
   local zones = {}
   if type(cfg.zones) == "table" then
@@ -110,6 +133,8 @@ function M.payload()
     pool = M.pool(),
     respawn = M.respawn(),
     parked = M.parked(),
+    rarity = M.rarity(),
+    preload = M.preload(),
   }
 end
 
