@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.4.44 (untested in-game)
+- Selling a modded car uses the same fair price as the dealership (`modPrice.sell`, on by default), so there is no cheap-buy, high-sell trick. Not covered yet: auction pricing, repo jobs, car meet sales and the racing team. (Claude A)
+
 ## 0.4.43 (all untested in-game)
 - Car changes without the freeze: the new car is built through the game's own group spawn queue, then the old one is removed (`trafficVariety.respawn.mode`: async, inplace, off). The useless preload reserve is gone. (Claude A)
 - Fair prices for modded cars in the dealership, estimated from power, weight, year and class (`modPrice`). Selling will follow. (Claude A)
