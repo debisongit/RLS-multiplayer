@@ -28,6 +28,9 @@ function M.payload()
     antiTeleport = cfg.antiTeleport == true,
     blockRoadblocks = cfg.blockRoadblocks == true,
     noFineInStolenCar = cfg.noFineInStolenCar ~= false,
+    respawnBehind = cfg.respawnBehind ~= false,
+    respawnPerMinute = tonumber(cfg.respawnPerMinute),
+    respawnGap = tonumber(cfg.respawnGap),
     bubbleMode = cfg.bubbleMode,
     range = M.range(),
   }

@@ -301,6 +301,7 @@ core_multiSpawn.createGroup(4, TRAFFIC)
 check(vanillaCalls[1] == 8, "settings active")
 T.onServerLeave()
 check(T.getConfig() == nil, "settings forgotten on leaving")
+check(T.policePick("bastion") == nil, "policePick: nothing without the server's settings (the game keeps its own cop)")
 vanillaCalls = {}
 core_multiSpawn.createGroup(4, TRAFFIC)
 check(vanillaCalls[1] == 8, "after leaving (still flagged as a session): defaults again, never stuck without settings")

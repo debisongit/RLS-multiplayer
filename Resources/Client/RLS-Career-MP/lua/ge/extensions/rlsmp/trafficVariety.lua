@@ -359,6 +359,24 @@ local function buildPolice(amount)
   return group
 end
 
+-- One police car entry {model, config} of a model other than `avoidModel` (the police settings apply: Bastion weight, undercover cap), or nil.
+-- Used by rlsmp_policeRespawn when a cop is re-placed and comes back behind the player.
+function M.policePick(avoidModel)
+  if not (config and config.enabled and config.police and config.police.enabled) then return nil end
+  local pool = policePool()
+  if #pool == 0 then return nil end
+  local fallback
+  for _ = 1, 6 do
+    local group = V.selectPolice(pool, 1, config.police)
+    local e = group and group[1]
+    if e then
+      fallback = fallback or e
+      if e.model ~= avoidModel then return {model = e.model, config = e.config} end
+    end
+  end
+  return fallback and {model = fallback.model, config = fallback.config} or nil   -- the pool has only that model: better the same than none
+end
+
 -- The premade pool: a few eligible configs of EVERY model the game could use as traffic, built once per session, a few models per frame.
 -- Same rules as the game's own groups: model Types from gameplay_traffic_trafficUtils.getBaseGroupParams() (when it lists any), RLS's
 -- trafficConfigFilter.isConfigEligible for every config. Gives groups and re-rolls more than the 5 to 15 cars the game offered last time.

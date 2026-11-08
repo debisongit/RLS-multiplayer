@@ -401,6 +401,8 @@ local function onConfig(data)
     local u = rawget(_G, "rlsmp_unjam") or package.loaded["rlsmp/unjam"]
     if u and u.configure then u.configure(b and b.getRange and b.getRange().unjam or data.range.unjam) end
   end
+  local pr = rawget(_G, "rlsmp_policeRespawn") or package.loaded["rlsmp/policeRespawn"]
+  if pr and pr._onConfig then pr._onConfig(data) end   -- cops that come back behind the player (rlsmp/policeRespawn.lua)
   if not settings.antiTeleport then releaseAll() end
 end
 

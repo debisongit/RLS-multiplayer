@@ -462,3 +462,8 @@ Client input action `rlsmpInteract` (`core/input/actions/rlsmp.json`, default ke
 ## No fine in a stolen car (client `rlsmp/police.lua`, server setting `police.noFineInStolenCar`)
 
 `rlsmpPoliceConfig` also carries `noFineInStolenCar` (default true). While the player's car is one the theft code converted from a parked car (`lib/theft` converted set), the client wraps `overhaul_career_economy_payment.pay` and skips the one payment whose reason label is "Police fine" (RLS's `playerDriving.onPursuitAction` charges it on a citation or arrest), and rewrites the "Citation fine" / "Arrest fine" message that follows within 2 s. Nothing else is touched.
+
+
+## Police cars come back behind the player (client `rlsmp/policeRespawn.lua`, server `police.respawnBehind|respawnPerMinute|respawnGap`)
+
+`rlsmpPoliceConfig` also carries `respawnBehind`, `respawnPerMinute`, `respawnGap` (handled by `rlsmp/police.lua`, which passes them to `rlsmp_policeRespawn._onConfig`: one event name, one handler). A police unit (role police, AI) whose `respawnCount` rose and that is 80 m or more from the player gets a replacement: `core_multiSpawn.spawnGroup({entry}, 1, {name = "rlsmpCop", mode = "roadBehind", gap = respawnGap})` with `entry` from `rlsmp_trafficVariety.policePick(oldModel)` (another model), then on `onVehicleGroupSpawned(.., "rlsmpCop")`: `gameplay_traffic.insertTraffic(id, false, true)`, `veh:setRole('police')`, a check that it is behind the player and at least 80 m away, then the old unit is removed (`removeTraffic` + `delete`). Failure (in front, too close, no message in 25 s, any error) keeps the old unit; 3 failures switch it off for the session.

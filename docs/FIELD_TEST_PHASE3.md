@@ -539,3 +539,13 @@ Known gaps: only RLS's own "Police fine" is covered (not other fees); the chase,
 2. The log has `smart: it is night now: new personalities from the night mix` when night falls and `... day now ...` at dawn. The line `smart: personalities now ...` (census) shows the counts if you call `rlsmp_personalities.census()` from the console.
 3. Menu (`[`), Behaviour page: the "at night x" sliders change it live. Set a night multiplier to 1 to switch the effect off.
 Known gaps: never played; it only changes WHICH personality a car draws, not how bad a racer or a drunk is.
+
+
+## Police cars come back behind you, as another model (build 0.4.52)
+
+1. Drive until cops get re-placed (a chase, or just driving through the city). Search the game log for `police respawn:`.
+2. Expected sequence: `cop N re-placed X m in front of / behind the player`, `building <model> behind the player`, `new cop M came out Y m behind the player`, `done, new cop M (<model>), old cop N removed`. The new model is not the old one.
+3. If you see `came out IN FRONT`, `too close` or `failed`, the placement did not work as hoped: send those lines and the next ones. After three failures the log says `switched off for this session` and RLS places cops as before.
+4. Check that the new cop chases you like the others (role police is set the way RLS's own police service does it).
+Settings: Police page of the `[` menu (on/off, builds a minute, how far behind).
+Known gaps: never played. What `roadBehind` does with one car and a gap is a guess (the log lines tell); BeamMP sends each spawn and delete to everybody, and the per-player car limit (`MaxCars`) can refuse the extra car for a moment.

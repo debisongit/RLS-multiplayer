@@ -101,6 +101,12 @@ M.defaults = {
     -- RLS charges a "Police fine" when a chase ends in a citation or an arrest. Driving a car that is not registered to you (a stolen car) means
     -- the fine is not charged: the car is not on your name. The chase, the arrest and the plate flag still happen.
     noFineInStolenCar = true,
+    -- A police car that RLS re-places comes back as a DIFFERENT model on the road BEHIND the player (client rlsmp_policeRespawn), not where the game
+    -- puts it (often in front, same model). `respawnPerMinute` limits how many we build (BeamMP sends every spawn and delete to everybody);
+    -- `respawnGap` is the multi spawn gap in metres (how far behind it asks for).
+    respawnBehind = true,
+    respawnPerMinute = 4,
+    respawnGap = 150,
     -- Which traffic cars another player's game may not recycle (client rlsmp/bubble.lua):
     -- "original" = RLS's own spawn and respawn distances, a car is only kept while another player is within its
     --   own active radius AND has a clear line to it; "protect" = the old strict rule (450 m, or a clear line up to 1 km);

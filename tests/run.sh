@@ -75,6 +75,7 @@ luajit tests/range_test.lua
 luajit tests/parked_client_test.lua
 luajit tests/weather_client_test.lua
 luajit tests/police_client_test.lua
+luajit tests/police_respawn_client_test.lua
 luajit tests/positions_client_test.lua
 luajit tests/personalities_client_test.lua
 luajit tests/plate_read_lib_test.lua
