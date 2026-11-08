@@ -4,7 +4,7 @@
 - Theft hints for black market members: `/inspect` near a parked car (3 s) tells its weakness, tools and risk; a Scout tip in the black market app marks 2 to 3 stealable cars for about 10 minutes. (Claude A)
 - The big debug text labels on meetup and drop markers are gone. (Claude A)
 
-## Unreleased (inspect hint and scout tip, build number not bumped, all untested in-game)
+## 0.4.38, more detail: inspect hint and scout tip
 - Black market members get a small toast when they walk within about 15 m of a stealable parked car ("type /inspect"). Everyone else never sees it. (Claude A)
 - `/inspect` takes 3 s and tells the car's tier, the tools it needs (missing ones listed) and the rough risk (alarm, GPS tracker, loud). Boring cars and non-members get the same wait and a plain "nothing stands out"; the server judges distance, membership and the pick itself. (Claude A)
 - Black Market phone app: "Scout tip" button. It marks 2 to 3 stealable parked cars within 800 m with small floating dots for up to 10 minutes. Price, rep, cooldown in `market.scout`; more than 3 tips an hour cost 1 reputation each. (Claude A)
@@ -15,7 +15,7 @@
 - Realistic mix: everyday cars about 88%, rare ones (race, drift, hotrod, junk) about 2%; trucks and vans favoured on highways. (Claude A)
 - Cars are never changed or recycled within 120 m of a player or in the camera view; `distance:` log lines every 30 s. Turn the car changing off with `trafficVariety.respawn.enabled=false`. (Claude A)
 
-## Unreleased (respawn distance, build number not bumped)
+## 0.4.37, more detail: respawn distance
 - Traffic on foot: our re-roll, live swap and stuck-car recycling now never touch a car closer than 120 m to any player or in front of the camera (a wide cone, up to 500 m). The old test was only a line from the car to the avatar. (Claude A)
 - New log line `distance:` every 30 s (radius, active amount, respawns in the last minute, nearest respawn distance), plus a line per respawn and a warning when a car fades out near you. (Claude A)
 - See `docs/RESEARCH_RESPAWN_DISTANCE.md`. Switch for the original behaviour: `trafficVariety.respawn.enabled = false`. (Claude A)
@@ -24,7 +24,7 @@
 - Traffic: premade pool that rotates brands and models (no repeat within 6 picks, max 3 of a brand), respawned cars get a new model and config out of sight (3 a minute), parked car amount raised to 10 (`trafficVariety.parked.amount`). (Claude A)
 - Police chase: cops near you are held before a chase starts, fading-out cops are cancelled, cops re-placed should come from behind. Spawn range is back to the original game behavior by default (`police.bubbleMode`: original, protect, off). (Claude A)
 
-## Unreleased (preload and rarity, build number not bumped)
+## 0.4.37, more detail: preload and rarity
 - Lag: building a replacement car costs about a second of work in your game (the log shows jbeam, meshes and the vehicle thread loading). New lag protection: no car is built while the last frames were slow (and not for 3 s after a slow frame), never two builds within 6 s, never in a chase. Config `trafficVariety.preload`. (Claude A)
 - Lag: a small reserve (3) of picks is chosen ahead and their data read ahead, one every 4 s in calm moments; the re-roll uses them. No hidden spare car is built, because BeamMP would send it to everybody. 70% of picks come from models that are already on the street or built before (their meshes are loaded). (Claude A)
 - Log lines `preload: prepared ... ready N of M`, `preload: build ... took N ms`, `preload: build postponed: ...` so you can send logs. (Claude A)
@@ -32,7 +32,7 @@
 - Variety: default road class and night weights (trucks and vans on highways, fewer in the city and at night, small cars like the city); one log line `variety context: zone=... night=...` when it changes. (Claude A)
 - All untested in the game. (Claude A)
 
-## Unreleased (chase and traffic range, build number not bumped)
+## 0.4.36, more detail: chase and traffic range
 - Police: cops near you are now held BEFORE a chase starts (not only after the game noticed it), so a cop that sees you is not recycled in the half second before the chase flips on. A cop that is already fading out when it gets held fades back in. Untested. (Claude A)
 - Police: every police car gets "respawn away from you" (`spawnDirBias = -1`), so a cop that RLS re-places anyway should arrive from behind, not ahead. This is a guess about vanilla placement, see `docs/RESEARCH_CHASE_RANGE.md`. Roadblocks and police teleports are also refused before the chase is noticed. Untested. (Claude A)
 - Traffic range: new setting `police.bubbleMode` (menu: Police page). Default `original` = RLS's own spawn and respawn distances; a car is only kept while another player is inside its own radius and sees it. `protect` = the old strict rule (450 m, or line of sight up to 1 km), `off` = no protection. The old rule is what made respawns far and repetitive. Untested. (Claude A)
@@ -43,7 +43,7 @@
 - Garage: Strip and illegal parts buttons in your RLS garage, plus a Black market items button. (Claude A)
 - Police variety: more police models, fewer undercovers, fewer Bastions. (Claude A)
 
-## Unreleased (traffic pool, build number not bumped)
+## 0.4.36, more detail: traffic pool
 - Respawned traffic cars now change: when RLS respawns a traffic car out of everybody's sight, it is replaced by a different model with a different config (and half of them get new paint). Rate-limited (3 a minute), never police, taxis, chases, job, crashed or player cars, and it stops itself after 3 failures. Settings `trafficVariety.respawn`. Untested in game. (Claude A)
 - Premade car pool: traffic groups and re-rolled cars are picked from a few configs of every model the game could use (RLS's own traffic filter applies), round robin: not the same model within the last 6 picks, at most 3 of one brand in the last 12, at most 3 of one brand on the street. Settings `trafficVariety.pool`. Untested in game. (Claude A)
 - More parked cars: after the career starts, the game setting `trafficParkingAmount` is raised to `trafficVariety.parked.amount` (default 10; your log had 2) and RLS tops the cars up; the old value comes back when you leave. 0 = leave alone. More parked cars are more BeamMP cars per player, so check `MaxCars`. Untested in game. (Claude A)
@@ -53,9 +53,9 @@
 - New meetup selling. A Marketplace sale no longer finishes at once: you get a GPS route to a meetup spot the server picks, stop there for a moment, and the sale completes. Spots change each time and there is a cooldown. Untested in game, and the hook into the Marketplace is unverified (see `docs/RESEARCH_MEETUP_SALE.md`). (untested) (Claude A)
 - A fully legal car is never set up. A stolen car or a car with a police-flagged plate has a chance that the buyer is a police setup: 1 or 2 cops chase you, no roadblocks, no sale. The chance is never 0 or 100 percent for those cars, so you cannot be sure. (untested) (Claude A)
 - Black market: `/meetup black` sells a stolen car you drive by meetup; the server pays. `/meetup` is the fallback for a garage car. Settings in config `meetup`. (untested) (Claude A)
-## Unreleased (police variety, build number not bumped)
+## 0.4.35, more detail: police variety
 - Police cars: RLS's west coast police list is 5 Bastions (4 of 5 unmarked or undercover), and its police do not even go through the group builder we wrapped. We now also wrap `fitGroup` and re-pick police groups from every police config the game has: Bastion weight 0.3, about 10 percent undercover, at most 40 percent of one model. New server block `trafficVariety.police` (also in the `[` menu on the amount page). Research: `docs/RESEARCH_POLICE_MIX.md`. Untested in game. (Claude A)
-## Unreleased (garage strip)
+## 0.4.35, more detail: garage strip
 - New: a **"Strip / illegal parts"** button inside RLS's own garage computer, on every car you own (greyed out for loaned, rented or auctioned cars). It opens a small dialog: strip the car for cash (30% of its value; the car and its parts leave your RLS garage) or fit a fake plate, VIN plate or part number kit you bought. Untested in game. (Claude A)
 - Stolen cars are not in the RLS garage, so they get an extra button "Stolen car: PLATE" in the same computer when one stands within 60 m. Stripping a stolen car works anywhere (no drop spot) but needs the black market. Untested. (Claude A)
 - Fitted parts are remembered on the stolen car; `/fence resell` and `gamble` count them, so you do not have to carry the items to the drop spot. The fake plate does not change the plate text yet. Untested. (Claude A)
