@@ -277,6 +277,11 @@ check(next(sn.theft.methods) ~= nil and allOn, "the default methods have no enab
 cfg.theft.methods.relay_box.enabled = false
 check(admin.snapshot().theft.methods.relay_box.enabled == false and admin.snapshot().theft.methods.signal_cloner.enabled == true, "a method switched off shows as off")
 cfg.theft.methods.relay_box.enabled = nil
+set(0, {{p = {"police", "copCount"}, v = 2}, {p = {"police", "copCount"}, v = 9}, {p = {"police", "copTopUpSeconds"}, v = 1}, {p = {"police", "copTopUpSeconds"}, v = 45}})
+r = lastResult()
+check(r and r.applied == 2 and #r.rejected == 2 and cfg.police.copCount == 2 and cfg.police.copTopUpSeconds == 45, "police car count and top-up time: in range accepted, out of range refused")
+check(admin.snapshot().police.copCount == 2 and admin.snapshot().police.copTopUpSeconds == 45, "the snapshot carries them")
+cfg.police.copCount, cfg.police.copTopUpSeconds = 3, 30
 set(0, {{p = {"fence", "phone"}, v = false}, {p = {"fence", "gambleBust"}, v = 0.1}, {p = {"fence", "gambleBase"}, v = 0.5}})
 r = lastResult()
 check(r and r.applied == 1 and #r.rejected == 2 and cfg.fence.phone == false and admin.snapshot().fence.phone == false, "fence.phone can be switched; the gamble settings are gone from the menu's allowlist")

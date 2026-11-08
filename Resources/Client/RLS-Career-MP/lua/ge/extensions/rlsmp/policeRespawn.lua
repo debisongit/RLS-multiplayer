@@ -1,4 +1,4 @@
--- RLS-Career-MP client extension "rlsmp_policeRespawn": a police car that RLS re-places comes back BEHIND the player, as a different model.
+-- RLS-Career-MP client extension "rlsmp_policeRespawn": more police cars, and a police car that RLS re-places comes back BEHIND the player as a different model.
 -- SPDX-License-Identifier: AGPL-3.0-only
 --
 -- The owner's report: a re-placed cop keeps its model and the game puts it in front of the player (its own `spawnDirBias` hint did not help, see
@@ -14,6 +14,12 @@
 -- Never: units within `minDistance` of the player, our own new cars, a second build at the same time, more than `perMinute` a minute (BeamMP sends every
 -- spawn and delete to everybody). Switch: server config police.respawnBehind (also on the Police page of the [ menu).
 -- UNVERIFIED IN GAME: what `roadBehind` does with one car and `gap` (the log says where the car really came out), and that a cop made this way chases.
+--
+-- TOP-UP (owner: "add more cops to the map, at most 2 to 3"): the game only puts ONE police car on the map ("requested 1, allocated 1" in the log). When the
+-- number of AI police units is below `copCount` (server config police.copCount, default 3, 0 = leave the game's number) we build one more the same way
+-- (steps 2 and 3 above, a random police model), at most one per `topUpSeconds` (30). The new cops are police like the game's own: RLS's police service
+-- sends them after you in a chase. They are not removed when the game re-places them: they are replaced by a cop of another model behind you like any other.
+-- Failures are counted separately for the two jobs (3 each), so a top-up that does not work never switches the respawn off, and the other way round.
 -- Pure helpers are exported for tests/police_respawn_client_test.lua.
 
 local M = {}
@@ -24,17 +30,22 @@ local CHECK_EVERY = 0.5
 local BUILD_TIMEOUT = 25          -- seconds to wait for onVehicleGroupSpawned
 local NAME = "rlsmpCop"
 
-local settings = {respawnBehind = true, perMinute = 4, gap = 150, minDistance = 80, maxFailures = 3}
+local settings = {respawnBehind = true, perMinute = 4, gap = 150, minDistance = 80, maxFailures = 3, copCount = 3, topUpSeconds = 30}
 local seen = {}                   -- police unit id -> respawnCount last time we looked
-local mine = {}                   -- ids of the cops we built (never replaced again)
-local job                         -- the build in flight: {oldId, entry, startedAt}
+local mine = {}                   -- ids of the cops we built (for the log and the tests)
+local grace = {}                  -- cop id we just built -> clock before which a respawn counter change is not acted on
+local job                         -- the build in flight: {kind = "respawn" | "top", oldId?, entry, startedAt}
 local recent = {}                 -- os.time() of our builds in the last minute
-local failures, off = 0, false
+local failures = {respawn = 0, top = 0}
+local off = {respawn = false, top = false}
+local lastTop = -math.huge        -- clock of the last top-up build
 local clock, timer = 0, 0
 
 local function isMP() return MPCoreNetwork ~= nil and MPCoreNetwork.isMPSession ~= nil and MPCoreNetwork.isMPSession() end
 local function careerActive() return overhaul_career_career ~= nil and overhaul_career_career.isActive() end
-local function active() return settings.respawnBehind and not off and isMP() and careerActive() end
+local function live() return isMP() and careerActive() end
+local function respawnOn() return settings.respawnBehind and not off.respawn and live() end
+local function topOn() return settings.copCount > 0 and not off.top and live() end
 local function ext(name) return rawget(_G, "rlsmp_" .. name) or package.loaded["rlsmp/" .. name] end
 
 local function trafficData()
@@ -85,22 +96,25 @@ local function removeCar(id)
   if o and o.delete then pcall(o.delete, o) end
 end
 
-local function fail(why)
-  failures = failures + 1
-  p3.count("police respawn failed")
-  p3.log("W", "police respawn: " .. why .. " (failure " .. failures .. " of " .. settings.maxFailures .. ")")
-  if failures >= settings.maxFailures then
-    off = true
-    p3.log("W", "police respawn: switched off for this session after " .. failures .. " failures; RLS places cops as before")
+local LABEL = {respawn = "respawn", top = "top-up"}      -- the word in the log lines
+
+local function fail(why, kind)
+  kind = kind or "respawn"
+  failures[kind] = failures[kind] + 1
+  p3.count("police " .. kind .. " failed")
+  p3.log("W", "police " .. LABEL[kind] .. ": " .. why .. " (failure " .. failures[kind] .. " of " .. settings.maxFailures .. ")")
+  if failures[kind] >= settings.maxFailures then
+    off[kind] = true
+    p3.log("W", "police " .. LABEL[kind] .. ": switched off for this session after " .. failures[kind] .. " failures; RLS places cops as before")
   end
 end
 
--- Start building the replacement for a re-placed unit. Returns true when a build was started.
-local function start(oldId, oldVeh)
+-- Build one police car through the game's group spawn. kind = "respawn" (replaces `oldId`, a model other than its) or "top" (one more cop).
+-- Returns true when a build was started.
+local function build(kind, oldId, oldModel, have)
   if job or not underRate() then return false end
   local v = ext("trafficVariety")
   if not (v and v.policePick) then return false end
-  local oldModel = oldVeh.jbeam or (objectOf(oldId) and objectOf(oldId).jbeam)
   local entry = v.policePick(oldModel)
   if not entry then return false end
   local ms = rawget(_G, "core_multiSpawn")
@@ -109,79 +123,98 @@ local function start(oldId, oldVeh)
     return false
   end
   local ok, err = pcall(ms.spawnGroup, {{model = entry.model, config = entry.config}}, 1, {name = NAME, mode = "roadBehind", gap = settings.gap})
-  if not ok then fail("spawnGroup raised: " .. tostring(err)) return false end
+  if not ok then fail("spawnGroup raised: " .. tostring(err), kind) return false end
   recent[#recent + 1] = os.time()
-  job = {oldId = oldId, entry = entry, startedAt = clock}
-  p3.count("police respawn started")
-  p3.log("I", string.format("police respawn: cop %s (%s) was re-placed; building %s/%s behind the player", tostring(oldId), tostring(oldModel), entry.model, entry.config))
+  job = {kind = kind, oldId = oldId, entry = entry, startedAt = clock}
+  p3.count("police " .. kind .. " started")
+  if kind == "respawn" then
+    p3.log("I", string.format("police respawn: cop %s (%s) was re-placed; building %s/%s behind the player", tostring(oldId), tostring(oldModel), entry.model, entry.config))
+  else
+    p3.log("I", string.format("police top-up: only %s of %s cops on the map; building %s/%s behind the player", tostring(have or "?"), tostring(settings.copCount), entry.model, entry.config))
+  end
   return true
 end
 
--- The game says the group exists. Give the car to traffic as police, check where it came out, then remove the old unit.
+-- The game says the group exists. Give the car to traffic as police, check where it came out; a replacement then removes the old unit.
 function M.onVehicleGroupSpawned(vehList, groupId, groupName)
   if groupName ~= NAME or not job then return end
   local j = job
   job = nil
+  local kind = j.kind
   local id = type(vehList) == "table" and vehList[1] or nil
-  if not id then return fail("the group came back empty") end
+  if not id then return fail("the group came back empty", kind) end
   mine[id] = true
-  if not (gameplay_traffic and gameplay_traffic.insertTraffic) then removeCar(id) return fail("no insertTraffic") end
+  if not (gameplay_traffic and gameplay_traffic.insertTraffic) then removeCar(id) return fail("no insertTraffic", kind) end
   local ok, err = pcall(gameplay_traffic.insertTraffic, id, false, true)
-  if not ok then removeCar(id) return fail("insertTraffic failed: " .. tostring(err)) end
+  if not ok then removeCar(id) return fail("insertTraffic failed: " .. tostring(err), kind) end
   local veh = trafficData()[id]
   if veh and veh.setRole then
     local okRole, errRole = pcall(veh.setRole, veh, "police")
-    if not okRole then removeCar(id) return fail("setRole failed: " .. tostring(errRole)) end
+    if not okRole then removeCar(id) return fail("setRole failed: " .. tostring(errRole), kind) end
   else
     removeCar(id)
-    return fail("the new car is not in the traffic data")
+    return fail("the new car is not in the traffic data", kind)
   end
   local o = objectOf(id)
   local ppos, pdir = playerFrame()
   local at = o and xyz(o:getPosition())
   if ppos and at then
     local ahead, dist = M.relative(ppos, pdir, at)
-    p3.log("I", string.format("police respawn: new cop %s came out %.0f m %s the player", tostring(id), dist, ahead and "IN FRONT OF" or "behind"))
+    p3.log("I", string.format("police %s: new cop %s came out %.0f m %s the player", LABEL[kind], tostring(id), dist, ahead and "IN FRONT OF" or "behind"))
     if ahead or dist < settings.minDistance then
       removeCar(id)
       mine[id] = nil
-      return fail(string.format("the new cop came out %s (%.0f m): not what we want", ahead and "in front" or "too close", dist))
+      return fail(string.format("the new cop came out %s (%.0f m): not what we want", ahead and "in front" or "too close", dist), kind)
     end
   end
-  failures = 0                      -- a good one: the failure count starts again
-  removeCar(j.oldId)
-  seen[j.oldId] = nil
-  p3.count("police respawn done")
-  p3.log("I", string.format("police respawn: done, new cop %s (%s), old cop %s removed", tostring(id), j.entry.model, tostring(j.oldId)))
+  failures[kind] = 0                -- a good one: the failure count starts again
+  seen[id] = tonumber(veh.respawnCount) or 0
+  grace[id] = clock + 10            -- its own start is not a re-placement
+  if kind == "respawn" then
+    removeCar(j.oldId)
+    seen[j.oldId] = nil
+  end
+  p3.count("police " .. kind .. " done")
+  p3.log("I", string.format("police %s: done, new cop %s (%s)%s", LABEL[kind], tostring(id), j.entry.model,
+    kind == "respawn" and (", old cop " .. tostring(j.oldId) .. " removed") or ""))
 end
 
 local function step()
-  if not active() then return end
+  if not (respawnOn() or topOn()) then return end
   local traffic = trafficData()
   local playerId = be and be.getPlayerVehicleID and be:getPlayerVehicleID(0) or nil
   if job and clock - job.startedAt > BUILD_TIMEOUT then
+    local kind = job.kind
     job = nil
-    fail("no group-spawned message within " .. BUILD_TIMEOUT .. " s")
+    fail("no group-spawned message within " .. BUILD_TIMEOUT .. " s", kind)
   end
   local ppos, pdir = playerFrame()
   for id in pairs(seen) do if traffic[id] == nil then seen[id] = nil end end
   for id in pairs(mine) do if traffic[id] == nil then mine[id] = nil end end
+  for id in pairs(grace) do if traffic[id] == nil then grace[id] = nil end end
+  local cops = 0
   for id, veh in pairs(traffic) do
-    if isPoliceUnit(id, veh, playerId) and not mine[id] then
+    if isPoliceUnit(id, veh, playerId) then
+      cops = cops + 1
       local rc = tonumber(veh.respawnCount) or 0
       if seen[id] == nil then
         seen[id] = rc
       elseif rc > seen[id] then
         seen[id] = rc
-        if ppos and veh.pos then
+        if respawnOn() and not (grace[id] and clock < grace[id]) and ppos and veh.pos then
           local ahead, dist = M.relative(ppos, pdir, veh.pos)
           if dist >= settings.minDistance then
             p3.log("I", string.format("police respawn: cop %s re-placed %.0f m %s the player", tostring(id), dist, ahead and "in front of" or "behind"))
-            start(id, veh)
+            build("respawn", id, veh.jbeam or (objectOf(id) and objectOf(id).jbeam))
           end
         end
       end
     end
+  end
+  -- more cops: one more when there are fewer than copCount, at most one per topUpSeconds, and not while another build is running
+  if topOn() and not job and cops < settings.copCount and clock - lastTop >= settings.topUpSeconds and ppos then
+    lastTop = clock
+    build("top", nil, nil, cops)
   end
 end
 
@@ -200,11 +233,16 @@ local function onConfig(data)
   if per and per >= 0 and per <= 30 then settings.perMinute = math.floor(per) end
   local gap = tonumber(data.respawnGap)
   if gap and gap >= 20 and gap <= 500 then settings.gap = gap end
+  local cops = tonumber(data.copCount)
+  if cops and cops >= 0 and cops <= 6 then settings.copCount = math.floor(cops) end
+  local topUp = tonumber(data.copTopUpSeconds)
+  if topUp and topUp >= 5 and topUp <= 600 then settings.topUpSeconds = topUp end
 end
 M._onConfig = onConfig
 
 function M.onServerLeave()
-  seen, mine, job, recent, failures, off = {}, {}, nil, {}, 0, false
+  seen, mine, grace, job, recent = {}, {}, {}, nil, {}
+  failures, off, lastTop = {respawn = 0, top = 0}, {respawn = false, top = false}, -math.huge
 end
 
 function M.getState() return {job = job, failures = failures, off = off, settings = settings, seen = seen, mine = mine} end

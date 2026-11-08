@@ -559,3 +559,12 @@ Known gaps: never played. What `roadBehind` does with one car and a gap is a gue
 4. Switch `fence.phone` off on the Fence page of the `[` menu: the phone buttons then say "Selling from the phone is switched off on this server"; the garage computer still works.
 5. Send me the `RLSMP-GARAGE` and `[fence]` lines if something is off.
 Known gaps: never played; the phone can sell a car that is far away (a stolen car is paid for without being delivered), see `fence.phone`.
+
+
+## More cops on the map (build 0.4.54)
+
+1. Drive around (a few minutes). The log should show `police top-up: only 1 of 3 cops on the map; building <model>/<config> behind the player`, then `new cop N came out X m behind the player` and `done`, about every 30 s until there are 3 cops (the game's one plus two).
+2. Look for the cop cars: different models, patrolling like normal traffic. Start a chase: all of them should join.
+3. If the log says `came out IN FRONT`, `too close` or `failed`, send those lines: after 3 failures the top-up switches off for the session.
+4. Settings (Police page of the `[` menu): `Police cars on the map` (0 to 4) and how often a new one may come.
+Known gaps: never played; each cop is one more BeamMP car for everybody (MaxCars); what `roadBehind` does with one car is a guess.

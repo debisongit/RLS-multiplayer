@@ -31,6 +31,8 @@ function M.payload()
     respawnBehind = cfg.respawnBehind ~= false,
     respawnPerMinute = tonumber(cfg.respawnPerMinute),
     respawnGap = tonumber(cfg.respawnGap),
+    copCount = tonumber(cfg.copCount),
+    copTopUpSeconds = tonumber(cfg.copTopUpSeconds),
     bubbleMode = cfg.bubbleMode,
     range = M.range(),
   }

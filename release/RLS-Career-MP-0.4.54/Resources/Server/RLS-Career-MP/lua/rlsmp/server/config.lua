@@ -107,6 +107,10 @@ M.defaults = {
     respawnBehind = true,
     respawnPerMinute = 4,
     respawnGap = 150,
+    -- How many AI police cars should be on the map. The game puts only ONE ("requested 1, allocated 1"); the client builds more behind you, one every
+    -- `copTopUpSeconds`, up to this number (client rlsmp_policeRespawn). 0 = leave the game's number. Each cop is one more BeamMP car for everybody (MaxCars).
+    copCount = 3,
+    copTopUpSeconds = 30,
     -- Which traffic cars another player's game may not recycle (client rlsmp/bubble.lua):
     -- "original" = RLS's own spawn and respawn distances, a car is only kept while another player is within its
     --   own active radius AND has a clear line to it; "protect" = the old strict rule (450 m, or a clear line up to 1 km);
