@@ -50,3 +50,6 @@ Guessed (never in game): that vanilla calls `updateActiveRadius` before `tryResp
 ## 5. Try next
 
 Set `respawnRange` 2 (about 260 to 900 m) and `respawnDelay` 60 in the menu, drive away and back. Compare the `distance:` line (`radius=`, `nearestRespawn=`) and the `range:` line. If cars still vanish far out, the cause is vanilla placement, not the radius; the lever would then be the car count (`activeAmount`).
+
+## 4c. The car count (added later, untested)
+"cars=5 for activeAmount 4" is not a bug in the number: the log has `Traffic system started with 5 active / 5 total vehicles` = the 4-car `autoTraffic` group plus the one police car the traffic setup asked for. See `docs/RESEARCH_TRAFFIC_FILL.md`: the cars are built once at setup and `setActiveAmount` cannot add any, so `rlsmp_trafficFill` now builds the missing ones. With the 4 km distance the area near the player stays full only when the car count is high enough.

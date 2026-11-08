@@ -49,6 +49,8 @@ end
 
 -- Nobody can see this car and the usual safety rules pass (also asked again when an async build finishes). Returns false, or true and the distance.
 local function hiddenFrom(P, id, veh, pctx, b)
+  local fill = ext("trafficFill")
+  if fill and fill.isNew and fill.isNew(id) then return false end   -- a car the traffic fill just added stays as it is
   if not (veh and veh.pos and b ~= nil and R.skipReason(P, id, veh, pctx) == nil) then return false end
   if veh.camVisible == true or (b.isEnabled and not b.isEnabled()) or (b.stayFor and b.stayFor(veh)) then return false end
   if b.viewReason then

@@ -447,4 +447,25 @@ do
   gameplay_traffic_trafficUtils = nil
 end
 
+-- The setup group is asked at the server's minimum (setActiveAmount cannot add cars later) ------------------------------------------------
+do
+  server({enabled = true, minAmount = 12, maxCars = 40})
+  check(require("rlsmp/lib/trafficVariety").sanitize({minAmount = 9999, maxCars = -3}).minAmount == 64 and require("rlsmp/lib/trafficVariety").sanitize({maxCars = -3}).maxCars == 0, "minAmount / maxCars are clamped")
+  gameplay_traffic = {getTrafficData = function() return {} end}
+  vanillaCalls = {}
+  local big = core_multiSpawn.createGroup(4, TRAFFIC)
+  check(#big == 12 and saw("fill: the game asked for a traffic group of 4, the server wants 12"), "no traffic yet: the group is as big as the minimum")
+  check(#core_multiSpawn.createGroup(4, POLICE) == 4, "police groups keep their size")
+  check(#core_multiSpawn.createGroup(4, PARKED) == 4, "parked groups keep their size")
+  check(#core_multiSpawn.createGroup(1, TRAFFIC) == 1, "a single car stays single")
+  rlsmp_traffic = {getQuota = function() return 8 end}
+  check(#core_multiSpawn.createGroup(4, TRAFFIC) == 8, "never above the quota")
+  rlsmp_traffic = nil
+  gameplay_traffic = {getTrafficData = function() return {[1] = {}} end}
+  check(#core_multiSpawn.createGroup(4, TRAFFIC) == 4, "traffic already exists: a refill keeps its size")
+  gameplay_traffic = nil
+  server({enabled = true})
+  check(#core_multiSpawn.createGroup(4, TRAFFIC) == 4, "no minimum known: the game's size")
+end
+
 print(string.format("traffic_variety_client_test: %d checks passed", passed))

@@ -117,6 +117,8 @@ local function onQuota(data)
 end
 
 function M.getQuota() return quota end
+-- The number of cars the server wants to exist: min(quota, minAmount), 0 = no wish (rlsmp/trafficFill.lua builds the missing ones).
+function M.getWant() return quota and wantMin > 0 and math.min(quota, wantMin) or 0 end
 
 function M.onUpdate(dtReal)
   if not quota then return end

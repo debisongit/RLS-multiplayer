@@ -262,8 +262,56 @@ local function resolveAsync(dt)
   end
 end
 
--- The game's group spawn calls this for every group; ours is named GROUP.
+-- A NEW traffic car (no old one to replace): rlsmp/trafficFill.lua uses this to reach the server's minimum. Same queue, same gates (M.canBuild),
+-- same failure switch. `at` = {x, y, z, q = {x, y, z, w}} where it appears. onDone(newId, trafficResult) runs once the car is in RLS traffic.
+local FILL_GROUP = "rlsmpFill"
+local fillJob                 -- {entry, at, before, onDone, maxFailures, callMs}
+function M.spawnNew(entry, at, maxFailures, onDone)
+  maxFailures = tonumber(maxFailures) or 3
+  if liveOff then return false, "switched off after failures" end
+  if pending or job or fillJob then return false, "busy" end
+  if not M.asyncReady() then return false, "no group spawn" end
+  if not (at and at.q) then return false, "no place" end
+  local can, why = M.canBuild()
+  if not can then p3.count("build postponed (" .. tostring(why) .. ")") return false, why end
+  local before, t0 = idSet(), os.clock()
+  local params = {name = FILL_GROUP, mode = "roadBehind", gap = 50, randomPaints = false,
+    customTransforms = {{pos = vec3(at.x, at.y, at.z), rot = quat(at.q.x, at.q.y, at.q.z, at.q.w)}}}
+  local ok, err = pcall(core_multiSpawn.spawnGroup, {{model = entry.model, config = entry.config}}, 1, params)
+  PL.built(guard, clock)
+  if not ok then fail(maxFailures, err) return false, "error" end
+  fillJob = {entry = entry, at = clock, before = before, onDone = onDone, maxFailures = maxFailures, callMs = (os.clock() - t0) * 1000}
+  p3.count("builds (fill started)")
+  p3.log("I", string.format("build: %s/%s mode=fill started, the call took %.0f ms", tostring(entry.model), tostring(entry.config), fillJob.callMs))
+  return true
+end
+function M.isFillBusy() return fillJob ~= nil end
+
+local function finishFill(newId)
+  local j = fillJob
+  fillJob = nil
+  local result = toTraffic(newId)
+  p3.count("fill cars built")
+  p3.log("I", string.format("build: %s/%s mode=fill total %.1f s; car %s; traffic: %s", tostring(j.entry.model), tostring(j.entry.config), clock - j.at, tostring(newId), result))
+  if j.onDone then local okd, err = pcall(j.onDone, newId, result) if not okd then p3.log("W", "fill: after-spawn step failed: " .. tostring(err)) end end
+end
+
+local function resolveFill()
+  if not fillJob or clock - fillJob.at <= TIMEOUT then return end
+  local fresh = freshCars(fillJob.before, fillJob.entry, nil)
+  if fresh[1] then p3.log("W", "build: mode=fill: no group-spawned message, adopting the new car found by looking") return finishFill(fresh[1]) end
+  local maxF = fillJob.maxFailures
+  fillJob = nil
+  fail(maxF, "fill: no new car after " .. TIMEOUT .. " s (BeamMP's car limit?)")
+end
+
+-- The game's group spawn calls this for every group; ours are named GROUP and FILL_GROUP.
 function M.onVehicleGroupSpawned(vehList, groupId, groupName)
+  if groupName == FILL_GROUP and fillJob then
+    local newId = type(vehList) == "table" and vehList[1] or nil
+    if newId == nil then local maxF = fillJob.maxFailures fillJob = nil fail(maxF, "fill: the group had no car") return end
+    return finishFill(newId)
+  end
   if groupName ~= GROUP or not job then return end
   local newId = type(vehList) == "table" and vehList[1] or nil
   if newId == nil then local maxF = job.maxFailures job = nil fail(maxF, "async: the group had no car") return end
@@ -277,7 +325,7 @@ function M.replace(id, entry, maxFailures, onDone, opts)
   opts = opts or {}
   maxFailures = tonumber(maxFailures) or 3
   if liveOff then return false, "switched off after failures" end
-  if pending or job then return false, "busy" end
+  if pending or job or fillJob then return false, "busy" end
   local can, why = M.canBuild()
   if not can then
     p3.count("build postponed (" .. tostring(why) .. ")")
@@ -308,7 +356,7 @@ function M.replace(id, entry, maxFailures, onDone, opts)
   resolvePending()
   return true
 end
-function M.isBusy() return pending ~= nil or job ~= nil end
+function M.isBusy() return pending ~= nil or job ~= nil or fillJob ~= nil end
 
 -- One round. Returns the decision {id, from, to, live} or nil (for tests and logs).
 function M.check()
@@ -324,7 +372,8 @@ function M.check()
   for id, veh in pairs(gameplay_traffic.getTrafficData()) do
     alive[id] = true
     local hidden = false
-    if veh.pos and P.skipReason(id, veh, pctx) == nil then
+    local fill = ext("trafficFill")
+    if veh.pos and not (fill and fill.isNew and fill.isNew(id)) and P.skipReason(id, veh, pctx) == nil then
       hidden = b ~= nil and veh.camVisible ~= true and not (b.isEnabled and not b.isEnabled()) and not (b.stayFor and b.stayFor(veh))
       if hidden and b.viewReason and b.viewReason(veh) then hidden = false end   -- strict: near a player or in front of the camera
     end
@@ -363,6 +412,7 @@ function M.onUpdate(dtReal)
   PL.feed(guard, dtReal, clock, preloadCfg())
   resolvePending()                                                 -- a swap started by the respawn re-roll finishes here even when watching is off
   resolveAsync(dtReal)
+  resolveFill()
   local cfg = settings()
   if not cfg then return end
   timer = timer + dtReal
@@ -373,7 +423,7 @@ function M.onUpdate(dtReal)
 end
 
 function M.onServerLeave()
-  tracker, pending, job, settle, liveOff, clock, timer, guard = S.newTracker(), nil, nil, nil, false, 0, 0, PL.newGuard()
+  tracker, pending, job, fillJob, settle, liveOff, clock, timer, guard = S.newTracker(), nil, nil, nil, nil, false, 0, 0, PL.newGuard()
 end
 
 function M.report() return p3.report() end

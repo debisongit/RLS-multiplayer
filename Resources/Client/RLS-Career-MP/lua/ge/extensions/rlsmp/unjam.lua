@@ -53,7 +53,8 @@ function M.check()
   for id, veh in pairs(gameplay_traffic.getTrafficData()) do
     -- only cars RLS itself would recycle: respawn allowed (a car with respawn off would fade out and stay invisible)
     local respawnOk = veh.enableRespawn ~= false and (type(veh.respawn) ~= "table" or (tonumber(veh.respawn.spawnValue) or 1) > 0)
-    if veh.pos and respawnOk and P.skipReason(id, veh, ctx) == nil then
+    local fill = rawget(_G, "rlsmp_trafficFill") or package.loaded["rlsmp/trafficFill"]
+    if veh.pos and respawnOk and not (fill and fill.isNew and fill.isNew(id)) and P.skipReason(id, veh, ctx) == nil then   -- cars the traffic fill just added are left alone
       local stuck = U.seen(tracker, id, veh.pos.x, veh.pos.y, tonumber(veh.speed) or 0, clock)
       if stuck >= U.STUCK_SECONDS then
         local bubbleOff = b and b.isEnabled and not b.isEnabled()   -- without the bubble we do not know where the other players are

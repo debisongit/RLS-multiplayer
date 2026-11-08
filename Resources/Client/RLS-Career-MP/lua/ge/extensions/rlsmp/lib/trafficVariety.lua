@@ -201,6 +201,8 @@ function M.sanitize(src)
     maxShare = number(src.maxShare, d.maxShare, 0.05, 1),
     maxCandidates = math.floor(number(src.maxCandidates, d.maxCandidates, 10, 300)),
     excludeWords = wordList(src.excludeWords, d.excludeWords, 40),
+    minAmount = math.floor(number(src.minAmount, 0, 0, 64)),   -- traffic.minAmount, known before the quota (0 = unknown)
+    maxCars = math.floor(number(src.maxCars, 0, 0, 1000)),     -- BeamMP's MaxCars per player (0 = unknown)
     applyToTraffic = src.applyToTraffic ~= false,
     applyToParked = src.applyToParked ~= false,
     zoneSpeedLimits = {city = city, main = main},

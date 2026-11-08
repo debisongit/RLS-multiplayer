@@ -20,6 +20,7 @@ local p3 = require("rlsmp/lib/p3")
 local V = require("rlsmp/lib/trafficVariety")
 local PL = require("rlsmp/lib/trafficPreload")
 local SM = require("rlsmp/lib/simplified")
+local F = require("rlsmp/lib/trafficFill")
 
 local MOD_CONFIGS_PER_MODEL = 4   -- how many eligible configs of a modded model join the candidate pool
 
@@ -224,12 +225,35 @@ local function remember(list)
   end
 end
 
+-- How many traffic cars the server wants (traffic.minAmount, known from our settings even before the quota; the quota caps it once it is here), 0 = no wish.
+local function wish()
+  local m = config and config.minAmount or 0
+  if m < 1 then return 0 end
+  local t = rawget(_G, "rlsmp_traffic") or package.loaded["rlsmp/traffic"]
+  local q = t and t.getQuota and t.getQuota()
+  return q and F.want(q, m) or m
+end
+
+local function trafficCars()
+  local n = 0
+  for _ in pairs(gameplay_traffic and gameplay_traffic.getTrafficData and gameplay_traffic.getTrafficData() or {}) do n = n + 1 end
+  return n
+end
+
 -- Builds the new group, or returns nil to let the game keep its own.
 local function build(original, amount, params)
   local parked = isParkedIntent(params)
   if parked and not config.applyToParked then return nil end
   if not parked and not config.applyToTraffic then return nil end
   local want = math.floor(amount)
+  if not parked then
+    -- the game's setup group is as big as the player's own amount (a real log: 4), and setActiveAmount cannot add cars later: ask for the server's minimum now
+    local bigger = F.groupSize(want, wish(), trafficCars())
+    if bigger > want then
+      p3.log("I", string.format("fill: the game asked for a traffic group of %d, the server wants %d cars: group size raised", want, bigger))
+      want = bigger
+    end
+  end
   local size = math.min(config.maxCandidates, math.max(want, math.ceil(want * config.oversample)))
   local pool = original(size, params)
   if type(pool) ~= "table" or #pool == 0 then return nil end

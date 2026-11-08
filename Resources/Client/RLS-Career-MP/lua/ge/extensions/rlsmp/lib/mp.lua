@@ -13,6 +13,15 @@ function M.remoteSet()
   return set
 end
 
+-- How many cars BeamMP counts as MINE (they count against the server's per-player limit MaxCars).
+function M.ownCount()
+  local n = 0
+  if MPVehicleGE and MPVehicleGE.getVehicles then
+    for _, v in pairs(MPVehicleGE.getVehicles()) do if v.isLocal == true then n = n + 1 end end
+  end
+  return n
+end
+
 function M.isRemote(id)
   return M.remoteSet()[id] == true
 end
