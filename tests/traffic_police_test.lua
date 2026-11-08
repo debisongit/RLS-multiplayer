@@ -31,9 +31,10 @@ stages[0] = "loaded"
 tick()
 local m = take()
 check(#m == 1 and m[1].name == "rlsmpPoliceConfig" and m[1].data.antiTeleport == true
-  and m[1].data.blockRoadblocks == true and m[1].data.noFineInStolenCar == true and m[1].data.noRadarFineIllegal == true, "settings sent on load (no fine in a stolen car, no radar fine in one: on by default)")
-check(m[1].data.respawnBehind == true and m[1].data.respawnPerMinute == 4 and m[1].data.respawnGap == 150, "cops that come back behind the player: on by default, 4 a minute, gap 150")
-check(m[1].data.copCount == 3 and m[1].data.copTopUpSeconds == 30, "more cops: three police cars wanted by default, one new every 30 s")
+  and m[1].data.blockRoadblocks == true and m[1].data.noFineInStolenCar == true and m[1].data.noRadarFineIllegal == true, "settings sent on load (no fine in a stolen car, no radar fine: on by default)")
+check(m[1].data.respawnBehind == true and m[1].data.respawnPerMinute == 4 and m[1].data.respawnGap == nil, "re-placed cops are judged and moved: on by default, 4 builds a minute, no gap setting any more")
+check(m[1].data.spawnMinDistance == 1000 and m[1].data.chaseSpawnMinDistance == 600 and m[1].data.spawnPreferRight == true, "cops appear at least 1000 m away (600 m in a chase), right side preferred")
+check(m[1].data.copCount == 0 and m[1].data.copTopUpSeconds == 30, "no extra cops by default (copCount 0 = the game's own number)")
 check(m[1].data.respawnRebuildSeconds == 90 and m[1].data.copRespawnDistance == 450, "a rebuild at most every 90 s, cops re-placed only beyond 450 m")
 check(m[1].data.bubbleMode == "original", "the traffic bubble mode is sent and defaults to original (RLS's own distances)")
 tick()
@@ -52,5 +53,15 @@ cfg.police.enabled = false
 stages[2] = "loaded"
 tick()
 check(#take() == 0, "disabled -> silent")
+
+-- an old config.json (written before the cop spawn rules) still has the old copCount default 3: it is reset to 0 once; a chosen value stays
+local storage = require("rlsmp.server.storage")
+local path = os.tmpname()
+storage.writeJson(path, {police = {copCount = 3}}, true)
+check(require("rlsmp.server.config").load(path).police.copCount == 0, "old config.json with copCount 3 and no spawn rules: reset to 0 (the owner never asked for more cops)")
+check(require("rlsmp.server.config").load(path).police.copCount == 0, "...and it stays 0 (the file now has the new keys)")
+storage.writeJson(path, {police = {copCount = 2, spawnMinDistance = 1000}}, true)
+check(require("rlsmp.server.config").load(path).police.copCount == 2, "a value chosen after the change is kept")
+os.remove(path)
 
 print(string.format("traffic_police_test: %d checks passed", passed))

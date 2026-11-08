@@ -37,6 +37,8 @@ local STATIC = {
   ["traffic.maxPerPlayer"] = {"number", 1, 100, true},
   ["traffic.respawnRange"] = {"number", 0.5, 3},
   ["traffic.respawnDistance"] = {"number", 0, 6000},
+  ["traffic.spawnMinDistance"] = {"number", 120, 3000},
+  ["traffic.spawnMaxDistance"] = {"number", 0, 6000},
   ["traffic.respawnDelay"] = {"number", 0, 600},
   ["traffic.unjam.enabled"] = {"bool"},
   ["traffic.unjam.seconds"] = {"number", 30, 1800, true},
@@ -104,7 +106,9 @@ local STATIC = {
   ["police.noRadarFineIllegal"] = {"bool"},
   ["police.respawnBehind"] = {"bool"},
   ["police.respawnPerMinute"] = {"number", 0, 30, true},
-  ["police.respawnGap"] = {"number", 20, 500},
+  ["police.spawnMinDistance"] = {"number", 300, 3000, true},
+  ["police.chaseSpawnMinDistance"] = {"number", 200, 3000, true},
+  ["police.spawnPreferRight"] = {"bool"},
   ["police.respawnRebuildSeconds"] = {"number", 10, 1800, true},
   ["police.copRespawnDistance"] = {"number", 0, 4000, true},
   ["police.copCount"] = {"number", 0, 4, true},
@@ -355,7 +359,8 @@ function M.snapshot()
     modPrice = {enabled = mpr.enabled, sell = mpr.sell, max = mpr.max, min = mpr.min, tolerance = mpr.tolerance},
     traffic = {enabled = t.enabled, totalBudget = t.totalBudget, baseBudget = t.baseBudget, perPlayerBudget = t.perPlayerBudget,
       minPerPlayer = t.minPerPlayer, maxPerPlayer = t.maxPerPlayer,
-      respawnRange = t.respawnRange, respawnDistance = t.respawnDistance, respawnDelay = t.respawnDelay, unjam = copyMap(t.unjam)},
+      respawnRange = t.respawnRange, respawnDistance = t.respawnDistance, respawnDelay = t.respawnDelay,
+      spawnMinDistance = t.spawnMinDistance, spawnMaxDistance = t.spawnMaxDistance, unjam = copyMap(t.unjam)},
     smartTraffic = {enabled = s.enabled, policeReact = s.policeReact, mix = copyMap(s.mix), nightMult = copyMap(s.nightMult)},
     trafficVariety = {enabled = v.enabled, applyToTraffic = v.applyToTraffic, applyToParked = v.applyToParked,
       maxShare = v.maxShare, oversample = v.oversample, maxCandidates = v.maxCandidates,
@@ -375,7 +380,7 @@ function M.snapshot()
         slowFrameMs = pl.slowFrameMs, settleSeconds = pl.settleSeconds, warmShare = pl.warmShare},
       simplified = {enabled = sm.enabled, parked = sm.parked, traffic = sm.traffic, nearRadius = sm.nearRadius, perMinute = sm.perMinute}},
     weather = {enabled = w.enabled, force = w.force, mix = copyMap(w.mix), periodMinutes = w.periodMinutes},
-    police = {enabled = p.enabled, antiTeleport = p.antiTeleport, blockRoadblocks = p.blockRoadblocks, noFineInStolenCar = p.noFineInStolenCar ~= false, noRadarFineIllegal = p.noRadarFineIllegal ~= false, respawnBehind = p.respawnBehind ~= false, respawnPerMinute = p.respawnPerMinute, respawnGap = p.respawnGap, respawnRebuildSeconds = p.respawnRebuildSeconds, copRespawnDistance = p.copRespawnDistance, copCount = p.copCount, copTopUpSeconds = p.copTopUpSeconds, bubbleMode = p.bubbleMode,
+    police = {enabled = p.enabled, antiTeleport = p.antiTeleport, blockRoadblocks = p.blockRoadblocks, noFineInStolenCar = p.noFineInStolenCar ~= false, noRadarFineIllegal = p.noRadarFineIllegal ~= false, respawnBehind = p.respawnBehind ~= false, respawnPerMinute = p.respawnPerMinute, spawnMinDistance = p.spawnMinDistance, chaseSpawnMinDistance = p.chaseSpawnMinDistance, spawnPreferRight = p.spawnPreferRight ~= false, respawnRebuildSeconds = p.respawnRebuildSeconds, copRespawnDistance = p.copRespawnDistance, copCount = p.copCount, copTopUpSeconds = p.copTopUpSeconds, bubbleMode = p.bubbleMode,
       plateFlagSeconds = p.plateFlagSeconds, descriptionSeconds = p.descriptionSeconds,
       plateReading = {enabled = pr.enabled, rangeMeters = pr.rangeMeters, maxSpeedKmh = pr.maxSpeedKmh, readChance = pr.readChance,
         afterEscapeChance = pr.afterEscapeChance, skipChance = pr.skipChance}},
@@ -438,7 +443,7 @@ local function onSet(pid, data)
   watchers[pid] = true       -- somebody who changes settings has the menu open
   local t0 = type(config.traffic) == "table" and config.traffic or {}
   local u0 = type(t0.unjam) == "table" and t0.unjam or {}
-  local before = {["traffic.respawnRange"] = t0.respawnRange, ["traffic.respawnDistance"] = t0.respawnDistance, ["traffic.respawnDelay"] = t0.respawnDelay,
+  local before = {["traffic.respawnRange"] = t0.respawnRange, ["traffic.respawnDistance"] = t0.respawnDistance, ["traffic.respawnDelay"] = t0.respawnDelay, ["traffic.spawnMinDistance"] = t0.spawnMinDistance, ["traffic.spawnMaxDistance"] = t0.spawnMaxDistance,
     ["traffic.unjam.enabled"] = u0.enabled, ["traffic.unjam.seconds"] = u0.seconds, ["traffic.unjam.distance"] = u0.distance}
   local applied, rejected, done = M.applyPatch(data)
   local saved = true
@@ -446,7 +451,7 @@ local function onSet(pid, data)
     saved = storage.writeJson(configPath, config, true) == true
     modulesResend()
     for _, d in ipairs(done) do
-      if d:find("^traffic%.respawn") or d:find("^traffic%.unjam") then util.info("RLSMP-P3 range: " .. d .. " (was " .. tostring(before[d:match("^[^=]+")]) .. ")") end
+      if d:find("^traffic%.respawn") or d:find("^traffic%.spawn") or d:find("^traffic%.unjam") then util.info("RLSMP-P3 range: " .. d .. " (was " .. tostring(before[d:match("^[^=]+")]) .. ")") end
     end
     local shown = {}
     for i = 1, math.min(#done, 8) do shown[i] = done[i] end

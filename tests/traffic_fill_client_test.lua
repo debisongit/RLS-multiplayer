@@ -150,4 +150,20 @@ check(T.isNew(nextId), "new right after")
 step(130)
 check(not T.isNew(nextId), "after the grace time the normal rules apply again")
 
+-- 6. the 4 km ring: the place comes from rlsmp_spawnSpot (traffic.spawnMinDistance .. spawnMaxDistance), the camera place is only the fallback ------------
+TS.onServerLeave() T.onServerLeave() logged, groupCalls = {}, {}
+td = {} for i = 11, 15 do addTraffic(i) end
+local askedRing
+package.loaded["rlsmp/spawnSpot"] = {find = function(o) askedRing = o return {x = 1800, y = 900, z = 0, q = {x = 0, y = 0, z = 0, w = 1}, dist = 2012} end}
+package.loaded["rlsmp/bubble"] = {getRange = function() return {spawnMinDistance = 250, spawnMaxDistance = 4000} end}
+step(1)
+check(#groupCalls == 1 and groupCalls[1].params.customTransforms[1].pos.x == 1800 and groupCalls[1].params.customTransforms[1].pos.y == 900, "the fill car is placed at the ring spot, not 150 to 400 m behind the camera")
+check(askedRing and askedRing.minDist >= 250 and askedRing.maxDist <= 4000 and askedRing.noRoad == true, "the ring search stays inside 250..4000 m")
+TS.onServerLeave() T.onServerLeave() groupCalls = {}
+td = {} for i = 11, 15 do addTraffic(i) end
+package.loaded["rlsmp/bubble"] = {getRange = function() return {spawnMinDistance = 250, spawnMaxDistance = 0} end}
+step(1)
+check(#groupCalls == 1 and groupCalls[1].params.customTransforms[1].pos.y == -200, "spawnMaxDistance 0: the old place behind the camera")
+package.loaded["rlsmp/spawnSpot"], package.loaded["rlsmp/bubble"] = nil, nil
+
 print(string.format("traffic_fill_client_test: %d checks passed", passed))

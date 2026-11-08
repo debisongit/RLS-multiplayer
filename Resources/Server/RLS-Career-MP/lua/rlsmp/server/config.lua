@@ -87,6 +87,11 @@ M.defaults = {
     -- respawnDistance: meters. A traffic car is recycled only when it is farther than this from EVERY player (never below the game's own radius). 0 = the game's original.
     respawnDistance = 4000,
     respawnDelay = 0,
+    -- spawnMinDistance / spawnMaxDistance: meters. A traffic car that the game has just re-placed (it puts it only 100 to 300 m from you) is moved to a
+    -- road spot between these distances from the player (client rlsmp_trafficPlace); the traffic fill uses the same ring. Never within 120 m, in the
+    -- camera view or near another player. spawnMaxDistance 0 = the game's own placement.
+    spawnMinDistance = 250,
+    spawnMaxDistance = 4000,
     -- Our own removal of stuck cars (client unjam.lua): only a car that stood still `seconds` and is `distance` m or more from EVERY player; one at a time.
     unjam = {enabled = true, seconds = 120, distance = 400, crashed = true, crashedSeconds = 60, inViewSeconds = 120},   -- crashed: a wrecked car near you also goes (hidden after crashedSeconds, in view after inViewSeconds)
   },
@@ -103,21 +108,25 @@ M.defaults = {
     noFineInStolenCar = true,
     -- Speed cameras and red-light cameras (RLS speedTraps) take no money and make no ticket from a stolen car or a car with a fake plate.
     noRadarFineIllegal = true,
-    -- A police car that RLS re-places comes back as a DIFFERENT model on the road BEHIND the player (client rlsmp_policeRespawn), not where the game
-    -- puts it (often in front, same model). `respawnPerMinute` limits how many we build (BeamMP sends every spawn and delete to everybody);
-    -- `respawnGap` is the multi spawn gap in metres (how far behind it asks for).
+    -- A police car that RLS re-places is judged by the client (rlsmp_policeRespawn): when the game put it near you, in view, on your road or straight ahead/behind,
+    -- it comes back as a DIFFERENT model on another road far away (see below). `respawnPerMinute` limits how many we build (BeamMP sends every spawn and delete to everybody).
     respawnBehind = true,
     respawnPerMinute = 4,
-    respawnGap = 150,
+    -- Where a re-placed cop (and a top-up cop) is allowed to appear: at least `spawnMinDistance` m (straight line) from EVERY player, not in view, not on
+    -- the player's own road, not straight ahead or behind; a road on the player's right side is preferred. During a chase the minimum is
+    -- `chaseSpawnMinDistance` (reinforcements may come from nearer, never into view).
+    spawnMinDistance = 1000,
+    chaseSpawnMinDistance = 600,
+    spawnPreferRight = true,
     -- Building a car freezes the game for a moment (owner: "drops crazy fps"). A re-placed cop is only rebuilt as another model at most once per
     -- `respawnRebuildSeconds`; in between a cop that RLS put in FRONT of you is moved to the road behind you (no build, no freeze).
     respawnRebuildSeconds = 90,
     -- RLS re-places a police car once it is farther than its own radius. Police get at least this many metres (0 = the game's own radius), so a cop
     -- is not recycled (and put back close, often in front, unseen) every few seconds.
     copRespawnDistance = 450,
-    -- How many AI police cars should be on the map. The game puts only ONE ("requested 1, allocated 1"); the client builds more behind you, one every
-    -- `copTopUpSeconds`, up to this number (client rlsmp_policeRespawn). 0 = leave the game's number. Each cop is one more BeamMP car for everybody (MaxCars).
-    copCount = 3,
+    -- How many AI police cars should be on the map. 0 = leave the game's number (default; the owner never asked for more cops). Above 0 the client builds more,
+    -- one every `copTopUpSeconds`, up to this number (rlsmp_policeRespawn). Each cop is one more BeamMP car for everybody (MaxCars).
+    copCount = 0,
     copTopUpSeconds = 30,
     -- Which traffic cars another player's game may not recycle (client rlsmp/bubble.lua):
     -- "original" = RLS's own spawn and respawn distances, a car is only kept while another player is within its
@@ -508,7 +517,14 @@ end
 
 function M.load(path)
   local raw = storage.readJson(path)
+  -- (deepMerge fills `raw` in place, so look at it first)
+  local oldCops = type(raw) == "table" and type(raw.police) == "table" and raw.police.copCount == 3 and raw.police.spawnMinDistance == nil
   local cfg = util.deepMerge(M.defaults, raw)
+  -- One-time step: a config.json written before the cop spawn rules still has the old copCount default 3 (extra cops nobody asked for). Reset it to 0.
+  if oldCops then
+    cfg.police.copCount = 0
+    util.info("RLSMP-P3 police.copCount was the old default 3 in config.json: set to 0 (the game's own number of cops); raise it in the [ menu if you want more")
+  end
   if type(cfg.serverTag) ~= "string" or not cfg.serverTag:match("^[a-z0-9]+$") then
     cfg.serverTag = randomTag()
   end

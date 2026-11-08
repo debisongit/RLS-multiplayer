@@ -4,7 +4,7 @@
 -- gameplay_traffic.setActiveAmount only limits how many existing cars are active; it never builds a car. The game builds its traffic cars once, at
 -- traffic setup, as many as the player's own setting says (a real log: 4 + 1 police = 5 cars, so the same few cars circled the player).
 -- rlsmp_traffic raises the active amount to min(quota, traffic.minAmount) (getWant); when fewer cars exist than that, this extension builds the missing
--- ones ONE AT A TIME, at most one every few seconds, through the async one-car group spawn of rlsmp_trafficSwap (no freeze) and gives each to RLS
+-- ones (placed in the 4 km ring around the player, rlsmp_spawnSpot: traffic.spawnMinDistance/spawnMaxDistance) ONE AT A TIME, at most one every few seconds, through the async one-car group spawn of rlsmp_trafficSwap (no freeze) and gives each to RLS
 -- traffic (insertTraffic). The model comes from the variety pool (excludeWords, rarity, area weights, round robin) like every other pick.
 -- Never above the want. Not in a chase, not while an event/job/race has cut the traffic amount, not on slow frames, not near BeamMP's per-player car
 -- limit (MaxCars). Cars added here are left alone by the stuck-car recycling, the re-roll and the swap for a while (isNew).
@@ -16,9 +16,10 @@ local F = require("rlsmp/lib/trafficFill")
 local R = require("rlsmp/lib/trafficReroll")
 local mp = require("rlsmp/lib/mp")
 local p3 = require("rlsmp/lib/p3")
+local SS = require("rlsmp/lib/spawnSpot")
 
 local CHECK_EVERY = 1
-local SPAWN_MIN, SPAWN_MAX = 150, 400   -- metres from the player, behind the camera (out of sight)
+local SPAWN_MIN, SPAWN_MAX = 150, 400   -- the old fallback: metres from the player, behind the camera (out of sight)
 local clock, timer, last = 0, 0, -1e9
 local born = {}                          -- car id -> clock when we added it
 local spawned, refused, episode = 0, 0, false
@@ -39,8 +40,8 @@ local function traffic()
   return n, out
 end
 
--- A place behind the camera on a road, out of sight, like RLS's taxi call does it. Returns {x, y, z, q} or nil.
-local function spawnPlace()
+-- The old place: behind the camera on a road, out of sight, like RLS's taxi call does it (used only when the ring is off or finds nothing).
+local function spawnPlaceBehind()
   local tu = rawget(_G, "gameplay_traffic_trafficUtils")
   if not (tu and tu.findSafeSpawnPoint and tu.finalizeSpawnPoint and core_camera and core_camera.getPosition and map and map.surfaceNormal) then return nil end
   local ok, at = pcall(function()
@@ -54,6 +55,20 @@ local function spawnPlace()
     return {x = pos.x, y = pos.y, z = pos.z, q = {x = rot.x, y = rot.y, z = rot.z, w = rot.w}}
   end)
   return ok and at or nil
+end
+
+-- A place in the ring around the player (traffic.spawnMinDistance .. spawnMaxDistance, default 250 to 4000 m), anywhere on the roads, never within 120 m
+-- of a player or in the camera cone (rlsmp_spawnSpot). Falls back to the old behind-the-camera place when the ring is off (max 0) or has no spot.
+local function spawnPlace()
+  local b, sp = ext("bubble"), ext("spawnSpot")
+  local r = b and b.getRange and b.getRange() or {}
+  local min, max = SS.ring(r.spawnMinDistance, r.spawnMaxDistance)
+  if max > 0 and sp and sp.find then
+    local d0 = SS.ringDistance(min, max, math.random())
+    local at = sp.find({minDist = math.max(min, d0 - 300), maxDist = math.min(max, d0 + 300), preferRight = false, corridor = 0, noRoad = true, why = "fill"})
+    if at then return at end
+  end
+  return spawnPlaceBehind()
 end
 
 -- The next model: the variety pool (round robin, rarity, area weights, excludeWords), else something the game offered lately.

@@ -20,6 +20,7 @@ function M.range()
   local t = type(tcfg) == "table" and tcfg or {}
   local u = type(t.unjam) == "table" and t.unjam or {}
   return {respawnRange = tonumber(t.respawnRange), respawnDistance = tonumber(t.respawnDistance), respawnDelay = tonumber(t.respawnDelay),
+    spawnMinDistance = tonumber(t.spawnMinDistance), spawnMaxDistance = tonumber(t.spawnMaxDistance),
     unjam = {enabled = u.enabled ~= false, seconds = tonumber(u.seconds), distance = tonumber(u.distance),
       crashed = u.crashed ~= false, crashedSeconds = tonumber(u.crashedSeconds), inViewSeconds = tonumber(u.inViewSeconds)}}
 end
@@ -32,7 +33,9 @@ function M.payload()
     noRadarFineIllegal = cfg.noRadarFineIllegal ~= false,
     respawnBehind = cfg.respawnBehind ~= false,
     respawnPerMinute = tonumber(cfg.respawnPerMinute),
-    respawnGap = tonumber(cfg.respawnGap),
+    spawnMinDistance = tonumber(cfg.spawnMinDistance),
+    chaseSpawnMinDistance = tonumber(cfg.chaseSpawnMinDistance),
+    spawnPreferRight = cfg.spawnPreferRight ~= false,
     respawnRebuildSeconds = tonumber(cfg.respawnRebuildSeconds),
     copRespawnDistance = tonumber(cfg.copRespawnDistance),
     copCount = tonumber(cfg.copCount),

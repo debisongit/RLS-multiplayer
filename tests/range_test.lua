@@ -10,6 +10,8 @@ local function check(c, m) if not c then error("FAIL: " .. m, 2) end passed = pa
 local R = require("rlsmp/lib/range")
 local d = R.sanitize(nil)
 check(d.respawnRange == 1 and d.respawnDelay == 0 and d.respawnDistance == 4000, "defaults: range 1, no delay, recycle at 4000 m")
+check(d.spawnMinDistance == 250 and d.spawnMaxDistance == 4000, "defaults: new traffic is placed 250 to 4000 m from the player")
+check(R.sanitize({spawnMaxDistance = 99999}).spawnMaxDistance == 6000 and R.sanitize({spawnMaxDistance = 0}).spawnMaxDistance == 0 and R.sanitize({spawnMinDistance = 1}).spawnMinDistance == 120, "spawn ring clamped (max 0 = game)")
 check(R.sanitize({respawnDistance = 0}).respawnDistance == 0 and R.sanitize({respawnDistance = 99999}).respawnDistance == 6000 and R.sanitize({respawnDistance = -3}).respawnDistance == 0, "distance 0 (game original) to 6000")
 check(R.sanitize({respawnDistance = "x"}).respawnDistance == 4000, "distance garbage falls back to 4000")
 check(d.unjam.enabled == true and d.unjam.seconds == 120 and d.unjam.distance == 400, "unjam defaults: 120 s, 400 m")

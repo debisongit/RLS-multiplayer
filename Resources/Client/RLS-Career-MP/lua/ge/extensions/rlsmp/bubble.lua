@@ -44,8 +44,8 @@ function M.setRange(src)
   local new = R.sanitize(src)
   local change = R.describe(range, new)
   range = new
-  p3.log("I", "range: " .. (change and ("changed " .. change) or "unchanged") .. string.format(" (now range=%s distance=%sm delay=%s unjam=%s/%ss/%sm)",
-    tostring(new.respawnRange), tostring(new.respawnDistance), tostring(new.respawnDelay), tostring(new.unjam.enabled), tostring(new.unjam.seconds), tostring(new.unjam.distance)))
+  p3.log("I", "range: " .. (change and ("changed " .. change) or "unchanged") .. string.format(" (now range=%s distance=%sm delay=%s spawn=%s..%sm unjam=%s/%ss/%sm)",
+    tostring(new.respawnRange), tostring(new.respawnDistance), tostring(new.respawnDelay), tostring(new.spawnMinDistance), tostring(new.spawnMaxDistance), tostring(new.unjam.enabled), tostring(new.unjam.seconds), tostring(new.unjam.distance)))
 end
 function M.getRange() return range end
 

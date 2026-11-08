@@ -1,26 +1,25 @@
--- RLS-Career-MP client extension "rlsmp_policeRespawn": more police cars, and a police car that RLS re-places comes back BEHIND the player as a different model.
+-- RLS-Career-MP client extension "rlsmp_policeRespawn": where a police car that RLS re-places comes back (and the optional extra cops).
 -- SPDX-License-Identifier: AGPL-3.0-only
 --
--- The owner's report: a re-placed cop keeps its model and the game puts it in front of the player (its own `spawnDirBias` hint did not help, see
--- docs/RESEARCH_CHASE_RANGE.md). So we do the placing ourselves:
+-- Owner: "cop cars that respawn must NOT spawn literally in front of or behind the player; better about a block away in a DIFFERENT street, or a street
+-- on the player's right side, at least about 1 km away." and "I never asked for more cops".
 --  1. A police unit's `respawnCount` goes up: RLS has just re-placed it (we only look at the counter, we never touch RLS's own recycling).
---  2. We build ONE new police car of a DIFFERENT model (rlsmp_trafficVariety.policePick: police settings apply) through the game's own group spawn,
---     `core_multiSpawn.spawnGroup({entry}, 1, {name = "rlsmpCop", mode = "roadBehind", gap = ...})`: the multi spawn mode that puts a car on the road behind the player.
---     RLS itself uses spawnGroup with `mode = "roadBehind"` for parked cars (integration/services/parking.lua).
---  3. `onVehicleGroupSpawned(..., "rlsmpCop")` gives us the new car: it joins traffic (`gameplay_traffic.insertTraffic(id, false, true)`) with the
---     police role (`setRole('police')`, the same two calls RLS's police service makes). We measure where it came out (`behind=`, `dist=` in the log).
---     If it is in FRONT of the player or closer than `minDistance`, it is deleted again and counted as a failure (three failures switch this off for the session).
---  4. Only then the old unit is removed. If anything fails, the old unit stays as RLS placed it.
--- Never: units within `minDistance` of the player, our own new cars, a second build at the same time, more than `perMinute` a minute (BeamMP sends every
--- spawn and delete to everybody). Switch: server config police.respawnBehind (also on the Police page of the [ menu).
--- UNVERIFIED IN GAME: what `roadBehind` does with one car and `gap` (the log says where the car really came out), and that a cop made this way chases.
+--  2. We judge where the game put it (rlsmp_spawnSpot.judge, rules in lib/spawnSpot.lua): at least `spawnMinDistance` (1000 m; `chaseSpawnMinDistance`,
+--     600 m, during a chase) straight-line from EVERY player, not in the camera cone or within 120 m, not on the player's own road, not on the line
+--     straight ahead of / behind the player (40 m corridor). A cop that passes is left alone.
+--  3. Otherwise rlsmp_spawnSpot.find looks for a better road spot in the ring [min, 2.5 x min] (right-hand side preferred). With one: when the rebuild
+--     interval has passed we BUILD one new police car of a DIFFERENT model there (`core_multiSpawn.spawnGroup` with `customTransforms`, the way RLS's
+--     parking does it, then `insertTraffic(id, false, true)` + `setRole('police')` like RLS's police service) and remove the old unit; in between
+--     (building freezes the game for a moment) the same car is moved there with `spawn.safeTeleport`. No spot found: the cop stays as the game put it.
+--  The old "150 m behind the player on the player's own trail" behaviour is gone.
+-- Never: more than `perMinute` builds a minute (BeamMP sends every spawn and delete to everybody), a second build at the same time, a car that ends
+-- inside the minimum distance (it is deleted again and counted as a failure; three failures switch this off for the session).
+-- Switch: server config police.respawnBehind (the name is old; it now means "we place re-placed cops").
+-- UNVERIFIED IN GAME: that finalizeSpawnPoint / customTransforms lay the car where we ask, that a moved cop keeps chasing (see docs/RESEARCH_POLICE_SPAWN.md).
 --
--- TOP-UP (owner: "add more cops to the map, at most 2 to 3"): the game only puts ONE police car on the map ("requested 1, allocated 1" in the log). When the
--- number of AI police units is below `copCount` (server config police.copCount, default 3, 0 = leave the game's number) we build one more the same way
--- (steps 2 and 3 above, a random police model), at most one per `topUpSeconds` (30). The new cops are police like the game's own: RLS's police service
--- sends them after you in a chase. They are not removed when the game re-places them: they are replaced by a cop of another model behind you like any other.
--- Failures are counted separately for the two jobs (3 each), so a top-up that does not work never switches the respawn off, and the other way round.
--- Pure helpers are exported for tests/police_respawn_client_test.lua.
+-- OPTIONAL TOP-UP (default OFF, police.copCount = 0 = leave the game's number, the owner never asked for more cops): when it is above 0 and fewer AI
+-- police units exist, one more is built the same way at a spot from step 3, at most one per `topUpSeconds` (30).
+-- Failures are counted separately for the two jobs (3 each). Pure helpers are exported for tests/police_respawn_client_test.lua.
 
 local M = {}
 
@@ -30,7 +29,11 @@ local CHECK_EVERY = 0.5
 local BUILD_TIMEOUT = 25          -- seconds to wait for onVehicleGroupSpawned
 local NAME = "rlsmpCop"
 
-local settings = {respawnBehind = true, perMinute = 4, gap = 150, minDistance = 80, maxFailures = 3, copCount = 3, topUpSeconds = 30, rebuildSeconds = 90, respawnDistance = 450}
+local CORRIDOR = 40            -- m: "straight ahead of / behind the player" (lib/spawnSpot.lua)
+local RING = 2.5                  -- the ring for a new spot is [min, RING x min]
+local SLACK = 50                  -- a built car may come out this much closer than asked (lane laying moves it a little)
+local settings = {respawnBehind = true, perMinute = 4, maxFailures = 3, copCount = 0, topUpSeconds = 30, rebuildSeconds = 90, respawnDistance = 450,
+  spawnMinDistance = 1000, chaseSpawnMinDistance = 600, preferRight = true}
 local seen = {}                   -- police unit id -> respawnCount last time we looked
 local mine = {}                   -- ids of the cops we built (for the log and the tests)
 local grace = {}                  -- cop id we just built -> clock before which a respawn counter change is not acted on
@@ -40,10 +43,8 @@ local failures = {respawn = 0, top = 0}
 local off = {respawn = false, top = false}
 local lastTop = -math.huge        -- clock of the last top-up build
 local clock, timer = 0, 0
-local lastBuild = -math.huge      -- clock of the last replacement build (the freeze); between builds a cop in front is only moved behind the player
-local trail = {}                  -- where the player has been: crumbs {x, y, z}, one every CRUMB metres, newest last
+local lastBuild = -math.huge      -- clock of the last replacement build (the freeze); between builds a bad cop is only moved
 local moveFailures, moveOff = 0, false
-local CRUMB, MAX_CRUMBS = 8, 400
 
 local function isMP() return MPCoreNetwork ~= nil and MPCoreNetwork.isMPSession ~= nil and MPCoreNetwork.isMPSession() end
 local function careerActive() return overhaul_career_career ~= nil and overhaul_career_career.isActive() end
@@ -82,30 +83,23 @@ function M.relative(playerPos, playerDir, pos)
   return (dx * playerDir.x + dy * playerDir.y) / len > 0, dist
 end
 
--- The point `back` metres back along the player's own trail, and the direction of travel there (toward the player). Pure. nil when the trail is shorter.
-function M.trailPoint(t, back)
-  local acc = 0
-  for i = #t, 2, -1 do
-    local a, b = t[i - 1], t[i]
-    local seg = math.sqrt((b.x - a.x) ^ 2 + (b.y - a.y) ^ 2)
-    acc = acc + seg
-    if acc >= back and seg > 1e-6 then
-      return {x = a.x, y = a.y, z = a.z}, {x = (b.x - a.x) / seg, y = (b.y - a.y) / seg}
-    end
-  end
-  return nil
+-- The least distance to every player for a spot now (a chase may have a shorter one), and the ring's far end.
+function M.limits(chase)
+  local min = chase and settings.chaseSpawnMinDistance or settings.spawnMinDistance
+  return min, math.min(6000, min * RING)
 end
 
--- Add the player's position to the trail (a jump over 150 m = a teleport: start again).
-function M.recordTrail(t, pos)
-  local last = t[#t]
-  if last then
-    local d = math.sqrt((pos.x - last.x) ^ 2 + (pos.y - last.y) ^ 2)
-    if d > 150 then for k in pairs(t) do t[k] = nil end last = nil
-    elseif d < CRUMB then return end
-  end
-  t[#t + 1] = {x = pos.x, y = pos.y, z = pos.z}
-  if #t > MAX_CRUMBS then table.remove(t, 1) end
+local function pursuit()
+  local pol = ext("police")
+  return pol and pol.isPursuit and pol.isPursuit() == true or false
+end
+
+-- A road spot for a new or moved cop, or nil.
+local function findSpot(why)
+  local sp = ext("spawnSpot")
+  if not (sp and sp.find) then return nil end
+  local min, max = M.limits(pursuit())
+  return sp.find({minDist = min, maxDist = max, preferRight = settings.preferRight, corridor = CORRIDOR, why = why})
 end
 
 local function isPoliceUnit(id, veh, playerId)
@@ -141,18 +135,21 @@ end
 
 -- Build one police car through the game's group spawn. kind = "respawn" (replaces `oldId`, a model other than its) or "top" (one more cop).
 -- Returns true when a build was started.
-local function build(kind, oldId, oldModel, have, removeFirst)
+local function build(kind, oldId, oldModel, have, removeFirst, spot)
   if job or not underRate() then return false end
   local v = ext("trafficVariety")
   if not (v and v.policePick) then return false end
   local entry = v.policePick(oldModel)
   if not entry then return false end
+  if not (spot and spot.q and rawget(_G, "vec3") and rawget(_G, "quat")) then return false end
   local ms = rawget(_G, "core_multiSpawn")
   if not (ms and type(ms.spawnGroup) == "function") then
     p3.logOnChange("pr-nospawn", true, "W", "police respawn: core_multiSpawn.spawnGroup is not available")
     return false
   end
-  local ok, err = pcall(ms.spawnGroup, {{model = entry.model, config = entry.config}}, 1, {name = NAME, mode = "roadBehind", gap = settings.gap})
+  -- mode + gap are only what RLS's parking passes next to customTransforms (parking.lua:1313); the transform decides where the car appears
+  local params = {name = NAME, mode = "roadBehind", gap = 50, customTransforms = {{pos = vec3(spot.x, spot.y, spot.z), rot = quat(spot.q.x, spot.q.y, spot.q.z, spot.q.w)}}}
+  local ok, err = pcall(ms.spawnGroup, {{model = entry.model, config = entry.config}}, 1, params)
   if not ok then fail("spawnGroup raised: " .. tostring(err), kind) return false end
   recent[#recent + 1] = os.time()
   job = {kind = kind, oldId = oldId, entry = entry, startedAt = clock}
@@ -164,9 +161,9 @@ local function build(kind, oldId, oldModel, have, removeFirst)
   end
   p3.count("police " .. kind .. " started")
   if kind == "respawn" then
-    p3.log("I", string.format("police respawn: cop %s (%s) was re-placed; building %s/%s behind the player", tostring(oldId), tostring(oldModel), entry.model, entry.config))
+    p3.log("I", string.format("police respawn: cop %s (%s) was re-placed; building %s/%s at a spot %.0f m from the player", tostring(oldId), tostring(oldModel), entry.model, entry.config, spot.dist or 0))
   else
-    p3.log("I", string.format("police top-up: only %s of %s cops on the map; building %s/%s behind the player", tostring(have or "?"), tostring(settings.copCount), entry.model, entry.config))
+    p3.log("I", string.format("police top-up: only %s of %s cops on the map; building %s/%s at a spot %.0f m from the player", tostring(have or "?"), tostring(settings.copCount), entry.model, entry.config, spot.dist or 0))
   end
   return true
 end
@@ -192,15 +189,16 @@ function M.onVehicleGroupSpawned(vehList, groupId, groupName)
     return fail("the new car is not in the traffic data", kind)
   end
   local o = objectOf(id)
-  local ppos, pdir = playerFrame()
   local at = o and xyz(o:getPosition())
-  if ppos and at then
-    local ahead, dist = M.relative(ppos, pdir, at)
-    p3.log("I", string.format("police %s: new cop %s came out %.0f m %s the player", LABEL[kind], tostring(id), dist, ahead and "IN FRONT OF" or "behind"))
-    if ahead or dist < settings.minDistance then
+  local sp = ext("spawnSpot")
+  if at and sp and sp.judge then
+    local min = M.limits(pursuit())
+    local why, dist = sp.judge(at, min - SLACK, 0)
+    p3.log("I", string.format("police %s: new cop %s came out %.0f m from the player%s", LABEL[kind], tostring(id), dist or -1, why and (" (" .. why .. ")") or ""))
+    if why and why ~= "noPlayer" then
       removeCar(id)
       mine[id] = nil
-      return fail(string.format("the new cop came out %s (%.0f m): not what we want", ahead and "in front" or "too close", dist), kind)
+      return fail(string.format("the new cop came out too near or in view (%s, %.0f m): not what we want", why, dist or -1), kind)
     end
   end
   failures[kind] = 0                -- a good one: the failure count starts again
@@ -215,14 +213,11 @@ function M.onVehicleGroupSpawned(vehList, groupId, groupName)
     kind == "respawn" and (", old cop " .. tostring(j.oldId or "(removed earlier)") .. " removed") or ""))
 end
 
--- A cop in front of the player: put the same car on the road behind (a point of the player's own trail), facing the way the player drives. No build.
-local function moveBehind(id)
-  local p, d = M.trailPoint(trail, settings.gap)
+-- Put the same car on the road spot (no build, no freeze).
+local function moveTo(id, spot)
   local o = objectOf(id)
-  if not (p and d and o and rawget(_G, "vec3") and rawget(_G, "quatFromDir")) then return false end
-  local okRot, rot = pcall(quatFromDir, vec3(d.x, d.y, 0), vec3(0, 0, 1))
-  if not okRot or not rot then return false end
-  local pos = vec3(p.x, p.y, p.z + 0.3)
+  if not (spot and spot.q and o and rawget(_G, "vec3") and rawget(_G, "quat")) then return false end
+  local pos, rot = vec3(spot.x, spot.y, spot.z + 0.3), quat(spot.q.x, spot.q.y, spot.q.z, spot.q.w)
   local sp = rawget(_G, "spawn") or package.loaded["spawn"]
   local ok, res
   if sp and type(sp.safeTeleport) == "function" then
@@ -232,14 +227,14 @@ local function moveBehind(id)
   end
   if not ok or res == false then
     moveFailures = moveFailures + 1
-    p3.log("W", "police respawn: moving cop " .. tostring(id) .. " behind the player failed (" .. tostring(res) .. ")")
+    p3.log("W", "police respawn: moving cop " .. tostring(id) .. " failed (" .. tostring(res) .. ")")
     if moveFailures >= settings.maxFailures then moveOff = true p3.log("W", "police respawn: moving cops is switched off for this session") end
     return false
   end
   moveFailures = 0
   grace[id] = clock + 10
   p3.count("police respawn moved")
-  p3.log("I", string.format("police respawn: cop %s was in front, moved %.0f m behind the player along the road you drove (no build)", tostring(id), settings.gap))
+  p3.log("I", string.format("police respawn: cop %s moved to a spot %.0f m from the player, %s side (no build)", tostring(id), spot.dist or 0, (spot.side or 0) < 0 and "right" or "other"))
   return true
 end
 
@@ -252,8 +247,7 @@ local function step()
     job = nil
     fail("no group-spawned message within " .. BUILD_TIMEOUT .. " s", kind)
   end
-  local ppos, pdir = playerFrame()
-  if ppos then M.recordTrail(trail, ppos) end
+  local ppos = playerFrame()
   for id in pairs(seen) do if traffic[id] == nil then seen[id] = nil end end
   for id in pairs(mine) do if traffic[id] == nil then mine[id] = nil end end
   for id in pairs(grace) do if traffic[id] == nil then grace[id] = nil end end
@@ -267,15 +261,23 @@ local function step()
       elseif rc > seen[id] then
         seen[id] = rc
         if respawnOn() and not (grace[id] and clock < grace[id]) and ppos and veh.pos then
-          local ahead, dist = M.relative(ppos, pdir, veh.pos)
-          if dist >= settings.minDistance then
-            p3.log("I", string.format("police respawn: cop %s re-placed %.0f m %s the player", tostring(id), dist, ahead and "in front of" or "behind"))
-            local model = veh.jbeam or (objectOf(id) and objectOf(id).jbeam)
-            if clock - lastBuild >= settings.rebuildSeconds and build("respawn", id, model, nil, ahead) then
-              lastBuild = clock
-            elseif ahead and not moveOff then
-              moveBehind(id)
+          local sp = ext("spawnSpot")
+          local min = M.limits(pursuit())
+          local why, dist = nil, nil
+          if sp and sp.judge then why, dist = sp.judge(veh.pos, min, CORRIDOR) end
+          if why and why ~= "noPlayer" then
+            p3.log("I", string.format("police respawn: cop %s re-placed %.0f m from the player: not allowed (%s, minimum %.0f m)", tostring(id), dist or -1, why, min))
+            local spot = findSpot("cop " .. tostring(id))
+            if spot then
+              local model = veh.jbeam or (objectOf(id) and objectOf(id).jbeam)
+              if clock - lastBuild >= settings.rebuildSeconds and build("respawn", id, model, nil, (dist or 1e9) < 300, spot) then
+                lastBuild = clock
+              elseif not moveOff then
+                moveTo(id, spot)
+              end
             end
+          elseif sp then
+            p3.log("I", string.format("police respawn: cop %s re-placed %.0f m from the player: fine, left alone", tostring(id), dist or -1))
           end
         end
       end
@@ -284,7 +286,8 @@ local function step()
   -- more cops: one more when there are fewer than copCount, at most one per topUpSeconds, and not while another build is running
   if topOn() and not job and cops < settings.copCount and clock - lastTop >= settings.topUpSeconds and ppos then
     lastTop = clock
-    build("top", nil, nil, cops)
+    local spot = findSpot("top-up")
+    if spot then build("top", nil, nil, cops, false, spot) end
   end
 end
 
@@ -301,10 +304,13 @@ local function onConfig(data)
   if type(data.respawnBehind) == "boolean" then settings.respawnBehind = data.respawnBehind end
   local per = tonumber(data.respawnPerMinute)
   if per and per >= 0 and per <= 30 then settings.perMinute = math.floor(per) end
-  local gap = tonumber(data.respawnGap)
-  if gap and gap >= 20 and gap <= 500 then settings.gap = gap end
   local cops = tonumber(data.copCount)
   if cops and cops >= 0 and cops <= 6 then settings.copCount = math.floor(cops) end
+  local minD = tonumber(data.spawnMinDistance)
+  if minD and minD >= 300 and minD <= 3000 then settings.spawnMinDistance = minD end
+  local chaseD = tonumber(data.chaseSpawnMinDistance)
+  if chaseD and chaseD >= 200 and chaseD <= 3000 then settings.chaseSpawnMinDistance = chaseD end
+  if type(data.spawnPreferRight) == "boolean" then settings.preferRight = data.spawnPreferRight end
   local rebuild = tonumber(data.respawnRebuildSeconds)
   if rebuild and rebuild >= 10 and rebuild <= 1800 then settings.rebuildSeconds = rebuild end
   local rd = tonumber(data.copRespawnDistance)
@@ -316,7 +322,7 @@ M._onConfig = onConfig
 
 function M.onServerLeave()
   seen, mine, grace, job, recent = {}, {}, {}, nil, {}
-  trail, lastBuild, moveFailures, moveOff = {}, -math.huge, 0, false
+  lastBuild, moveFailures, moveOff = -math.huge, 0, false
   failures, off, lastTop = {respawn = 0, top = 0}, {respawn = false, top = false}, -math.huge
 end
 

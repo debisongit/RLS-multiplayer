@@ -6,7 +6,7 @@
 
 local M = {}
 
-M.DEFAULTS = {respawnRange = 1, respawnDistance = 4000, respawnDelay = 0, unjam = {enabled = true, seconds = 120, distance = 400, crashed = true, crashedSeconds = 60, inViewSeconds = 120}}
+M.DEFAULTS = {respawnRange = 1, respawnDistance = 4000, respawnDelay = 0, spawnMinDistance = 250, spawnMaxDistance = 4000, unjam = {enabled = true, seconds = 120, distance = 400, crashed = true, crashedSeconds = 60, inViewSeconds = 120}}
 
 local function num(v, lo, hi, d)
   v = tonumber(v)
@@ -22,6 +22,8 @@ function M.sanitize(src)
     respawnRange = num(src.respawnRange, 0.5, 3, d.respawnRange),
     respawnDistance = num(src.respawnDistance, 0, 6000, d.respawnDistance),
     respawnDelay = num(src.respawnDelay, 0, 600, d.respawnDelay),
+    spawnMinDistance = num(src.spawnMinDistance, 120, 3000, d.spawnMinDistance),
+    spawnMaxDistance = num(src.spawnMaxDistance, 0, 6000, d.spawnMaxDistance),
     unjam = {enabled = u.enabled ~= false, seconds = num(u.seconds, 30, 1800, d.unjam.seconds), distance = num(u.distance, 150, 5000, d.unjam.distance),
       crashed = u.crashed ~= false, crashedSeconds = num(u.crashedSeconds, 15, 600, d.unjam.crashedSeconds), inViewSeconds = num(u.inViewSeconds, 30, 1200, d.unjam.inViewSeconds)},
   }
@@ -53,6 +55,8 @@ function M.describe(old, new)
   diff("respawnRange", old.respawnRange, new.respawnRange)
   diff("respawnDistance", old.respawnDistance, new.respawnDistance)
   diff("respawnDelay", old.respawnDelay, new.respawnDelay)
+  diff("spawnMinDistance", old.spawnMinDistance, new.spawnMinDistance)
+  diff("spawnMaxDistance", old.spawnMaxDistance, new.spawnMaxDistance)
   diff("unjam.enabled", old.unjam.enabled, new.unjam.enabled)
   diff("unjam.seconds", old.unjam.seconds, new.unjam.seconds)
   diff("unjam.distance", old.unjam.distance, new.unjam.distance)

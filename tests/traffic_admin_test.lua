@@ -297,11 +297,21 @@ r = lastResult()
 check(r and r.applied == 1 and #r.rejected == 2 and cfg.fence.phone == false and admin.snapshot().fence.phone == false, "fence.phone can be switched; the gamble settings are gone from the menu's allowlist")
 check(admin.snapshot().fence.gambleBust == nil and admin.snapshot().fence.rep.gamble == nil, "...and from the snapshot")
 cfg.fence.phone = true
-set(0, {{p = {"police", "respawnBehind"}, v = false}, {p = {"police", "respawnPerMinute"}, v = 99}, {p = {"police", "respawnGap"}, v = 200}, {p = {"police", "respawnGap"}, v = 5}})
+set(0, {{p = {"police", "respawnBehind"}, v = false}, {p = {"police", "respawnPerMinute"}, v = 99}, {p = {"police", "spawnMinDistance"}, v = 1500}, {p = {"police", "spawnMinDistance"}, v = 50}})
 r = lastResult()
-check(r and r.applied == 2 and #r.rejected == 2 and cfg.police.respawnBehind == false and cfg.police.respawnGap == 200, "cop respawn settings: in range accepted, out of range refused")
-check(admin.snapshot().police.respawnBehind == false and admin.snapshot().police.respawnGap == 200, "the snapshot carries them")
-cfg.police.respawnBehind, cfg.police.respawnGap = true, 150
+check(r and r.applied == 2 and #r.rejected == 2 and cfg.police.respawnBehind == false and cfg.police.spawnMinDistance == 1500, "cop respawn settings: in range accepted, out of range refused")
+check(admin.snapshot().police.respawnBehind == false and admin.snapshot().police.spawnMinDistance == 1500, "the snapshot carries them")
+cfg.police.respawnBehind, cfg.police.spawnMinDistance = true, 1000
+set(0, {{p = {"police", "chaseSpawnMinDistance"}, v = 700}, {p = {"police", "chaseSpawnMinDistance"}, v = 10}, {p = {"police", "spawnPreferRight"}, v = false}, {p = {"police", "respawnGap"}, v = 150}})
+r = lastResult()
+check(r and r.applied == 2 and #r.rejected == 2 and cfg.police.chaseSpawnMinDistance == 700 and cfg.police.spawnPreferRight == false, "chase minimum distance and right-side preference: in range accepted; the old respawnGap is no longer a setting")
+check(admin.snapshot().police.chaseSpawnMinDistance == 700 and admin.snapshot().police.spawnPreferRight == false, "...and in the snapshot")
+cfg.police.chaseSpawnMinDistance, cfg.police.spawnPreferRight = 600, true
+set(0, {{p = {"traffic", "spawnMinDistance"}, v = 300}, {p = {"traffic", "spawnMinDistance"}, v = 10}, {p = {"traffic", "spawnMaxDistance"}, v = 3000}, {p = {"traffic", "spawnMaxDistance"}, v = 9000}})
+r = lastResult()
+check(r and r.applied == 2 and #r.rejected == 2 and cfg.traffic.spawnMinDistance == 300 and cfg.traffic.spawnMaxDistance == 3000, "traffic spawn ring: in range accepted, out of range refused")
+check(admin.snapshot().traffic.spawnMinDistance == 300 and admin.snapshot().traffic.spawnMaxDistance == 3000, "...and in the snapshot")
+cfg.traffic.spawnMinDistance, cfg.traffic.spawnMaxDistance = 250, 4000
 set(0, {{p = {"smartTraffic", "nightMult", "drunk"}, v = 8}, {p = {"smartTraffic", "nightMult", "racer"}, v = 25}, {p = {"smartTraffic", "nightMult", "bogus"}, v = 1}})
 r = lastResult()
 check(r and r.applied == 1 and #r.rejected == 2 and cfg.smartTraffic.nightMult.drunk == 8, "night multipliers: in range accepted, out of range and unknown names refused")
