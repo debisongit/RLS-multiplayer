@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.48 (untested in-game)
+- You can type in the Black Market app invite field again (it tells the game you are typing, like RLS's own forms). (Claude A)
+- Stolen car prices follow RLS's real used-car market and refresh every `theft.repriceMinutes` (default 30, at most `theft.maxRepriceStep` percent per update). Old records with the flat fallback value get fixed once. The app shows 'Price up/down, updated N min ago'. (Claude A)
+
+## Unreleased (untested in-game)
+- Black Market app: the "Player name" invite field can be typed in now. Like RLS's own forms, focus tells the game to stop treating keys as game controls (`setCEFTyping(true)`, sent by raw engineLua), Enter invites, Esc, blur and closing the app give the keyboard back. (Claude A)
+- Stolen car prices follow RLS's used-car market (global economy vehicle market index) and are refreshed every `theft.repriceMinutes` (default 30): the owner's game works the value out again and sends it (`rlsmpTheftValue`); the server takes it only for the owner's own record, capped by `fence.maxValue` and `fence.modelCaps`, at most `theft.maxRepriceStep` percent (default 25) per update. Cars stolen before the value fix (no `valueSource`) get one free correction. A quote or sale with an old price asks first. The app shows "Price up/down, updated N min ago". Both settings are in the traffic menu (Theft page). New records store `valueSource` and `config`; log lines `theft value:`. (Claude A)
+
 ## 0.4.47 (untested in-game)
 - Stolen cars are worth their real used price (found from the real config or RLS's own valuation), not a flat 2,000. Payouts: strip 45%, sell without papers 40%, gamble 55 to 60% with a 20% trap chance, resell with all papers 70%. Existing servers keep their old values in `config.json`: change `fence.stripRate`, `fence.gambleBase`, `fence.gamblePerPaper`, `fence.gambleBust`, `fence.resellRate` and the market `fenceCarRate`. (Claude A)
 
