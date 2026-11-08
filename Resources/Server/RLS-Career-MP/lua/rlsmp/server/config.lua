@@ -173,7 +173,7 @@ M.defaults = {
     -- Respawn re-roll: when RLS respawns a traffic car out of everybody's sight, it comes back as another model with another config
     -- (needs pool.enabled). perMinute = most re-rolls per minute in one game (BeamMP sends every one to every player: keep it low). chance = share of respawns re-rolled.
     -- repaintChance = share of re-rolled cars that also get random paint. Never police, taxis, chased, crashed, job or player cars.
-    respawn = {enabled = true, perMinute = 3, chance = 1, repaintChance = 0.5, waitSeconds = 3},
+    respawn = {enabled = true, perMinute = 2, chance = 0.25, repaintChance = 0.5, waitSeconds = 3},
     -- Parked cars: RLS keeps as many as its game setting trafficParkingAmount says (a real log: 2). Each game raises that setting to this amount after the
     -- career starts (never lowers a higher one, gives the old value back on leaving). 0 = leave it alone. Every parked car is a car BeamMP syncs to the others
     -- and counts for the server's per-player car limit (MaxCars in ServerConfig.toml), so raise that too. Car theft needs parked cars to steal.

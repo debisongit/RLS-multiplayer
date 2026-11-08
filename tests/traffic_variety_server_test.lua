@@ -43,7 +43,7 @@ check(#m == 1 and m[1].name == "rlsmpTrafficVariety" and m[1].data.enabled == tr
 check(m[1].data.applyToTraffic == true and m[1].data.applyToParked == true, "traffic and parked on")
 check(m[1].data.swap.enabled == true and m[1].data.swap.live == false and m[1].data.swap.perMinute == 2, "swap settings are sent, watch only")
 check(m[1].data.pool.enabled == true and m[1].data.pool.avoidLast == 6 and m[1].data.pool.brandMax == 3, "premade pool settings are sent")
-check(m[1].data.respawn.enabled == true and m[1].data.respawn.perMinute == 3 and m[1].data.respawn.repaintChance == 0.5, "respawn re-roll settings are sent, on")
+check(m[1].data.respawn.enabled == true and m[1].data.respawn.perMinute == 2 and m[1].data.respawn.repaintChance == 0.5, "respawn re-roll settings are sent, on")
 check(m[1].data.parked.amount == 10, "parked amount is sent (default 10)")
 check(m[1].data.rarity.enabled == true and m[1].data.rarity.common == 0.88 and m[1].data.rarity.rare == 0.02 and #m[1].data.rarity.rareWords > 5, "rarity settings are sent")
 check(m[1].data.preload.enabled == true and m[1].data.preload.reserve == 3 and m[1].data.preload.slowFrameMs == 45, "preload settings are sent")

@@ -30,7 +30,7 @@ M.DEFAULTS = {
   -- Premade pool: every car the game could use, picked round-robin (least recently used first, no model twice in a row, per-brand cap).
   pool = {enabled = true, avoidLast = 6, brandWindow = 12, brandMax = 3, streetMax = 3, configsPerModel = 5, popPower = 0.5, ageMax = 30},
   -- Re-roll: a traffic car that RLS respawned out of everybody's sight becomes a different model with a different config.
-  respawn = {enabled = true, perMinute = 3, chance = 1, repaintChance = 0.5, waitSeconds = 3, checkSeconds = 0.5},
+  respawn = {enabled = true, perMinute = 2, chance = 0.25, repaintChance = 0.5, waitSeconds = 3, checkSeconds = 0.5},
   -- Parked cars: how many RLS keeps (its own game setting trafficParkingAmount). 0 = leave the game's own amount alone.
   parked = {amount = 10},
   -- Rarity: everyday cars are the clear majority. Tier shares (of the picks), and what puts a config into a higher tier (words in the model or config

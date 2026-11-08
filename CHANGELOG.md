@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.4.42 (stopgap, untested)
+- Lag fix, first step: the owner's log showed every car model change freezes the game for 0.5 to 2.3 s (29 times in 1000 s). Changes now happen for only about a quarter of respawns, 2 a minute at most. The real fix (changing cars without a freeze) is being built. (Claude A)
+
 ## 0.4.41 (all untested in-game)
 - Traffic respawn range: `traffic.respawnRange` (1.0 = the game's own, up to 3) and `traffic.respawnDelay`, both on the [ menu Amount page. Live swapping is now OFF by default (it replaced cars the game never recycled). Stuck-car cleanup now waits 120 s and only acts on cars 400 m from every player, one at a time. (Claude A)
 
