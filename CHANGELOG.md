@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.4.58 (untested in-game)
+- Crashed traffic cars near you now go away: removed 60 s after the crash if nobody sees them, or after 120 s in view (never closer than 40 m to a player). A damaged car that still drives stays. `traffic.unjam.crashed`, `crashedSeconds`, `inViewSeconds`. (Claude A)
+
 ## Unreleased (untested in-game)
 - Crashed traffic cars no longer sit on the road for ever: RLS keeps a crashed car around (it adds 1000 m to its respawn radius) and our stuck rule needs 400 m, so a wreck near you stayed. Now a crashed car that stands still is removed with the game's own fade-out: when nobody can see it, 60 s after the crash; when it stays in sight and is 40 m or more from everyone, 120 s after the crash. A damaged car that still drives, police, taxis, job and pursuit cars, and your own and other players' cars are never touched. Server setting `traffic.unjam.crashed` (default true), `crashedSeconds`, `inViewSeconds`, also in the `[` menu. Log lines `unjam: crashed car id=...`. (Claude A)
 

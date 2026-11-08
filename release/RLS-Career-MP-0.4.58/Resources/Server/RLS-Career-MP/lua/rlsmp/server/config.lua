@@ -88,7 +88,7 @@ M.defaults = {
     respawnDistance = 4000,
     respawnDelay = 0,
     -- Our own removal of stuck cars (client unjam.lua): only a car that stood still `seconds` and is `distance` m or more from EVERY player; one at a time.
-    unjam = {enabled = true, seconds = 120, distance = 400},
+    unjam = {enabled = true, seconds = 120, distance = 400, crashed = true, crashedSeconds = 60, inViewSeconds = 120},   -- crashed: a wrecked car near you also goes (hidden after crashedSeconds, in view after inViewSeconds)
   },
 
   -- Phase 3: police pursuits.
