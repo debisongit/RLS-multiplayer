@@ -355,6 +355,26 @@ M.defaults = {
     },
   },
 
+  -- Meetup selling: a Marketplace (or black market) sale is finished by driving to a spot the SERVER picks (server/meetup.lua).
+  -- A fully legal car never gets a police setup. A stolen car or a car with illegal papers does, with these chances
+  -- (kept between minChance and maxChance so the player is never sure). A setup brings copsMin..copsMax police (1 to 2).
+  meetup = {
+    enabled = true,
+    spots = {},               -- {name, x, y, z}; empty = use market.dropSpots
+    radius = 15,              -- meters (horizontal) the client wants for the drop-off
+    serverRadius = 30,        -- meters the server accepts (positions are a few seconds old)
+    minDistance = 300,        -- the new spot is at least this far from where the player stands (when enough spots exist)
+    expireMinutes = 20,       -- an unfinished meetup ends after this
+    cooldownSeconds = 300,    -- after a finished or ambushed meetup the player waits this long
+    cancelCooldownSeconds = 60,
+    illegalChance = 0.35,     -- setup chance for a stolen / police-flagged car sold through the Marketplace
+    blackChance = 0.45,       -- setup chance for a stolen car sold through the black market
+    minChance = 0.05,
+    maxChance = 0.85,
+    copsMin = 1,
+    copsMax = 2,
+  },
+
   security = {
     -- RLS "cheats mode" (and Freeroam+) gives free money and vehicles. Never accepted from a client save unless you turn this on.
     allowCheats = false,

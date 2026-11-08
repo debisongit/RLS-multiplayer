@@ -374,6 +374,25 @@ Chat (members only): `/fence` lists your stolen cars with prices; `/fence strip 
 | S→C | `rlsmpFenceResult` | `{ok, mode, pay, busted?, takeCar?, err?}`; the client deletes the car only when `takeCar` is true (a sale or a trap) |
 | S→C | `rlsmpWalletSet` | `{money, why = "fence"}` the new balance after a paid sale |
 
+## Meetup selling (server `meetup.lua`, client `rlsmp/meetup.lua`; research in `docs/RESEARCH_MEETUP_SALE.md`)
+
+A Marketplace sale (and a black market car sale) is finished at a spot the SERVER picks. Chat: `/meetup` (sell the garage car you sit in), `/meetup black` (stolen car), `/meetup cancel`, `/meetup status`.
+- Server rules: spot from `meetup.spots` (empty = `market.dropSpots`), never the player's last spot, at least `minDistance` from them when possible; one open meetup per player; `cooldownSeconds` after a meetup, `cancelCooldownSeconds` after a cancel; expires after `expireMinutes`; arrival needs a fresh `rlsmpPos` within `serverRadius` and no chase.
+- Setup roll (made at creation, secret until arrival): a fully legal car never rolls (0). A plate in the theft records or flagged by `plateRecords`, and every black market car, rolls `illegalChance` / `blackChance` clamped to `minChance..maxChance`. A setup is `copsMin..copsMax` (1 to 2) police, no roadblocks; the sale does not happen and the player keeps the car (cooldown applies).
+- Money: `market` kind is paid by RLS locally with its own offer value (the server cannot check that number). `black` kind is paid by the server (`market.fenceQuote`, one profile save, record removed).
+
+| Direction | Event | Body |
+|---|---|---|
+| S→C | `rlsmpMeetupAsk` | `{kind = "market"\|"black"}` from the chat command |
+| C→S | `rlsmpMeetupRequest` | `{kind, inv?, plate?, model?, price?}` |
+| S→C | `rlsmpMeetupSet` | `{id, kind, spot, x, y, z, radius, expiresIn}` (client sets the GPS route) |
+| S→C | `rlsmpMeetupDenied` | `{err}` |
+| C→S | `rlsmpMeetupArrive` | `{id}` (stopped in the circle for 2.5 s) |
+| S→C | `rlsmpMeetupResult` | `{id, ok, kind, retry?, setup?, cops?, pay?, takeCar?, inv?, err?}` |
+| C→S | `rlsmpMeetupCancel` | `{}` |
+| S→C | `rlsmpMeetupClear` | `{id}` |
+| S→C | `rlsmpWalletSet` | `{money, why = "meetup"}` after a black market sale |
+
 ## Reserved prefixes for later phases
 
 - `rlsmpBiz*` – Phase 2 business / syndicate (Claude A)

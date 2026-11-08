@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased (not built, not played)
+- New meetup selling. A Marketplace sale no longer finishes at once: you get a GPS route to a meetup spot the server picks, stop there for a moment, and the sale completes. Spots change each time and there is a cooldown. Untested in game, and the hook into the Marketplace is unverified (see `docs/RESEARCH_MEETUP_SALE.md`). (untested) (Claude A)
+- A fully legal car is never set up. A stolen car or a car with a police-flagged plate has a chance that the buyer is a police setup: 1 or 2 cops chase you, no roadblocks, no sale. The chance is never 0 or 100 percent for those cars, so you cannot be sure. (untested) (Claude A)
+- Black market: `/meetup black` sells a stolen car you drive by meetup; the server pays. `/meetup` is the fallback for a garage car. Settings in config `meetup`. (untested) (Claude A)
+
 ## 0.4.34
 - Car theft now logs `parked cars known: N, within 60 m: M, nearest ...` every 30 s while you walk, to find out why so few cars can be stolen. Your last log showed RLS only spawned 2 parked cars in total. (Claude A)
 
