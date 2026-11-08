@@ -6,7 +6,7 @@
 
 local M = {}
 
-M.DEFAULTS = {respawnRange = 1, respawnDistance = 4000, respawnDelay = 0, unjam = {enabled = true, seconds = 120, distance = 400}}
+M.DEFAULTS = {respawnRange = 1, respawnDistance = 4000, respawnDelay = 0, unjam = {enabled = true, seconds = 120, distance = 400, crashed = true, crashedSeconds = 60, inViewSeconds = 120}}
 
 local function num(v, lo, hi, d)
   v = tonumber(v)
@@ -22,7 +22,8 @@ function M.sanitize(src)
     respawnRange = num(src.respawnRange, 0.5, 3, d.respawnRange),
     respawnDistance = num(src.respawnDistance, 0, 6000, d.respawnDistance),
     respawnDelay = num(src.respawnDelay, 0, 600, d.respawnDelay),
-    unjam = {enabled = u.enabled ~= false, seconds = num(u.seconds, 30, 1800, d.unjam.seconds), distance = num(u.distance, 150, 5000, d.unjam.distance)},
+    unjam = {enabled = u.enabled ~= false, seconds = num(u.seconds, 30, 1800, d.unjam.seconds), distance = num(u.distance, 150, 5000, d.unjam.distance),
+      crashed = u.crashed ~= false, crashedSeconds = num(u.crashedSeconds, 15, 600, d.unjam.crashedSeconds), inViewSeconds = num(u.inViewSeconds, 30, 1200, d.unjam.inViewSeconds)},
   }
 end
 
@@ -55,6 +56,9 @@ function M.describe(old, new)
   diff("unjam.enabled", old.unjam.enabled, new.unjam.enabled)
   diff("unjam.seconds", old.unjam.seconds, new.unjam.seconds)
   diff("unjam.distance", old.unjam.distance, new.unjam.distance)
+  diff("unjam.crashed", old.unjam.crashed, new.unjam.crashed)
+  diff("unjam.crashedSeconds", old.unjam.crashedSeconds, new.unjam.crashedSeconds)
+  diff("unjam.inViewSeconds", old.unjam.inViewSeconds, new.unjam.inViewSeconds)
   return #parts > 0 and table.concat(parts, ", ") or nil
 end
 

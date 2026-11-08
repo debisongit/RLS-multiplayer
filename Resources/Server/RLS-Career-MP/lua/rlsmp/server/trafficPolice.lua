@@ -20,7 +20,8 @@ function M.range()
   local t = type(tcfg) == "table" and tcfg or {}
   local u = type(t.unjam) == "table" and t.unjam or {}
   return {respawnRange = tonumber(t.respawnRange), respawnDistance = tonumber(t.respawnDistance), respawnDelay = tonumber(t.respawnDelay),
-    unjam = {enabled = u.enabled ~= false, seconds = tonumber(u.seconds), distance = tonumber(u.distance)}}
+    unjam = {enabled = u.enabled ~= false, seconds = tonumber(u.seconds), distance = tonumber(u.distance),
+      crashed = u.crashed ~= false, crashedSeconds = tonumber(u.crashedSeconds), inViewSeconds = tonumber(u.inViewSeconds)}}
 end
 
 function M.payload()

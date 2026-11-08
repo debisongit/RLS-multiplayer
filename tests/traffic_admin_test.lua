@@ -338,6 +338,7 @@ check(require("rlsmp.server.trafficPolice").payload().range.respawnRange == 1, "
 set(0, {{p = {"traffic", "respawnRange"}, v = 2.5}, {p = {"traffic", "respawnDelay"}, v = 45}, {p = {"traffic", "respawnRange"}, v = 9}, {p = {"traffic", "unjam", "distance"}, v = 10}})
 r = lastResult()
 check(r.applied == 2 and #r.rejected == 2 and cfg.traffic.respawnRange == 2.5 and cfg.traffic.respawnDelay == 45, "range: edited, above 3 and a too small unjam distance refused")
+check(cfg.traffic.unjam.crashed == true and cfg.traffic.unjam.crashedSeconds == 60 and cfg.traffic.unjam.inViewSeconds == 120, "range: crashed rule defaults")
 check(admin.snapshot().traffic.respawnRange == 2.5 and admin.snapshot().traffic.unjam.seconds == 120, "range: in the snapshot")
 local pc = require("rlsmp.server.trafficPolice").payload()
 check(pc.range.respawnRange == 2.5 and pc.range.respawnDelay == 45 and pc.range.unjam.enabled == true, "range: the payload follows the edit")

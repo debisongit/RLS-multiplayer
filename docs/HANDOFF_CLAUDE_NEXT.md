@@ -23,6 +23,9 @@ Repo on GitHub: `debisongit/rls-multiplayer` (default listing shows our branch).
 5. Publish: the sandbox cannot push tags or call a create-release API, but the GitHub MCP tool **`mcp__github__actions_run_trigger`** (method `run_workflow`, owner `debisongit`, repo `rls-multiplayer`, workflow `release.yml`, ref `claude/amazing-sagan-kh6ecn`, inputs `{"version":"0.4.15"}`) starts `.github/workflows/release.yml` on the owner's account. It builds the zip and creates a **pre-release** (or attaches the zip if the release page already exists). Check the run with `actions_list`.
    Note: tag `v0.4.13` already exists remotely at an older commit.
 
+## Crashed car removal (unreleased, Claude A, no build bump)
+`unjam.lua` also removes crashed traffic cars near players: RLS sets `veh.activeData.tCrash` (os.clockhp) and adds 1000 m to the respawn radius, and `personality.skipReason` returns "crashed" for them, so they were never recycled. Now `unjam.check` re-judges a "crashed" car with the flag hidden, and `lib/unjam.crashDue(age, still, hidden, dist)` decides: hidden after `traffic.unjam.crashedSeconds` (60), in view after `inViewSeconds` (120) if 40 m or more from every player; the car must have stood still 10 s. Config flows server config -> trafficAdmin rules -> trafficPolice.range -> `lib/range.lua` -> `unjam.configure`. Log `unjam: crashed car id=`. Untested in game; unverified whether `fadeOut` looks gradual in view.
+
 ## START HERE (written at build 0.4.47, newest state)
 Branch `claude/amazing-sagan-kh6ecn` is pushed and up to date at build **0.4.47** (all tests pass, `bash tests/run.sh`). Almost everything since 0.4.26 is **untested in-game**; the owner tests each build and sends `beamng.log` files (grep `RLSMP`, `reroll:`, `fill:`, `range:`, `distance:`, `theft value:`, `modprice:`, `simplified:`). Owner style: short, plain, relaxed, no jargon, label untested things, almost no em dashes.
 

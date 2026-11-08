@@ -72,4 +72,35 @@ check(cars[6].state == "active", "server switch off: nothing is recycled")
 unjam.configure({enabled = true, seconds = 40, distance = 500})
 for _ = 1, 45 do unjam.onUpdate(1) end
 check(cars[6].state == "fadeOut", "server numbers (40 s, 500 m) are used")
+-- crashed cars near players (traffic.unjam.crashed)
+local hp = 1000
+os.clockhp = function() return hp end
+local viewed, d7 = {}, {}
+package.loaded["rlsmp/bubble"] = {stayFor = function() return false end, minPlayerDistance = function(v) return d7[v.id] or 10 end,
+  viewReason = function(v) return viewed[v.id] end}
+unjam.configure({enabled = true, seconds = 120, distance = 400, crashed = true, crashedSeconds = 60, inViewSeconds = 120})
+cars = {[7] = car(7, 50, 0, {activeData = {tCrash = hp}}), [8] = car(8, 60, 0, {activeData = {tCrash = hp}, role = {name = "police"}}),
+  [9] = car(9, 70, 5, {activeData = {tCrash = hp}})}
+gameplay_traffic = {getTrafficData = function() return cars end}
+viewed[7], viewed[9] = "inView", "inView"
+local function run(n) for _ = 1, n do hp = hp + 1 unjam.onUpdate(1) end end
+run(50)
+check(cars[7].state == "active", "crashed 50 s in view: stays")
+viewed[7] = nil
+run(15)
+check(cars[7].state == "fadeOut", "crashed, nobody sees it: removed after crashedSeconds")
+check(logged[#logged]:find("unjam: crashed car id=7 dist=10 seen=false removed after", 1, true), "crash log line")
+check(cars[8].state == "active", "crashed police car is left alone")
+check(cars[9].state == "active", "damaged car that is still driving stays")
+cars[9].speed = 0
+viewed[9] = "inView"
+run(125)
+check(cars[9].state == "active", "in view but within 40 m of a player: stays")
+d7[9] = 80
+run(10)
+check(cars[9].state == "fadeOut", "in view after inViewSeconds and 40 m or more away: faded out")
+cars = {[10] = car(10, 90, 0, {activeData = {tCrash = hp - 500}})}
+unjam.configure({crashed = false})
+run(15)
+check(cars[10].state == "active", "crashed rule off: nothing")
 print("unjam_test: " .. passed .. " checks passed")

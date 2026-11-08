@@ -72,7 +72,7 @@ Lua API for other server modules: `get(pid)`, `all()`, `distance(a, b)` (horizon
 
 | Direction | Event | Body |
 |---|---|---|
-| S→C | `rlsmpPoliceConfig` | `{antiTeleport, blockRoadblocks, bubbleMode, range}` (`range` = `{respawnRange, respawnDistance, respawnDelay, unjam = {enabled, seconds, distance}}` from server config `traffic.*`, see `docs/RESEARCH_RESPAWN_RANGE.md`) sent once when a player finishes loading (and again after a menu change). `bubbleMode` is `"original"` (default) \| `"protect"` \| `"off"`: which traffic cars another player's game may not recycle, see `docs/RESEARCH_CHASE_RANGE.md` |
+| S→C | `rlsmpPoliceConfig` | `{antiTeleport, blockRoadblocks, bubbleMode, range}` (`range` = `{respawnRange, respawnDistance, respawnDelay, unjam = {enabled, seconds, distance, crashed, crashedSeconds, inViewSeconds}}` from server config `traffic.*`, see `docs/RESEARCH_RESPAWN_RANGE.md`) `unjam.crashed` (default true) also removes a crashed, standing traffic car near players: out of sight after `crashedSeconds` (60), in sight but 40 m or more from everyone after `inViewSeconds` (120); sent once when a player finishes loading (and again after a menu change). `bubbleMode` is `"original"` (default) \| `"protect"` \| `"off"`: which traffic cars another player's game may not recycle, see `docs/RESEARCH_CHASE_RANGE.md` |
 
 While `antiTeleport` is on (MP career, a chase or not) the client holds every police unit within 300 m of the player (released past 350 m; units
 RLS marks `disabled` are let go) by setting `rlsmpHold` (the bubble's `tryRespawn` wrapper then refuses to recycle it), cancels a fade-out already in progress
