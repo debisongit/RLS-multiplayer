@@ -22,7 +22,9 @@
 -- Failures are counted separately for the two jobs (3 each). Pure helpers are exported for tests/police_respawn_client_test.lua.
 -- HOW MANY cops and in which AREA (rlsmp/lib/copBudget.lua): the optional top-up asks it before every build. The number follows the area type (city, main road,
 -- highway, other) and the time of day (night asks for more), never above police.maxCops (3), and at most ONE cop per area cell (police.areaSize, 1500 m).
--- The exact spawn spot is the placement code's job; until it hands its spot to budgetAllows, the player's position stands in for the cell.
+-- The far spawn spot is chosen FIRST; its position is the cell asked about (a new cop goes in an area that has no cop yet). The area target wins over
+-- copCount: cops wanted = min(copCount, area/time target, maxCops). The budget only ever stops an ADD; it never removes a cop. A re-placed cop that is
+-- rebuilt or moved keeps the count unchanged, so that path does not ask it.
 
 local M = {}
 
@@ -108,22 +110,16 @@ local function findSpot(why)
   return sp.find({minDist = min, maxDist = max, preferRight = settings.preferRight, corridor = CORRIDOR, why = why})
 end
 
--- The spot whose area cell must be free of cops for a top-up. The car is built behind the player, so the player's position stands in for it;
--- the placement code that picks a far spot replaces this one function.
-local function topUpSpot(ppos) return ppos end
-
--- May one more cop be built now, by area type, time of day and area cell? Asked at most every BUDGET_EVERY seconds (it reads the road under the player).
--- A "no" is not a failure of the build: nothing is counted against the top-up.
-local function budgetAllows(copPos, ppos)
-  if clock - lastBudget < BUDGET_EVERY then return false end
-  lastBudget = clock
+-- May one more cop be built at `spot` now, by area type, time of day and the area cell of the spot? The caller asks at most every BUDGET_EVERY seconds
+-- (it reads the road under the player). A "no" is not a failure of the build: nothing is counted against the top-up.
+local function budgetAllows(copPos, spot)
   local zone, night = false, false          -- false = no area information: only the caps apply
   local v = ext("trafficVariety")
   if v and v.contextNow then
     local ok, ctx = pcall(v.contextNow)
     if ok and type(ctx) == "table" then zone, night = ctx.zone, ctx.night == true end
   end
-  local ok, why = B.canAdd(settings.budget, copPos, zone, night, topUpSpot(ppos), settings.copCount)
+  local ok, why = B.canAdd(settings.budget, copPos, zone, night, spot, settings.copCount)
   p3.logOnChange("cop-budget", tostring(ok) .. tostring(why) .. tostring(zone) .. tostring(night), "I",
     string.format("police budget: %s (area %s, %s, %d cops out, at most %d)%s", ok and "one more cop" or "no new cop", tostring(zone or "other"),
       night and "night" or "day", #copPos, settings.budget.maxCops, ok and "" or ": " .. tostring(why)))
@@ -313,10 +309,13 @@ local function step()
     end
   end
   -- more cops: one more when there are fewer than copCount, at most one per topUpSeconds, and not while another build is running
-  if topOn() and not job and cops < settings.copCount and clock - lastTop >= settings.topUpSeconds and ppos and budgetAllows(copPos, ppos) then
-    lastTop = clock
+  if topOn() and not job and cops < settings.copCount and clock - lastTop >= settings.topUpSeconds and ppos and clock - lastBudget >= BUDGET_EVERY then
+    lastBudget = clock
     local spot = findSpot("top-up")
-    if spot then build("top", nil, nil, cops, false, spot) end
+    if spot and budgetAllows(copPos, spot) then
+      lastTop = clock
+      build("top", nil, nil, cops, false, spot)
+    end
   end
 end
 

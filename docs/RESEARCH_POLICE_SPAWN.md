@@ -47,3 +47,9 @@ Guessed (never in game):
 
 ## 4. What to read in the next log
 `spawn:` lines (spot distance, side, `RIGHT`/`left`, road, reasons for refusals), `police respawn:` (re-placed N m: not allowed (reason) / fine), `police respawn: cop X moved to a spot`, `police respawn: new cop came out N m`, `spawn: traffic car X re-placed by the game N m from you, moved to M m (ring ...)`, `fill:` lines, and `range: ... spawn=250..4000m`.
+
+## Cop budget and the real spawn spot (Claude A, untested in game)
+- The top-up first picks the far spot (`spawnSpot.find`, the same picker the respawn uses), then asks `copBudget.canAdd` with THAT spot as the area cell (`police.areaSize`, 1500 m): a new cop goes where no cop is yet. The player's position is no longer used.
+- Cops wanted = min(`copCount` if above 0, area/time target, `maxCops` 3). The area target wins over `copCount`; 3 is the hard maximum.
+- `copCount` 0 (default): nothing is added. The budget never removes a cop, even when the game has more than the target.
+- A re-placed cop (rebuild or move) keeps the count, so it does not ask the budget.

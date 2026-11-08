@@ -293,19 +293,19 @@ for id in pairs(objects) do objects[id] = nil end
 local ctx = {zone = "city", night = false}
 rlsmp_trafficVariety.contextNow = function() return ctx end
 local function copAt(id, x, y)
-  newObject(id, y, "bastion")
-  objects[id].pos = {x = x, y = y, z = 0}
+  newObject(id, x, y, "bastion")
   traffic[id] = {isAi = true, role = {name = "police"}, respawnCount = 0, pos = {x = x, y = y, z = 0}, jbeam = "bastion"}
 end
 R._onConfig({copCount = 3, copTopUpSeconds = 5, respawnPerMinute = 30, maxCops = 3, areaSize = 1500,
   copTargets = {city = {day = 1, night = 2}, main = {day = 1, night = 1}, highway = {day = 1, night = 1}, other = {day = 0, night = 1}}})
 copAt(300, 0, -3000)                               -- the game's own cop, two areas away
+spotToReturn = spotAt(1200, 700)                   -- the far spot: area cell 0:0, no cop in it
 tick(12)
 check(#groups == 0 and saw("police budget: no new cop (area city, day"), "city by day asks for 1 cop: it is out, no top-up (and the log says why)")
 ctx.night = true
 tick(12)
 check(#groups == 1 and R.getState().job.kind == "top" and saw("police budget: one more cop (area city, night"), "city at night asks for 2: one more is built")
-newObject(301, -150, "vivace")
+newObject(301, 1200, 700, "vivace")
 R.onVehicleGroupSpawned({301}, 40, "rlsmpCop")
 copAt(301, 0, 200)                                 -- the new cop stands in the player's area (the player is at 0,0)
 reset()
@@ -314,10 +314,31 @@ check(#groups == 0 and saw("2 cops out"), "two cops out for the night: no third"
 traffic[300], objects[300] = nil, nil                -- the far cop is gone: one cop left, and it stands in the player's area
 reset()
 tick(12)
-check(#groups == 0 and saw("a cop is already in area"), "one cop out, two asked for, but the one wanted spot is in an area that has a cop: never two in one area")
+check(#groups == 0, "one cop out, two asked for, but the far spot is in cell 0:0 where that cop stands: never two in one area")
+spotToReturn = spotAt(2000, 700)                   -- cell 1:0: free
+tick(12)
+check(#groups == 1 and groups[1].params.customTransforms[1].pos.x == 2000, "...a far spot in a free cell: the cop is built there (the budget asks about the spot, not the player)")
+reset()
 ctx.zone, ctx.night = nil, false
 tick(12)
 check(#groups == 0, "rural by day: no new cop")
+-- a re-placed cop is rebuilt/moved even when the budget would refuse a new one (count unchanged); copCount 0 never adds
+R.onServerLeave()
+for id in pairs(traffic) do traffic[id] = nil end
+reset()
+ctx.zone, ctx.night = "city", false
+copAt(303, 4000, 0)
+copAt(302, 0, -900)
+tick()
+replaced(302, 0, 300)
+spotToReturn = spotAt(1200, 700)
+tick()
+check(#groups == 1 and groups[1].params.name == "rlsmpCop", "a re-placed cop is rebuilt although the budget (2 cops, 1 asked) allows no new one")
+reset()
+R.onServerLeave()
+R._onConfig({copCount = 0})
+tick(40)
+check(#groups == 0, "copCount 0: no cop is added, and none is removed")
 R.onServerLeave()
 for id in pairs(traffic) do traffic[id] = nil end
 reset()
