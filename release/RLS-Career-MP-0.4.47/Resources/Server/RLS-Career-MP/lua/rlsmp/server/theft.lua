@@ -39,6 +39,7 @@ local market = require("rlsmp.server.market")
 local M = {}
 
 local cfg            -- config.theft
+local fenceCfg       -- config.fence (maxValue, modelCaps: the server's own limits on the client's car value)
 local serverTag = ""
 local file
 local stolen = {}    -- plate -> record
@@ -85,6 +86,14 @@ end
 
 -- Client-reported car value and year, made sane.
 function M.cleanValue(v) return clamp(math.floor(n(v, 0)), 0, 100000000) end
+-- The server cannot read the game's catalog, so the client's value is capped: fence.maxValue, and fence.modelCaps[model] when set.
+function M.capValue(model, value)
+  local f = fenceCfg or {}
+  local cap = n(f.maxValue, 300000)
+  local mc = type(f.modelCaps) == "table" and tonumber(f.modelCaps[model]) or nil
+  if mc and mc > 0 then cap = math.min(cap, mc) end
+  return math.min(M.cleanValue(value), math.floor(cap))
+end
 function M.cleanYear(y)
   y = math.floor(n(y, 0))
   if y < 1900 or y > 2100 then return nil end
@@ -451,11 +460,12 @@ local function onDone(pid, d)
   end
   local tracker = p.tracker and not items.has(pid, "tracker_blocker")
   if p.tracker and not tracker then chat(pid, "Your tracker blocker killed the GPS tracker.") end
+  local value = M.capValue(model, p.value)
   local seen, chance = M.rollWitness(d.witnesses, p.noise)
   local delay = M.reportDelay(seen, tracker)
   local s = sessions.get(pid)
   stolen[plate] = {
-    plate = plate, model = model, color = cleanColor(d.color), value = p.value, year = p.year,
+    plate = plate, model = model, color = cleanColor(d.color), value = value, year = p.year,
     pos = {x = n(d.x, 0), y = n(d.y, 0), z = n(d.z, 0)}, method = p.method, tier = p.tier,
     by = p.accountId, name = s and s.name or nil, t = now, seen = seen, tracker = tracker == true,
     reportAt = now + delay, reported = false,
@@ -541,6 +551,7 @@ end
 
 function M.init(config, pluginRoot)
   cfg = config.theft
+  fenceCfg = config.fence
   serverTag = tostring(config.serverTag or "")
   stolen, pending, cooldown, told, lastCheck = {}, {}, {}, {}, {}
   inspecting, inspectNext, lastHint = {}, {}, {}

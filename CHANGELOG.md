@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.4.47 (untested in-game)
+- Stolen cars are worth their real used price (found from the real config or RLS's own valuation), not a flat 2,000. Payouts: strip 45%, sell without papers 40%, gamble 55 to 60% with a 20% trap chance, resell with all papers 70%. Existing servers keep their old values in `config.json`: change `fence.stripRate`, `fence.gambleBase`, `fence.gamblePerPaper`, `fence.gambleBust`, `fence.resellRate` and the market `fenceCarRate`. (Claude A)
+
 ## 0.4.46 (all untested in-game)
 - No more broken junk cars in traffic (`trafficVariety.excludeWords`). (Claude A)
 - Traffic is only recycled when farther than 4 km from every player (`traffic.respawnDistance`, 0 = the game's own distance). (Claude A)
