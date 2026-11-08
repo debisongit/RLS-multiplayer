@@ -334,4 +334,5 @@ M._now = function() return now end
 M.context = context   -- for rlsmp_unjam
 M.onInit = function() setExtensionUnloadMode(M, "manual") end
 
+require("rlsmp/lib/perf").wrap("personalities", M)
 return M

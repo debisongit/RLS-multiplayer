@@ -584,3 +584,11 @@ Known gaps: moving cops onto the trail is never played (does the AI keep driving
 3. If the log says `came out IN FRONT`, `too close` or `failed`, send those lines: after 3 failures the top-up switches off for the session.
 4. Settings (Police page of the `[` menu): `Police cars on the map` (0 to 4) and how often a new one may come.
 Known gaps: never played; each cop is one more BeamMP car for everybody (MaxCars); what `roadBehind` does with one car is a guess.
+
+## Join retry and lag counters (build 0.4.64)
+
+1. Update server AND game (the join line says `build 0.4.64`). Join. If a download stalls the log has `download stalled at N/M chunks: asking the server to send the save again (attempt 1 of 3)` and the server console `save download stalled: sending it again`.
+2. Send the server console log of a join that stalled (lines with `rlsmp-timing`, `failed`, errors).
+3. Play 10 minutes. Send the `perf:` lines (one a minute): `ours X ms/frame` says how much of the frame time is our code; `cars in the game` how many cars exist.
+4. Parked cars are stand-ins now. Check you can still steal a parked car (it turns into the real car).
+Known gaps: never played; the cause of the original stall is not known, the retry only works around it.

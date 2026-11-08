@@ -266,4 +266,5 @@ function M.report() return p3.report() end
 function M.onExtensionLoaded() p3.log("I", "rlsmp_parked loaded") end
 M.onInit = function() setExtensionUnloadMode(M, "manual") end
 
+require("rlsmp/lib/perf").wrap("parked", M)
 return M

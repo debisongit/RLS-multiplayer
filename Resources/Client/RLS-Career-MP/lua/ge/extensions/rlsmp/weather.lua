@@ -121,4 +121,5 @@ end
 M._onWeather = onWeather
 M.onInit = function() setExtensionUnloadMode(M, "manual") end
 
+require("rlsmp/lib/perf").wrap("weather", M)
 return M

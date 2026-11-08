@@ -416,4 +416,5 @@ M._now = function() return now end
 M._pending = function() return pending end
 M.onInit = function() setExtensionUnloadMode(M, "manual") end
 
+require("rlsmp/lib/perf").wrap("plates", M)
 return M

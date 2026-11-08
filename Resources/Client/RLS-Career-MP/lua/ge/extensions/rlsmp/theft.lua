@@ -1101,4 +1101,5 @@ M._action = function() return action end
 M._inspect = function() return inspectAct end
 M.onInit = function() setExtensionUnloadMode(M, "manual") end
 
+require("rlsmp/lib/perf").wrap("theft", M)
 return M

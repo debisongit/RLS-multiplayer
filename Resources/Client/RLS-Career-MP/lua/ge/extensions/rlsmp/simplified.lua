@@ -388,4 +388,5 @@ function M.report() return p3.report() end
 function M.onExtensionLoaded() p3.log("I", "rlsmp_simplified loaded") end
 M.onInit = function() setExtensionUnloadMode(M, "manual") end
 
+require("rlsmp/lib/perf").wrap("simplified", M)
 return M

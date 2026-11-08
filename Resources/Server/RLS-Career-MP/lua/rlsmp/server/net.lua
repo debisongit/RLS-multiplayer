@@ -26,6 +26,9 @@ local REQUEST_EVERY = 1     -- seconds between accepted resend / header requests
 local MAX_MISSING = 50      -- chunk numbers read from one rlsmpChunkMissing
 local MAX_RESEND_QUEUE = 200
 local nextTransferId = 0
+local pace = {}         -- pid -> {chunkSize, perTick}: a player whose download stalled gets smaller, slower transfers (see M.setPace)
+-- Retry steps for a player whose save download stalled: smaller chunks, fewer per tick. Step 0 (no entry) = the config values.
+local RETRY_PACE = {{chunkSize = 8000, perTick = 3}, {chunkSize = 4000, perTick = 1}, {chunkSize = 2000, perTick = 1}}
 
 -- BeamMP wants a *global function name* per event. We generate one per event.
 function M.on(eventName, fn)
@@ -85,13 +88,27 @@ end
 -- Queue a big string for chunked delivery. `kind` tells the client what it is.
 function M.sendBig(pid, kind, payload, extra)
   nextTransferId = nextTransferId + 1
-  local header, chunks = transfer.describe(payload, cfg.transfer.chunkSize)
+  local header, chunks = transfer.describe(payload, pace[pid] and pace[pid].chunkSize or cfg.transfer.chunkSize)
   header.id = nextTransferId
   header.kind = kind
   header.extra = extra
   outbox[pid] = outbox[pid] or {}
   table.insert(outbox[pid], {header = header, chunks = chunks, next = 0, t0 = util.now(), bytes = #payload})
   return header.id
+end
+
+-- Step n of the retry ladder for this player (0 = back to the config values). Returns the pace used.
+function M.setPace(pid, step)
+  step = math.tointeger(tonumber(step)) or 0
+  if step <= 0 then pace[pid] = nil return nil end
+  pace[pid] = RETRY_PACE[math.min(step, #RETRY_PACE)]
+  return pace[pid]
+end
+
+-- Forget everything still queued for this player (a restarted download must not mix with the old one).
+function M.cancelTransfers(pid)
+  outbox[pid] = nil
+  resends[pid] = nil
 end
 
 function M.pendingFor(pid)
@@ -142,6 +159,7 @@ function M.dropPlayer(pid)
   recent[pid] = nil
   resends[pid] = nil
   limits[pid] = nil
+  pace[pid] = nil
 end
 
 -- The client says these chunks of transfer `id` never arrived: queue them again (works while it is still being sent, too).
@@ -208,7 +226,7 @@ local function pump()
   for pid in pairs(outbox) do pids[pid] = true end
   for pid in pairs(resends) do pids[pid] = true end
   for pid in pairs(pids) do
-    local budget = pumpResends(pid, cfg.transfer.chunksPerTick)
+    local budget = pumpResends(pid, pace[pid] and pace[pid].perTick or cfg.transfer.chunksPerTick)
     local queue = outbox[pid] or {}
     while budget > 0 and queue[1] do
       local job = queue[1]

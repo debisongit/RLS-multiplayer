@@ -67,4 +67,5 @@ function M.onUpdate() M.install() end
 
 M.onInit = function() setExtensionUnloadMode(M, "manual") end
 
+require("rlsmp/lib/perf").wrap("world", M)
 return M

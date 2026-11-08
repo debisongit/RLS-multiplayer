@@ -153,4 +153,5 @@ M._enforce = enforce
 M._resetClock = function() clock, lastHold = 0, -HOLD_EVERY end
 M.onInit = function() setExtensionUnloadMode(M, "manual") end
 
+require("rlsmp/lib/perf").wrap("traffic", M)
 return M

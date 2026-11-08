@@ -203,4 +203,5 @@ M._onUpAck = onUpAck
 
 M.onInit = function() setExtensionUnloadMode(M, "manual") end
 
+require("rlsmp/lib/perf").wrap("saveBridge", M)
 return M

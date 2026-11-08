@@ -181,4 +181,50 @@ fire("rlsmpLoaded", 6, json.encode({ok = false, err = "start_timeout"}))
 check(sessions.get(6).stage == "failed", "start timeout marks the session failed")
 fire("rlsmpLoaded", 6, json.encode({ok = true}))
 check(sessions.isLoaded(6), "a late success after the timeout loads the player")
+
+-- 0.4.64: a stalled download is sent again, smaller and slower each time
+players[7] = {name = "slow", ids = {beammp = "7"}}
+fire("onPlayerJoin", 7)
+fire("rlsmpRetry", 7, json.encode({attempt = 1}))
+net.pump()
+check(count(7, "rlsmpChunkBegin") == 0, "a retry before the hello does nothing")
+fire("rlsmpHello", 7, json.encode({v = 1, build = transfer.BUILD}))
+net.pump()
+check(count(7, "rlsmpChunkBegin") == 1 and sessions.get(7).stage == "downloading", "the hello starts the first download")
+local function lastBegin() for k = #sent[7], 1, -1 do if sent[7][k].name == "rlsmpChunkBegin" then return sent[7][k].data end end end
+local firstChunks = lastBegin().n
+sessions.get(7).profile.save.files["pad.json"] = string.rep("x", 60000)   -- a bigger save, so the chunk size shows in the chunk count
+for _ = 1, 20 do net.pump() end
+fire("rlsmpRetry", 7, json.encode({attempt = 0}))
+net.pump()
+check(count(7, "rlsmpChunkBegin") == 1, "attempt 0 is ignored")
+firstChunks = math.ceil(60000 / 16000)
+fire("rlsmpRetry", 7, json.encode({attempt = 1}))
+net.pump()
+check(count(7, "rlsmpChunkBegin") == 2, "the retry sends a new header")
+local n1 = lastBegin().n
+check(n1 > firstChunks, "attempt 1 uses smaller chunks, so more of them (" .. firstChunks .. " -> " .. n1 .. ")")
+fire("rlsmpRetry", 7, json.encode({attempt = 3}))
+net.pump()
+local n3 = lastBegin().n
+check(n3 > n1, "attempt 3 is smaller still (" .. n1 .. " -> " .. n3 .. ")")
+local sentBefore = count(7, "rlsmpChunk")
+net.pump()
+check(count(7, "rlsmpChunk") - sentBefore == 1, "the retry paces one chunk per tick (" .. (count(7, "rlsmpChunk") - sentBefore) .. ")")
+fire("rlsmpRetry", 7, json.encode({attempt = 9}))
+net.pump()
+check(count(7, "rlsmpChunkBegin") == 3, "an attempt number above three is ignored")
+now = now + 2
+fire("rlsmpHello", 7, json.encode({v = 1, build = transfer.BUILD, again = 2}))
+net.pump()
+check(count(7, "rlsmpChunkBegin") == 4, "a repeated hello (marked again) counts as a retry")
+fire("rlsmpHello", 7, json.encode({v = 1, build = transfer.BUILD}))
+net.pump()
+check(count(7, "rlsmpChunkBegin") == 4, "a plain repeated hello is still ignored")
+fire("onPlayerDisconnect", 7)
+fire("onPlayerJoin", 7)
+fire("rlsmpHello", 7, json.encode({v = 1, build = transfer.BUILD}))
+net.pump()
+local hb = lastBegin()
+check(hb.n == math.ceil(hb.len / 16000), "a new join starts at the normal chunk size again (" .. hb.n .. " chunks for " .. hb.len .. " bytes)")
 print("resend_test: " .. passed .. " checks passed")

@@ -298,4 +298,5 @@ M._meetup = function() return meetup end
 M._held = function() return held end
 M.onInit = function() setExtensionUnloadMode(M, "manual") end
 
+require("rlsmp/lib/perf").wrap("meetup", M)
 return M

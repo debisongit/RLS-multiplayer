@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.64 (untested in-game)
+- A save download that stops is asked for again (handoff open problem 2 and the owner's log `88e86ae6`: 29 of 191 pieces, then nothing, and the game ended up in plain BeamMP): after 12 s without a new piece the game asks the server to send the whole save again, up to three times; the server sends it with smaller chunks and fewer per tick each time (8000 B x 3, 4000 B x 1, 2000 B x 1). No answer to the hello for 20 s: the hello is sent again (twice), and the server treats that as a retry. New event `rlsmpRetry {attempt}`; hello may carry `again`. The server logs `save download stalled: sending it again`. Needs the new build on BOTH server and client. (Claude B)
+- Lag (handoff open problem 1): frame-time counters. Every extension's `onUpdate` is timed; once a minute the log has one line `RLSMP-P3 perf: ours X ms/frame over N frames, cars in the game N; per module ms/call: ...`. If "ours" is small the lag is not our per-frame code. Not covered: time inside our wrappers around RLS functions and in event handlers. (Claude B)
+- Lag: parked cars are cheap stand-ins by default now (`trafficVariety.parked.fullPool` false). Every parked car is a car for you and for every other player; a config.json that still has `fullPool` true is switched once (log: `lag trim`). Put it back in the [ menu if you prefer full cars. The 4 km traffic ring is unchanged (the car count is the same, so it is not the first suspect). (Claude B)
+
 ## 0.4.63 (untested in-game)
 - Parked cars follow you. Cause: RLS switches off every parked car more than 50 m from you when the career starts and only recycles active ones, so the 9 parked cars stayed where they were created. Now, when fewer than `parked.nearCount` (6 by day, `nearNightCount` 10 at night) parked cars are within `parked.nearRadius` (350 m), the farthest one (over 700 m from everyone, out of view) is teleported to a free parking spot 120 to 350 m from you, one move every 8 s, only while the frame rate is fine. Log lines `parked near:`. Existing servers: add the new keys to the `parked` block or use the [ menu. (Claude A)
 

@@ -123,4 +123,5 @@ end
 M._onWho, M._onGo, M._onAck, M._onVehicle = onWho, onGo, onAck, onVehicle
 M.onInit = function() setExtensionUnloadMode(M, "manual") end
 
+require("rlsmp/lib/perf").wrap("duel", M)
 return M

@@ -98,4 +98,5 @@ function M.onServerLeave() clock, timer, lastMove, seen, moved, kept, none = 0, 
 function M.onExtensionLoaded() p3.log("I", "rlsmp_trafficPlace loaded") end
 M.onInit = function() setExtensionUnloadMode(M, "manual") end
 
+require("rlsmp/lib/perf").wrap("trafficPlace", M)
 return M

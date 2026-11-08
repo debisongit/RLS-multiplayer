@@ -771,4 +771,5 @@ M._onConfig = onConfig
 M._build = build
 M.onInit = function() setExtensionUnloadMode(M, "manual") end
 
+require("rlsmp/lib/perf").wrap("trafficVariety", M)
 return M

@@ -93,10 +93,27 @@ local function onPlayerDisconnect(pid)
   end
 end
 
+local onRetry   -- defined below onHello (a repeated hello calls it)
+
+local function sendProfile(pid, s, payload)
+  net.sendBig(pid, "profile", payload, {
+    profile = identity.localProfileName(s.accountId),
+    isNew = s.isNew,
+    startingOptions = startingOptions(),
+    drop = profiles.staleCars(s.profile),
+    money = s.profile.ledger.seeded and s.profile.ledger.money or nil,
+  })
+  util.info(string.format("Sending %s profile to %s (%d bytes)", s.isNew and "NEW" or "saved", s.name, #payload))
+end
+
 local function onHello(pid, data)
   local s = sessions[pid]
   if not s then onPlayerJoin(pid) s = sessions[pid] end
-  if s.stage ~= "await_hello" then return end
+  if s.stage ~= "await_hello" then
+    -- the same client says hello again (nothing came back): send the save again, smaller and slower (a normal hello never repeats)
+    if s.stage == "downloading" and s.profile and tonumber(data.again) then onRetry(pid, {attempt = data.again}) end
+    return
+  end
 
   if tonumber(data.v) ~= transfer.PROTOCOL then
     MP.DropPlayer(pid, "RLS-Career-MP version mismatch. Restart BeamMP so it downloads the server's mod again.")
@@ -142,16 +159,24 @@ local function onHello(pid, data)
   s.stage = "downloading"
 
   runHooks(downloadHooks, pid, s, profile)
+  s.isNew = isNew
   local payload = profiles.encodeForDownload(profile)
   util.info(string.format("[rlsmp-timing] loaded and encoded %s's profile: %d bytes, %.2fs", tostring(s.name), #payload, os.clock() - t0))
-  net.sendBig(pid, "profile", payload, {
-    profile = identity.localProfileName(accountId),
-    isNew = isNew,
-    startingOptions = startingOptions(),
-    drop = profiles.staleCars(profile),
-    money = profile.ledger.seeded and profile.ledger.money or nil,
-  })
-  util.info(string.format("Sending %s profile to %s (%d bytes)", isNew and "NEW" or "saved", s.name, #payload))
+  sendProfile(pid, s, payload)
+end
+
+-- The client says its save download stalled (rlsmp-timing in its log): send the profile again, smaller and slower each time (net.setPace).
+local MAX_RETRY = 3
+onRetry = function(pid, data)
+  local s = sessions[pid]
+  if not (s and s.profile and s.stage == "downloading") then return end
+  local attempt = math.tointeger(tonumber(data.attempt)) or 1
+  if attempt < 1 or attempt > MAX_RETRY then return end
+  local p = net.setPace(pid, attempt)
+  net.cancelTransfers(pid)
+  util.warn(string.format("%s's save download stalled: sending it again (attempt %d, chunks of %d bytes, %d per tick)",
+    tostring(s.name), attempt, p.chunkSize, p.perTick))
+  sendProfile(pid, s, profiles.encodeForDownload(s.profile))
 end
 
 local function onLoaded(pid, data)
@@ -283,6 +308,7 @@ function M.init(config)
   net.on("onPlayerDisconnect", onPlayerDisconnect)
   net.on("onShutdown", M.saveAll)
   net.onClient("rlsmpHello", onHello)
+  net.onClient("rlsmpRetry", onRetry)
   net.onClient("rlsmpLoaded", onLoaded)
   net.onClient("rlsmpUpBegin", onUpBegin)
   net.onClient("rlsmpUpChunk", onUpChunk)

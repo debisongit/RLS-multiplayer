@@ -87,4 +87,5 @@ end
 M._onRx = onRx
 M.onInit = function() setExtensionUnloadMode(M, "manual") end
 
+require("rlsmp/lib/perf").wrap("trafficLabels", M)
 return M

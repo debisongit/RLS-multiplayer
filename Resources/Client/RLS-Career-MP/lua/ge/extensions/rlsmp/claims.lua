@@ -151,4 +151,5 @@ end
 M._onPenalty, M._onWhatCar = onPenalty, onWhatCar
 M.onInit = function() setExtensionUnloadMode(M, "manual") end
 
+require("rlsmp/lib/perf").wrap("claims", M)
 return M

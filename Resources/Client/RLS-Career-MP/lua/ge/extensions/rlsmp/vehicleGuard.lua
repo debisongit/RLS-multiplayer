@@ -357,4 +357,5 @@ M._onConfig = onConfig
 
 M.onInit = function() setExtensionUnloadMode(M, "manual") end
 
+require("rlsmp/lib/perf").wrap("vehicleGuard", M)
 return M

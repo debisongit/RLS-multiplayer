@@ -69,6 +69,7 @@ luajit tests/traffic_swap_client_test.lua
 luajit tests/traffic_pool_lib_test.lua
 luajit tests/traffic_rarity_lib_test.lua
 luajit tests/traffic_focus_lib_test.lua
+luajit tests/perf_test.lua
 luajit tests/traffic_reroll_client_test.lua
 luajit tests/traffic_fill_client_test.lua
 luajit tests/simplified_lib_test.lua
