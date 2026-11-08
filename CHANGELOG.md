@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.35 (all untested in-game)
+- Meetup selling: Marketplace sales send you to a meetup spot to drop the car off. Only stolen or fake-paper cars can be a police setup (1 to 2 cops); a fully legal car never is. (Claude A)
+- Garage: Strip and illegal parts buttons in your RLS garage, plus a Black market items button. (Claude A)
+- Police variety: more police models, fewer undercovers, fewer Bastions. (Claude A)
+
 ## Unreleased (not built, not played)
 - New meetup selling. A Marketplace sale no longer finishes at once: you get a GPS route to a meetup spot the server picks, stop there for a moment, and the sale completes. Spots change each time and there is a cooldown. Untested in game, and the hook into the Marketplace is unverified (see `docs/RESEARCH_MEETUP_SALE.md`). (untested) (Claude A)
 - A fully legal car is never set up. A stolen car or a car with a police-flagged plate has a chance that the buyer is a police setup: 1 or 2 cops chase you, no roadblocks, no sale. The chance is never 0 or 100 percent for those cars, so you cannot be sure. (untested) (Claude A)

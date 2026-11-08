@@ -15,7 +15,7 @@ local M = {}
 
 M.PROTOCOL = 1
 -- Bump on every release. Logged by the client on load and by the server on join, so mixed builds are easy to spot.
-M.BUILD = "0.4.34"
+M.BUILD = "0.4.35"
 
 -- Fletcher-32 over the bytes of a string, using plain arithmetic so it runs on any Lua.
 function M.checksum(str)

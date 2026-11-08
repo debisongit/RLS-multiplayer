@@ -147,6 +147,9 @@ M.defaults = {
     -- Live swapping: a traffic car that nobody can see is replaced by a model that fits the road class and day or night better.
     -- enabled = only watch and log what would happen (changes nothing). live = really replace the cars (EXPERIMENTAL, never tried in the game).
     swap = {enabled = true, live = true, perMinute = 2, hiddenSeconds = 5, checkSeconds = 2, minRatio = 1.5, maxFailures = 3},
+    -- Police cars (RLS's west coast list is only Bastions, 4 of 5 unmarked/undercover). Weight per police model (missing = 1, 0 = never; default Bastion low),
+    -- undercoverShare = about this share of police cars may be unmarked/undercover (name contains a word of undercoverWords), maxShare = most of one model in a group.
+    police = {enabled = true, models = {bastion = 0.3}, undercoverShare = 0.1, maxShare = 0.4, undercoverWords = {"undercover", "unmarked"}},
   },
 
   smartTraffic = {
@@ -297,7 +300,9 @@ M.defaults = {
   -- Rates are shares of the car's value. market.fenceCarRate is what "sell" pays.
   fence = {
     enabled = true,
-    minValue = 2000,          -- used when the game had no price for the car (value 0)
+    garage = true,            -- the "Strip / illegal parts" button in the RLS garage computer (client rlsmp/garage.lua)
+    garageCooldown = 20,      -- seconds between two strips of ordinary (not stolen) garage cars per player
+    minValue = 2000,         -- used when the game had no price for the car (value 0)
     maxValue = 300000,        -- the car value the fence works from is capped here (the value comes from the game)
     stripRate = 0.30,         -- parts for cash, no papers
     resellRate = 0.60,        -- fake plate + VIN plate + part number, all used up
@@ -353,6 +358,26 @@ M.defaults = {
       jammer          = {price = 40000, minRep = 50},
       can_injector    = {price = 45000, minRep = 50},
     },
+  },
+
+  -- Meetup selling: a Marketplace (or black market) sale is finished by driving to a spot the SERVER picks (server/meetup.lua).
+  -- A fully legal car never gets a police setup. A stolen car or a car with illegal papers does, with these chances
+  -- (kept between minChance and maxChance so the player is never sure). A setup brings copsMin..copsMax police (1 to 2).
+  meetup = {
+    enabled = true,
+    spots = {},               -- {name, x, y, z}; empty = use market.dropSpots
+    radius = 15,              -- meters (horizontal) the client wants for the drop-off
+    serverRadius = 30,        -- meters the server accepts (positions are a few seconds old)
+    minDistance = 300,        -- the new spot is at least this far from where the player stands (when enough spots exist)
+    expireMinutes = 20,       -- an unfinished meetup ends after this
+    cooldownSeconds = 300,    -- after a finished or ambushed meetup the player waits this long
+    cancelCooldownSeconds = 60,
+    illegalChance = 0.35,     -- setup chance for a stolen / police-flagged car sold through the Marketplace
+    blackChance = 0.45,       -- setup chance for a stolen car sold through the black market
+    minChance = 0.05,
+    maxChance = 0.85,
+    copsMin = 1,
+    copsMax = 2,
   },
 
   security = {
