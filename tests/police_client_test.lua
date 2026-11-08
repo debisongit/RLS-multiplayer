@@ -255,4 +255,47 @@ check(traffic[10].respawn.spawnDirBias == -1, "bias is set before leaving")
 police.onServerLeave()
 check(traffic[10].respawn.spawnDirBias == 0.5, "leaving puts the original respawn direction back")
 
+
+-- No fine in a stolen car ------------------------------------------------------------------------------------------------------------------
+local paid, messages = {}, {}
+overhaul_career_economy_payment = {pay = function(price, reason) paid[#paid + 1] = {price = price, label = type(reason) == "table" and reason.label or nil} return true end}
+ui_message = function(msg) messages[#messages + 1] = msg end
+local theftLib = require("rlsmp/lib/theft")
+handlers["rlsmpPoliceConfig"](json.encode({antiTeleport = true, blockRoadblocks = true}))
+tick()
+check(saw("patched finePay = true"), "the payment function is wrapped")
+-- the player's own car (not stolen): the fine is charged as RLS wants
+overhaul_career_economy_payment.pay({money = {amount = 300}}, {label = "Police fine", tags = {"fine"}})
+ui_message("Citation fine: $300 (1 violations, pursuit score 40)")
+check(#paid == 1 and paid[1].label == "Police fine" and messages[1]:find("^Citation fine"), "own car: the police fine is charged and the message stays")
+-- the same call in a car we made from a parked car: not charged, the message says why
+theftLib.markConverted(playerId)
+paid, messages = {}, {}
+local result = overhaul_career_economy_payment.pay({money = {amount = 300}}, {label = "Police fine", tags = {"fine"}})
+check(#paid == 0 and result == true, "stolen car: the police fine is not charged")
+ui_message("Arrest fine: $900 (3 violations, pursuit score 200)")
+check(messages[1] == "Arrest: no fine, this car is not registered to you.", "...and the message that follows says so: " .. tostring(messages[1]))
+ui_message("Citation fine: $5 (1 violations, pursuit score 1)")
+check(messages[2]:find("^Citation fine"), "a later fine message (no skipped fine before it) is left alone")
+-- other payments in a stolen car are untouched
+overhaul_career_economy_payment.pay({money = {amount = 50}}, {label = "Fuel"})
+check(#paid == 1 and paid[1].label == "Fuel", "other payments in a stolen car are charged normally")
+-- switched off by the server: the fine is charged again
+handlers["rlsmpPoliceConfig"](json.encode({noFineInStolenCar = false}))
+paid = {}
+overhaul_career_economy_payment.pay({money = {amount = 300}}, {label = "Police fine"})
+check(#paid == 1, "noFineInStolenCar = false: the fine is charged in a stolen car too")
+handlers["rlsmpPoliceConfig"](json.encode({noFineInStolenCar = true}))
+-- works with antiTeleport off too, and not outside multiplayer / the career
+handlers["rlsmpPoliceConfig"](json.encode({antiTeleport = false}))
+paid = {}
+overhaul_career_economy_payment.pay({money = {amount = 300}}, {label = "Police fine"})
+check(#paid == 0, "antiTeleport = false does not switch the no-fine rule off")
+mp = false
+overhaul_career_economy_payment.pay({money = {amount = 300}}, {label = "Police fine"})
+check(#paid == 1, "outside multiplayer the fine is charged")
+mp = true
+theftLib.forget(playerId)
+handlers["rlsmpPoliceConfig"](json.encode({antiTeleport = true}))
+
 print(string.format("police_client_test: %d checks passed", passed))

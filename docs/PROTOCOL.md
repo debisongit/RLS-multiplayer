@@ -111,7 +111,7 @@ Log lines: `RLSMP-P3 ... plates:` (client), `[plates]` (server).
 
 | Direction | Event | Body |
 |---|---|---|
-| S→C | `rlsmpSmartTraffic` | `{enabled, mix = {normal, slow, aggressive, racer, drunk}, policeReact}` sent once when a player finishes loading (also when `enabled` is false) |
+| S→C | `rlsmpSmartTraffic` | `{enabled, mix = {normal, slow, aggressive, racer, drunk}, nightMult = {same names}, policeReact}` (`nightMult`: each weight is multiplied by it at night, missing or bad = 1; the client reads the game's light state and draws new personalities when it flips) sent once when a player finishes loading (also when `enabled` is false) |
 
 Server `smartTraffic.lua` owns `config.smartTraffic` (defaults: on, mix 80/10/6/3/1, policeReact on) and sends weights as numbers >= 0
 (anything else becomes 0); they need not add up to 100. Client `personalities.lua` (`rlsmp_personalities`, pure logic in `lib/personality.lua`)
@@ -259,8 +259,8 @@ The screen has no rules: it shows what the server last sent and relays taps. Not
 | Direction | Event | Body |
 |---|---|---|
 | C→S | `rlsmpMarketGet` | `{}` at most one answer per player per second |
-| S→C | `rlsmpMarketState` | `{ready, member, money, spot, owned = [{name, label, count}], stolen = [{plate, model, strip, sell, resell?, gamble?}], meetup = {spot, kind}?, invite = {from, seconds}?}` plus, for members, `{rep, invitesLeft, items = [{name, label, price, minRep, durable, locked, have, onOrder}], orders = [{id, item, label, n, spot, readyIn, ready}] (orders also for players who were thrown out but still have paid orders)}` |
-| C→S | `rlsmpMarketAct` | `{a = "buy" \| "pickup" \| "invite" \| "accept" \| "scout", item?, n?, who?, cars?}`; at most one per player per second (a separate limit from Get). Runs the same command as the chat (the buttons `fence`, `meetup` and `meetupCancel` never reach the server, the client extension runs them: `rlsmp_theft.fence(mode)` with mode strip|sell|resell|gamble, `rlsmp_meetup.startBlack()`, `rlsmp_meetup.cancel()`; `scout` has no chat form; `cars` = `[{x, y, z}]`, at most 8 stealable parked cars the game sees near the player) |
+| S→C | `rlsmpMarketState` | `{ready, member, money, spot, owned = [{name, label, count}], stolen = [{plate, model, strip, sell, resell?, fit = [{name, label}], fitted = [label], age?, trend?}], meetup = {spot, kind}?, invite = {from, seconds}?}` plus, for members, `{rep, invitesLeft, items = [{name, label, price, minRep, durable, locked, have, onOrder}], orders = [{id, item, label, n, spot, readyIn, ready}] (orders also for players who were thrown out but still have paid orders)}` |
+| C→S | `rlsmpMarketAct` | `{a = "buy" \| "pickup" \| "invite" \| "accept" \| "scout", item?, n?, who?, cars?}`; at most one per player per second (a separate limit from Get). Runs the same command as the chat (the buttons `fence`, `meetup` and `meetupCancel` never reach the server, the client extension runs them: `rlsmp_theft.fence(mode)` with mode strip|sell|resell (the phone app now uses `stolenDo` instead: `rlsmp_garage.doStolen(plate, action)`), `rlsmp_meetup.startBlack()`, `rlsmp_meetup.cancel()`; `scout` has no chat form; `cars` = `[{x, y, z}]`, at most 8 stealable parked cars the game sees near the player) |
 | S→C | `rlsmpMarketResult` | `{text}` what the command would have said in chat (collected instead of sent to chat), then a fresh `rlsmpMarketState` |
 | S→C | `rlsmpMarketScout` | `{marks = [{x, y, z}], seconds}` after a bought scout tip: 2 to 3 stealable parked cars, shown as small spheres (no text) for `seconds` |
 
@@ -403,8 +403,8 @@ A stolen car is only a local car of its thief and vanishes when they leave. `rls
 
 ## The fence (server `fence.lua`; client part is in `rlsmp/theft.lua`; needs `theft.enabled`)
 
-Players use the garage computer buttons ("Garage flow" below) or the Black Market app (stolen cars section, buttons Strip, Sell, Resell, Gamble for the stolen car they stand next to at the drop spot). Hidden developer fallback (only with `ui.chatCommands`): `/fence` lists the stolen cars, `/fence strip | sell | resell | gamble`.
-- Prices are shares of the car's value (from the theft record: the client's USED value of the car, see `docs/RESEARCH_STOLEN_VALUE.md`; the server lifts it to `fence.minValue`, caps it at `fence.maxValue` and `fence.modelCaps[model]` when the record is made): `strip` `stripRate` (0.45), `sell` `market.fenceCarRate` (0.40), `resell` `resellRate` (0.70, needs fake_plate + vin_plate + part_number, all used up), `gamble` `gambleBase` (0.55) + `gamblePerPaper` (0.05) per extra paper, using the papers the player has up to `gambleMaxPapers` (2), used up; `gambleBust` (0.20) chance of a trap: no money, car taken, `market.bust`. Good sales give `fence.rep[mode]` reputation.
+Players use the garage computer buttons ("Garage flow" below) or the Black Market app (stolen cars section, every stolen car has its own buttons Strip, Sell and Resell plus Fit buttons for the illegal parts the player owns, done with the garage flow below (no drop spot; `fence.phone`, default on)). Hidden developer fallback (only with `ui.chatCommands`): `/fence` lists the stolen cars, `/fence strip | sell | resell`.
+- Prices are shares of the car's value (from the theft record: the client's USED value of the car, see `docs/RESEARCH_STOLEN_VALUE.md`; the server lifts it to `fence.minValue`, caps it at `fence.maxValue` and `fence.modelCaps[model]` when the record is made): `strip` `stripRate` (0.45), `sell` `market.fenceCarRate` (0.40), `resell` `resellRate` (0.70, needs fake_plate + vin_plate + part_number, all used up). There is no gamble any more (removed at the owner's request). Good sales give `fence.rep[mode]` reputation.
 - The server checks: fence enabled and theft on, loaded player, black market member, the plate is in the player's OWN theft record, the latest `rlsmpPos` report is fresh and within `market.pickupRadius` of the active drop spot (`market.spotAt(now)`), not chased, wallet seeded, one sale at a time. The record leaves memory, money and papers change in ONE profile save, then `stolen.json` is written; a failed save undoes everything.
 
 | Direction | Event | Body |
@@ -439,9 +439,9 @@ Config `fence.garage` (true) and `fence.garageCooldown` (20 s). No drop spot nee
 | Direction | Event | Body |
 |---|---|---|
 | C→S | `rlsmpGarageQuote` | `{plate?, model?, value?, year?}`; without a car it only asks for the item list. At most one per second |
-| S→C | `rlsmpGarageMenu` | `{ok, err?, items = [{name, label, count}], kind = "stolen" or "owned", plate, model, strip, fit = [{name, label}], fitted = [label]}`; `strip` is what stripping pays; for stolen cars also `sell`, `resell` (null without all three papers), `gamble` (null without a paper) and `trap` (percent); `fit` lists papers the player owns and has not fitted |
-| C→S | `rlsmpGarageDo` | `{action = "strip", "sell", "resell", "gamble" (the last three for stolen cars only), "fit:fake_plate", "fit:vin_plate" or "fit:part_number", plate, model, value, year, inventoryId?}` |
-| S→C | `rlsmpGarageResult` | `{ok, action, err?, pay?, takeCar?, inventoryId?, fitted?}`; on a paid sale (or a gamble that ended in a trap, `takeCar` true with `ok` false) the client removes the car (RLS `removeVehicle` for an owned car, `rlsmp_theft.removeStolenByPlate` for a stolen one). Followed by `rlsmpWalletSet` |
+| S→C | `rlsmpGarageMenu` | `{ok, err?, items = [{name, label, count}], kind = "stolen" or "owned", plate, model, strip, fit = [{name, label}], fitted = [label]}`; `strip` is what stripping pays; for stolen cars also `sell`, `resell` (null without all three papers); `fit` lists papers the player owns and has not fitted |
+| C→S | `rlsmpGarageDo` | `{action = "strip", "sell", "resell", (sell and resell for stolen cars only), "fit:fake_plate", "fit:vin_plate" or "fit:part_number", plate, model, value, year, inventoryId?}` |
+| S→C | `rlsmpGarageResult` | `{ok, action, err?, pay?, takeCar?, inventoryId?, fitted?}`; on a paid sale the client removes the car (RLS `removeVehicle` for an owned car, `rlsmp_theft.removeStolenByPlate` for a stolen one). Followed by `rlsmpWalletSet` |
 
 A plate that is in somebody else's theft record is refused. A stolen car's value comes from the server's record; an ordinary car's value is the client's, capped by `fence.maxValue`. Fitting uses the item up at once and sets `papers[name]` on the stolen record; resell and gamble count fitted papers first.
 
@@ -457,3 +457,15 @@ A plate that is in somebody else's theft record is refused. A stolen car's value
 `/steal`, `/inspect`, `/fence`, `/market`, `/meetup` and `/items` only work while `ui.chatCommands` is true (set it in `config.json`; nobody needs it). With it off the server answers one plain line ("That is done in the game menus now") and does nothing else. Registered with `net.onChat(name, fn, true)`. No toast, hint or text names them any more; `tests/no_chat_hints_test.lua` scans for that.
 
 Client input action `rlsmpInteract` (`core/input/actions/rlsmp.json`, default key Y in `settings/inputmaps/keyboard_rlsmp.json`) calls `rlsmp_theft.interact()`. See `docs/RESEARCH_THEFT_UI.md`.
+
+
+## No fine in a stolen car (client `rlsmp/police.lua`, server setting `police.noFineInStolenCar`)
+
+`rlsmpPoliceConfig` also carries `noFineInStolenCar` (default true). While the player's car is one the theft code converted from a parked car (`lib/theft` converted set), the client wraps `overhaul_career_economy_payment.pay` and skips the one payment whose reason label is "Police fine" (RLS's `playerDriving.onPursuitAction` charges it on a citation or arrest), and rewrites the "Citation fine" / "Arrest fine" message that follows within 2 s. Nothing else is touched.
+
+
+## Police cars come back behind the player (client `rlsmp/policeRespawn.lua`, server `police.respawnBehind|respawnPerMinute|respawnGap`)
+
+`rlsmpPoliceConfig` also carries `respawnBehind`, `respawnPerMinute`, `respawnGap` (handled by `rlsmp/police.lua`, which passes them to `rlsmp_policeRespawn._onConfig`: one event name, one handler). A police unit (role police, AI) whose `respawnCount` rose and that is 80 m or more from the player gets a replacement: `core_multiSpawn.spawnGroup({entry}, 1, {name = "rlsmpCop", mode = "roadBehind", gap = respawnGap})` with `entry` from `rlsmp_trafficVariety.policePick(oldModel)` (another model), then on `onVehicleGroupSpawned(.., "rlsmpCop")`: `gameplay_traffic.insertTraffic(id, false, true)`, `veh:setRole('police')`, a check that it is behind the player and at least 80 m away, then the old unit is removed (`removeTraffic` + `delete`). Failure (in front, too close, no message in 25 s, any error) keeps the old unit; 3 failures switch it off for the session.
+
+`rlsmpPoliceConfig` also carries `copCount` (default 3, 0 = the game's own number) and `copTopUpSeconds` (30). The client (`rlsmp_policeRespawn`) counts AI police units (role police, not the player's) and, below `copCount`, builds one more the same way as a replacement (`spawnGroup(..., mode = "roadBehind")`, `insertTraffic`, `setRole('police')`, placement check), at most one per `copTopUpSeconds`; the two jobs (top-up, replacement) count their failures apart (3 each).

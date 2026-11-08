@@ -56,6 +56,23 @@ local function playerChased()
   return rlsmp_police ~= nil and rlsmp_police.isPursuit ~= nil and rlsmp_police.isPursuit() == true
 end
 
+-- Night: the game's own light state (the same reading the traffic variety code uses).
+local function isNight()
+  if core_environment and core_environment.getLightState then
+    local ok, state = pcall(core_environment.getLightState)
+    if ok and type(state) == "table" then return state.isNight == true end
+  end
+  return false
+end
+
+-- The weights to pick from right now: the server's mix, times the night multipliers at night.
+local function currentMix()
+  if config.nightMult and isNight() then return P.withMultipliers(config.mix, config.nightMult) end
+  return config.mix
+end
+
+local lastNight               -- nil until the first step; when it flips, every car gets a new personality
+
 local function trafficData()
   return gameplay_traffic and gameplay_traffic.getTrafficData and gameplay_traffic.getTrafficData() or {}
 end
@@ -195,6 +212,14 @@ local function step()
   end
   local traffic = trafficData()
   local ctx = context()
+  local night = isNight()
+  if lastNight ~= nil and night ~= lastNight and config.nightMult then
+    -- day turned to night (or back): put every car back and let each one draw a personality from the new mix below
+    for id, e in pairs(cars) do restore(id, e) end
+    cars = {}
+    p3.log("I", "smart: it is " .. (night and "night" or "day") .. " now: new personalities from the " .. (night and "night" or "day") .. " mix")
+  end
+  lastNight = night
   for id, e in pairs(cars) do
     if traffic[id] == nil then cars[id] = nil end   -- car is gone
   end
@@ -214,7 +239,7 @@ local function step()
       end
     else
       if not e then
-        e = P.newEntry(P.pick(config.mix, rnd()), now, rnd)
+        e = P.newEntry(P.pick(currentMix(), rnd()), now, rnd)
         cars[id] = e
         p3.count("smart: assigned " .. e.name)
         if e.name ~= "normal" then p3.log("I", string.format("smart: car id=%s is %s", tostring(id), e.name)) end
@@ -263,6 +288,7 @@ local function onConfig(data)
   config = {
     enabled = data.enabled == true,
     mix = P.sanitizeMix(data.mix),
+    nightMult = type(data.nightMult) == "table" and data.nightMult or nil,
     policeReact = data.policeReact == true,
   }
   local m = config.mix
@@ -273,7 +299,7 @@ end
 
 function M.onServerLeave()
   restoreAll()
-  config, enabled, now, timer = nil, false, 0, 0
+  config, enabled, now, timer, lastNight = nil, false, 0, 0, nil
   limiter = P.newLimiter()
 end
 

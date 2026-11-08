@@ -523,3 +523,48 @@ Known gaps: never played. Drop spot places are only in `config.json`. Changes ma
 1. Two players drive the same model in the same colour. Player A escapes a police chase (so the car's description is remembered for 20 minutes). Player B drives slowly past a cop: B should NOT get the "wanted" chase from the description. If A changes plates and drives slowly past a cop, A still should.
 2. Menu, Police page: untick "Police rules on" and Apply. Cops should stop reading plates (no "Police reading your plate" text) until you tick it again.
 3. Send the `[plates]` server log lines and the `plates` client log lines if anything looks wrong.
+
+
+## No fine in a stolen car (build 0.4.50)
+
+1. Steal a car (see the theft section) and get caught for speeding or a chase ending in a citation or arrest. Expected: the message says "Citation: no fine, this car is not registered to you." (or "Arrest: ..."), your money does not drop, and the game log has `police fine NOT charged`.
+2. Do the same in a car from your own garage: the fine is charged as before.
+3. If you are fined in the stolen car anyway, send the game log lines with `finePay` / `police fine` and the exact message you saw: it means RLS charged the fine another way.
+Known gaps: only RLS's own "Police fine" is covered (not other fees); the chase, arrest and plate flag still happen. Loaned or rented garage cars are still fined.
+
+
+## More bad drivers at night (build 0.4.51)
+
+1. Drive in traffic at night (the game's light state says night) for a few minutes and watch: about one in three cars should now be something other than a normal driver (aggressive tailgaters, racers going far over the limit, drunk weavers). By day it is about one in five.
+2. The log has `smart: it is night now: new personalities from the night mix` when night falls and `... day now ...` at dawn. The line `smart: personalities now ...` (census) shows the counts if you call `rlsmp_personalities.census()` from the console.
+3. Menu (`[`), Behaviour page: the "at night x" sliders change it live. Set a night multiplier to 1 to switch the effect off.
+Known gaps: never played; it only changes WHICH personality a car draws, not how bad a racer or a drunk is.
+
+
+## Police cars come back behind you, as another model (build 0.4.52)
+
+1. Drive until cops get re-placed (a chase, or just driving through the city). Search the game log for `police respawn:`.
+2. Expected sequence: `cop N re-placed X m in front of / behind the player`, `building <model> behind the player`, `new cop M came out Y m behind the player`, `done, new cop M (<model>), old cop N removed`. The new model is not the old one.
+3. If you see `came out IN FRONT`, `too close` or `failed`, the placement did not work as hoped: send those lines and the next ones. After three failures the log says `switched off for this session` and RLS places cops as before.
+4. Check that the new cop chases you like the others (role police is set the way RLS's own police service does it).
+Settings: Police page of the `[` menu (on/off, builds a minute, how far behind).
+Known gaps: never played. What `roadBehind` does with one car and a gap is a guess (the log lines tell); BeamMP sends each spawn and delete to everybody, and the per-player car limit (`MaxCars`) can refuse the extra car for a moment.
+
+
+## Selling stolen cars through the phone, no gamble (build 0.4.53)
+
+1. Steal a car (see the theft section), open the Black Market app on the phone: under "Stolen cars" every car has Strip, Sell and Resell buttons with prices (Resell greyed out without all three papers) and a Fit button for each illegal part you own. There is no Gamble.
+2. Tap Sell: the car disappears, the money goes up by the price on the button, the app's message box says "Sold (sell): $...". No driving to the drop spot, the car can be anywhere.
+3. Order a fake plate, a VIN plate and a part number kit (Black Market app), press Fit for each, then Resell pays the most (70% of the value).
+4. Switch `fence.phone` off on the Fence page of the `[` menu: the phone buttons then say "Selling from the phone is switched off on this server"; the garage computer still works.
+5. Send me the `RLSMP-GARAGE` and `[fence]` lines if something is off.
+Known gaps: never played; the phone can sell a car that is far away (a stolen car is paid for without being delivered), see `fence.phone`.
+
+
+## More cops on the map (build 0.4.54)
+
+1. Drive around (a few minutes). The log should show `police top-up: only 1 of 3 cops on the map; building <model>/<config> behind the player`, then `new cop N came out X m behind the player` and `done`, about every 30 s until there are 3 cops (the game's one plus two).
+2. Look for the cop cars: different models, patrolling like normal traffic. Start a chase: all of them should join.
+3. If the log says `came out IN FRONT`, `too close` or `failed`, send those lines: after 3 failures the top-up switches off for the session.
+4. Settings (Police page of the `[` menu): `Police cars on the map` (0 to 4) and how often a new one may come.
+Known gaps: never played; each cop is one more BeamMP car for everybody (MaxCars); what `roadBehind` does with one car is a guess.

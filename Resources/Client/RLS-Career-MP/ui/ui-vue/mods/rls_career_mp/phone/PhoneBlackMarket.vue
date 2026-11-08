@@ -103,17 +103,22 @@
           <h2>Stolen cars</h2>
           <p v-if="!stolenList.length">You have no stolen car right now.</p>
           <template v-else>
-            <article v-for="c in stolenList" :key="c.plate" class="row">
-              <div>
-                <strong>{{ c.model }} {{ c.plate }}</strong>
-                <small>Strip {{ money(c.strip) }} · Sell {{ money(c.sell) }} · Resell {{ c.resell ? money(c.resell) : 'needs 3 papers' }} · Gamble {{ c.gamble ? money(c.gamble) : 'needs a paper' }}</small>
-                <small v-if="c.age != null" class="hint">Price {{ c.trend > 0 ? 'up ▲' : (c.trend < 0 ? 'down ▼' : 'steady') }}, updated {{ Math.floor(c.age / 60) < 1 ? 'just now' : Math.floor(c.age / 60) + ' min ago' }}</small>
+            <article v-for="c in stolenList" :key="c.plate" class="stolen">
+              <strong>{{ c.model }} {{ c.plate }}</strong>
+              <small v-if="c.age != null" class="hint">Price {{ c.trend > 0 ? 'up ▲' : (c.trend < 0 ? 'down ▼' : 'steady') }}, updated {{ Math.floor(c.age / 60) < 1 ? 'just now' : Math.floor(c.age / 60) + ' min ago' }}</small>
+              <small v-if="fittedList(c).length" class="hint">Fitted: {{ fittedList(c).join(', ') }}</small>
+              <div class="fence">
+                <button type="button" class="primary" bng-nav-item :disabled="busy" @click="act('stolenDo', c.plate, 'strip')">Strip {{ money(c.strip) }}</button>
+                <button type="button" class="primary" bng-nav-item :disabled="busy" @click="act('stolenDo', c.plate, 'sell')">Sell {{ money(c.sell) }}</button>
+                <button type="button" class="primary" bng-nav-item :disabled="busy || !c.resell" @click="act('stolenDo', c.plate, 'resell')">
+                  {{ c.resell ? 'Resell ' + money(c.resell) : 'Resell (needs 3 papers)' }}
+                </button>
+              </div>
+              <div v-if="fitList(c).length" class="fence">
+                <button v-for="f in fitList(c)" :key="f.name" type="button" bng-nav-item :disabled="busy" @click="act('stolenDo', c.plate, 'fit:' + f.name)">Fit {{ f.label }}</button>
               </div>
             </article>
-            <p class="hint">Drive to {{ state.spot || 'the drop spot' }}, get out and stand next to the car, then pick how to sell it. The garage computer offers the same without the drive. Gambling can end in a police trap.</p>
-            <div class="fence">
-              <button v-for="m in FENCE_MODES" :key="m.mode" type="button" class="primary" bng-nav-item :disabled="busy" @click="act('fence', m.mode)">{{ m.label }}</button>
-            </div>
+            <p class="hint">Strip pays the least, Sell a bit more without any papers, Resell the most but uses up a fake plate, a VIN plate and a part number kit (fit them one by one with the buttons that appear for the ones you own). All of it works from here, no drive to the drop spot.</p>
             <button type="button" bng-nav-item :disabled="busy" @click="act('recall')">Bring my stolen car here</button>
             <template v-if="state.meetup">
               <p class="hint">A buyer waits at {{ state.meetup.spot }}.</p>
@@ -164,7 +169,8 @@ const items = computed(() => asList(state.value && state.value.items))
 const orderList = computed(() => asList(state.value && state.value.orders))
 const ownedList = computed(() => asList(state.value && state.value.owned))
 const stolenList = computed(() => asList(state.value && state.value.stolen))
-const FENCE_MODES = [{ mode: 'strip', label: 'Strip' }, { mode: 'sell', label: 'Sell' }, { mode: 'resell', label: 'Resell' }, { mode: 'gamble', label: 'Gamble' }]
+const fitList = c => asList(c && c.fit)
+const fittedList = c => asList(c && c.fitted)
 const available = computed(() => items.value.filter(it => !it.locked))
 const locked = computed(() => items.value.filter(it => it.locked))
 const scoutLabel = computed(() => {
@@ -340,6 +346,10 @@ p { margin: 0 0 8px; font-size: 12px; line-height: 1.5; color: #cbd5e1; }
 .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 0; border-top: 1px solid #23252f; }
 .row:first-of-type { border-top: 0; }
 .row.dim { opacity: .55; }
+.stolen { padding: 9px 0; border-top: 1px solid #23252f; }
+.stolen:first-of-type { border-top: 0; }
+.stolen strong { display: block; font-size: 13px; }
+.stolen small { display: block; font-size: 11px; color: #94a3b8; margin: 2px 0; }
 .row strong { display: block; font-size: 13px; }
 .row small { display: block; font-size: 11px; color: #94a3b8; margin-top: 2px; }
 .buy { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }

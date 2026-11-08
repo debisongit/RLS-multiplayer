@@ -28,10 +28,22 @@ function M.mix()
   return out
 end
 
+-- Night multipliers: numbers >= 0 only; anything else counts as 1 (unchanged).
+function M.nightMult()
+  local src = type(cfg.nightMult) == "table" and cfg.nightMult or {}
+  local out = {}
+  for _, name in ipairs(M.NAMES) do
+    local m = tonumber(src[name])
+    out[name] = (m and m == m and m >= 0 and m < math.huge) and m or 1
+  end
+  return out
+end
+
 function M.payload()
   return {
     enabled = cfg.enabled == true,
     mix = M.mix(),
+    nightMult = M.nightMult(),
     policeReact = cfg.policeReact == true,
   }
 end

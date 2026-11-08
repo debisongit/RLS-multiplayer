@@ -49,6 +49,8 @@ local m = take()
 check(#m == 1 and m[1].name == "rlsmpSmartTraffic" and m[1].pid == 0, "sent on load, one event name")
 check(m[1].data.enabled == true and m[1].data.policeReact == true and m[1].data.mix.normal == 80
   and m[1].data.mix.drunk == 1, "payload carries the config")
+check(m[1].data.nightMult.drunk == 6 and m[1].data.nightMult.racer == 4 and m[1].data.nightMult.aggressive == 2.5 and m[1].data.nightMult.slow == 0.5
+  and m[1].data.nightMult.normal == 1, "payload carries the night multipliers (more racers, aggressive and drunk drivers at night)")
 tick()
 check(#take() == 0, "sent only once")
 stages[0] = nil
@@ -56,6 +58,12 @@ tick()
 stages[0] = "loaded"
 tick()
 check(#take() == 1, "rejoin gets it again")
+
+-- bad night multipliers count as 1 (unchanged)
+cfg.smartTraffic.nightMult.drunk = "lots"
+cfg.smartTraffic.nightMult.racer = -2
+check(smart.nightMult().drunk == 1 and smart.nightMult().racer == 1 and smart.nightMult().aggressive == 2.5, "bad night multipliers are sent as 1")
+cfg.smartTraffic.nightMult.drunk, cfg.smartTraffic.nightMult.racer = 6, 4
 
 -- bad weights from a hand-edited config.json are sent as 0
 cfg.smartTraffic.mix.racer = "lots"

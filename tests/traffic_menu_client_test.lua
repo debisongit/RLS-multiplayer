@@ -42,7 +42,7 @@ M.onExtensionLoaded()
 local passed = 0
 local function check(c, m) if not c then error("FAIL: " .. m, 2) end passed = passed + 1 end
 local function server(name, tbl) handlers[name](json.encode(tbl)) end
-local SNAP = {trafficVariety = {typeWeights = {Truck = 0.5}, models = {}, mods = {}}, smartTraffic = {mix = {normal = 100}},
+local SNAP = {trafficVariety = {typeWeights = {Truck = 0.5}, models = {}, mods = {}}, smartTraffic = {mix = {normal = 100}, nightMult = {normal = 1, slow = 0.5, aggressive = 2.5, racer = 4, drunk = 6}},
   weather = {force = "", mix = {}}, traffic = {}, police = {enabled = true, plateReading = {enabled = true, readChance = 0.35}},
   theft = {enabled = false, perMille = 150, methods = {window_screwdriver = {enabled = true, seconds = 8, noise = 0.9, failChance = 0.05}}, tiers = {}},
   fence = {enabled = true, stripRate = 0.3, rep = {strip = 1}},
@@ -131,6 +131,17 @@ check(M.getState().pending["police.plateReading.readChance"] and M.getState().pe
 clicks["Police rules on (also switches plate reading off)##police.enabled"] = true
 M.onUpdate()
 check(M.getState().pending["police.enabled"] and M.getState().pending["police.enabled"].value == false, "police on/off can be switched")
+clicks["Revert"] = true
+M.onUpdate()
+clicks["Cars"] = true
+M.onUpdate()
+
+-- 4d. the night multipliers on the Behaviour page
+clicks["Behaviour"] = true
+M.onUpdate()
+sliders["Drunk drivers at night x##smartTraffic.nightMult.drunk"] = 9
+M.onUpdate()
+check(M.getState().pending["smartTraffic.nightMult.drunk"] and M.getState().pending["smartTraffic.nightMult.drunk"].value == 9, "a night multiplier can be edited")
 clicks["Revert"] = true
 M.onUpdate()
 clicks["Cars"] = true

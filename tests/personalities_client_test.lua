@@ -373,4 +373,45 @@ smart.enable(true)
 run(2)
 check(#take() == 0, "nothing until the next server sends its config")
 
+
+---------------------------------------------------------------------------------------------------
+-- 7. Night: more racers, aggressive and drunk drivers
+local nm = P.withMultipliers({normal = 80, slow = 10, aggressive = 6, racer = 3, drunk = 1}, {normal = 1, slow = 0.5, aggressive = 2.5, racer = 4, drunk = 6})
+check(nm.normal == 80 and nm.slow == 5 and nm.aggressive == 15 and nm.racer == 12 and nm.drunk == 6, "night weights = day weights x multipliers")
+local total = 0
+for _, n in ipairs(P.ORDER) do total = total + nm[n] end
+check(math.abs(nm.drunk / total - 6 / 118) < 1e-9 and nm.racer / total > 3 / 100 * 2, "with the default mix drunk goes from 1% to about 5%, racers from 3% to about 10%")
+local un = P.withMultipliers({normal = 2, drunk = 1}, nil)
+check(un.normal == 2 and un.drunk == 1 and un.slow == 0, "no multipliers: the mix unchanged")
+local bad = P.withMultipliers({normal = 2, drunk = 1}, {normal = -3, drunk = "x", racer = 0 / 0})
+check(bad.normal == 2 and bad.drunk == 1, "negative, text and NaN multipliers count as 1")
+check(P.withMultipliers({drunk = 1}, {drunk = 1e9}).drunk == 100, "a multiplier is capped at 100")
+check(P.withMultipliers({drunk = 1}, {drunk = 0}).drunk == 0, "0 switches a personality off at night")
+
+for k in pairs(traffic) do traffic[k] = nil end
+local nightNow = false
+core_environment = {getLightState = function() return {isNight = nightNow} end}
+server({enabled = true, mix = {normal = 2, drunk = 1}, nightMult = {drunk = 6}, policeReact = false})
+smart.enable(true)
+traffic[30] = car()
+run(1)
+check(smart.getCars()[30] and smart.getCars()[30].name == "normal", "by day the random 0.5 gives a normal driver")
+nightNow = true
+run(1)
+check(smart.getCars()[30] and smart.getCars()[30].name == "drunk", "at night the same random gives a drunk driver (the car drew again when night fell)")
+check(saw("smart: it is night now"), "the change is logged")
+nightNow = false
+run(1)
+check(smart.getCars()[30].name == "normal" and saw("smart: it is day now"), "and back to normal when day comes")
+-- a server that sends no night multipliers: nothing changes at night
+server({enabled = true, mix = {normal = 2, drunk = 1}, policeReact = false})
+for k in pairs(traffic) do traffic[k] = nil end
+traffic[31] = car()
+run(1)
+nightNow = true
+run(1)
+check(smart.getCars()[31] and smart.getCars()[31].name == "normal", "no nightMult from the server: night changes nothing")
+nightNow = false
+core_environment = nil
+
 print(string.format("personalities_client_test: %d checks passed", passed))

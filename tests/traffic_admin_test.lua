@@ -253,7 +253,7 @@ check(cfg.theft.perMille == 300 and cfg.theft.methods.window_screwdriver.seconds
   and cfg.fence.stripRate == 0.4 and cfg.fence.rep.resell == 5 and cfg.market.tiers.screwdriver.price == 999 and cfg.market.tiers.jammer.off == true
   and cfg.market.fenceCarRate == 0.5 and cfg.theft.enabled == true, "...and written into the live config tables")
 set(0, {{p = {"theft", "perMille"}, v = 5000}, {p = {"theft", "witnessCap"}, v = -1}, {p = {"theft", "tiers", "keylessYear"}, v = 1800},
-  {p = {"fence", "gambleBust"}, v = 2}, {p = {"fence", "gambleMaxPapers"}, v = 9}, {p = {"market", "pickupRadius"}, v = 1},
+  {p = {"fence", "rep", "resell"}, v = 99}, {p = {"fence", "stripRate"}, v = 3}, {p = {"market", "pickupRadius"}, v = 1},
   {p = {"market", "tiers", "screwdriver", "price"}, v = 0}, {p = {"theft", "methods", "window_screwdriver", "noise"}, v = 3}, {p = {"theft", "methods", "signal_cloner", "failChance"}, v = 2}})
 r = lastResult()
 check(r.applied == 0 and #r.rejected == 9, "every out-of-range value is refused (" .. tostring(#r.rejected) .. " of 9)")
@@ -277,6 +277,31 @@ check(next(sn.theft.methods) ~= nil and allOn, "the default methods have no enab
 cfg.theft.methods.relay_box.enabled = false
 check(admin.snapshot().theft.methods.relay_box.enabled == false and admin.snapshot().theft.methods.signal_cloner.enabled == true, "a method switched off shows as off")
 cfg.theft.methods.relay_box.enabled = nil
+set(0, {{p = {"police", "copCount"}, v = 2}, {p = {"police", "copCount"}, v = 9}, {p = {"police", "copTopUpSeconds"}, v = 1}, {p = {"police", "copTopUpSeconds"}, v = 45}})
+r = lastResult()
+check(r and r.applied == 2 and #r.rejected == 2 and cfg.police.copCount == 2 and cfg.police.copTopUpSeconds == 45, "police car count and top-up time: in range accepted, out of range refused")
+check(admin.snapshot().police.copCount == 2 and admin.snapshot().police.copTopUpSeconds == 45, "the snapshot carries them")
+cfg.police.copCount, cfg.police.copTopUpSeconds = 3, 30
+set(0, {{p = {"fence", "phone"}, v = false}, {p = {"fence", "gambleBust"}, v = 0.1}, {p = {"fence", "gambleBase"}, v = 0.5}})
+r = lastResult()
+check(r and r.applied == 1 and #r.rejected == 2 and cfg.fence.phone == false and admin.snapshot().fence.phone == false, "fence.phone can be switched; the gamble settings are gone from the menu's allowlist")
+check(admin.snapshot().fence.gambleBust == nil and admin.snapshot().fence.rep.gamble == nil, "...and from the snapshot")
+cfg.fence.phone = true
+set(0, {{p = {"police", "respawnBehind"}, v = false}, {p = {"police", "respawnPerMinute"}, v = 99}, {p = {"police", "respawnGap"}, v = 200}, {p = {"police", "respawnGap"}, v = 5}})
+r = lastResult()
+check(r and r.applied == 2 and #r.rejected == 2 and cfg.police.respawnBehind == false and cfg.police.respawnGap == 200, "cop respawn settings: in range accepted, out of range refused")
+check(admin.snapshot().police.respawnBehind == false and admin.snapshot().police.respawnGap == 200, "the snapshot carries them")
+cfg.police.respawnBehind, cfg.police.respawnGap = true, 150
+set(0, {{p = {"smartTraffic", "nightMult", "drunk"}, v = 8}, {p = {"smartTraffic", "nightMult", "racer"}, v = 25}, {p = {"smartTraffic", "nightMult", "bogus"}, v = 1}})
+r = lastResult()
+check(r and r.applied == 1 and #r.rejected == 2 and cfg.smartTraffic.nightMult.drunk == 8, "night multipliers: in range accepted, out of range and unknown names refused")
+check(admin.snapshot().smartTraffic.nightMult.drunk == 8 and admin.snapshot().smartTraffic.nightMult.racer == 4, "the snapshot carries them")
+cfg.smartTraffic.nightMult.drunk = 6
+set(0, {{p = {"police", "noFineInStolenCar"}, v = false}})
+r = lastResult()
+check(r and r.applied == 1 and cfg.police.noFineInStolenCar == false and admin.snapshot().police.noFineInStolenCar == false, "the no-fine-in-a-stolen-car switch can be changed from the menu")
+cfg.police.noFineInStolenCar = true
+check(admin.snapshot().police.noFineInStolenCar == true, "...and is on by default")
 set(0, {{p = {"police", "enabled"}, v = false}, {p = {"police", "plateReading", "readChance"}, v = 0.2}, {p = {"police", "plateReading", "rangeMeters"}, v = 500}})
 r = lastResult()
 check(r.applied == 2 and #r.rejected == 1 and cfg.police.enabled == false and cfg.police.plateReading.readChance == 0.2 and cfg.police.plateReading.rangeMeters ~= 500,

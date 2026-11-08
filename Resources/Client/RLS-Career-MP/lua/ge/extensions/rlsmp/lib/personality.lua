@@ -70,6 +70,19 @@ function M.sanitizeMix(mix)
   return out
 end
 
+-- The weights at night (or whenever): every personality's weight times its multiplier. Missing, bad or negative multipliers count as 1
+-- (unchanged), at most 100. `mult` not a table -> the mix unchanged.
+function M.withMultipliers(mix, mult)
+  local out = M.sanitizeMix(mix)
+  if type(mult) ~= "table" then return out end
+  for _, name in ipairs(M.ORDER) do
+    local m = tonumber(mult[name])
+    if not (m and finite(m) and m >= 0) then m = 1 end
+    out[name] = out[name] * math.min(m, 100)
+  end
+  return out
+end
+
 -- Pick a personality from the weights with one random number r in [0, 1). Zero total -> "normal".
 function M.pick(mix, r)
   mix = M.sanitizeMix(mix)

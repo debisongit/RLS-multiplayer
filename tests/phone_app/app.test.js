@@ -205,6 +205,32 @@ describe('PhoneBlackMarket', () => {
     await w.findAll('button').find(b => b.text() === 'Buy $400').trigger('click'); await flushPromises()
     expect(calls[0].slice(0, 3)).toEqual(['buy', 'screwdriver', 1])
   })
+  it('stolen cars: every car has Strip, Sell and Resell (no gamble) and the papers it can be fitted with', async () => {
+    const stolen = [
+      { plate: 'AB 123', model: 'etk800', strip: 4500, sell: 4000, resell: null, fit: [{ name: 'fake_plate', label: 'Fake plate' }], fitted: ['VIN plate'], age: 30, trend: 1 },
+      { plate: 'CD 456', model: 'pickup', strip: 3000, sell: 2600, resell: 5000, fit: {}, fitted: {} },
+    ]
+    const w = await open({ enabled: true, state: member({ stolen }) })
+    const text = w.text()
+    expect(text).toContain('etk800 AB 123')
+    expect(text).toContain('pickup CD 456')
+    expect(text).not.toMatch(/gambl/i)
+    expect(text).toContain('Fitted: VIN plate')
+    const buttons = () => w.findAll('button')
+    expect(buttons().filter(b => b.text().startsWith('Strip $')).length).toBe(2)
+    expect(buttons().find(b => b.text() === 'Resell (needs 3 papers)').attributes('disabled')).toBeDefined()
+    expect(buttons().find(b => b.text() === 'Resell $5,000').attributes('disabled')).toBeUndefined()
+    await buttons().find(b => b.text() === 'Sell $4,000').trigger('click'); await flushPromises()
+    let call = parseCall(luaCode[luaCode.length - 1])
+    expect(call.fn).toBe('uiAct')
+    expect(call.args.slice(0, 3)).toEqual(['stolenDo', 'AB 123', 'sell'])
+    await buttons().find(b => b.text() === 'Fit Fake plate').trigger('click'); await flushPromises()
+    call = parseCall(luaCode[luaCode.length - 1])
+    expect(call.args.slice(0, 3)).toEqual(['stolenDo', 'AB 123', 'fit:fake_plate'])
+    await buttons().find(b => b.text() === 'Resell $5,000').trigger('click'); await flushPromises()
+    call = parseCall(luaCode[luaCode.length - 1])
+    expect(call.args.slice(0, 3)).toEqual(['stolenDo', 'CD 456', 'resell'])
+  })
   it('stops polling when closed', async () => {
     let n = 0
     fake.get = () => { n++; return { enabled: true, state: member() } }

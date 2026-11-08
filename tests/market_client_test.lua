@@ -176,5 +176,14 @@ check(#market._marks() == 0, "scout: leaving the server drops the marks")
 market.enable(true)
 market.onServerLeave()
 check(market.uiGet().state == nil and market.uiGet().result == nil, "app: leaving the server forgets the state")
+-- stolen cars through the phone: handed to the garage extension with the plate and the way; the garage answer can note a message
+local garageCalls = {}
+rlsmp_garage = {doStolen = function(plate, action) garageCalls[#garageCalls + 1] = {plate, action} return action ~= "gamble" end}
+check(market.uiAct("stolenDo", "PH 1", "sell") == true and garageCalls[1][1] == "PH 1" and garageCalls[1][2] == "sell", "app: stolenDo goes to the garage extension")
+check(market.uiAct("stolenDo", "PH 1", "gamble") == false, "app: the garage extension's refusal is passed on")
+market.note("Sold (sell): $4000.")
+check(market.uiGet().result.text == "Sold (sell): $4000.", "app: a note from the garage extension shows in the message box")
+rlsmp_garage = nil
+check(market.uiAct("stolenDo", "PH 1", "sell") == false, "app: without the garage extension nothing happens")
 os.time = realTime
 print("market_client_test: " .. passed .. " checks passed")

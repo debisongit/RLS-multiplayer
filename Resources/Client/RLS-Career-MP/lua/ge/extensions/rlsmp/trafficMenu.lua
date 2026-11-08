@@ -244,6 +244,14 @@ local function sectionBehaviour(ui)
     ui.SameLine()
     ui.Text(string.format("= %.1f%%", shares[p[1]]))
   end
+  ui.Separator()
+  ui.TextWrapped("At night every weight above is multiplied by these numbers (1 = no change), so night traffic has more racers, aggressive and drunk drivers. The share it gives is shown next to each.")
+  local nightShares = L.nightShares(st)
+  for _, p in ipairs(L.PERSONALITIES) do
+    num(ui, p[2] .. " at night x", {"smartTraffic", "nightMult", p[1]}, 0, 20, "%.1f")
+    ui.SameLine()
+    ui.Text(string.format("= %.1f%%", nightShares[p[1]]))
+  end
 end
 
 local function sectionAmount(ui)
@@ -333,6 +341,13 @@ local function sectionPolice(ui)
   checkbox(ui, "Police rules on (also switches plate reading off)", {"police", "enabled"})
   checkbox(ui, "Police cannot appear in front of a chased player", {"police", "antiTeleport"})
   checkbox(ui, "No roadblocks", {"police", "blockRoadblocks"})
+  checkbox(ui, "No police fine in a stolen car (not registered to you)", {"police", "noFineInStolenCar"})
+  checkbox(ui, "A re-placed cop comes back behind you as another model", {"police", "respawnBehind"})
+  num(ui, "...at most this many a minute", {"police", "respawnPerMinute"}, 0, 30, "%.0f")
+  num(ui, "...asked to spawn this far behind (m)", {"police", "respawnGap"}, 20, 500, "%.0f")
+  ui.TextWrapped("The game puts only ONE police car on the map. The cars below are built behind you, one at a time, until this many are out (0 = the game's number).")
+  num(ui, "Police cars on the map", {"police", "copCount"}, 0, 4, "%.0f")
+  num(ui, "A new cop at most every (seconds)", {"police", "copTopUpSeconds"}, 5, 600, "%.0f")
   ui.Separator()
   ui.TextWrapped("Traffic cars near other players. Original = RLS's own spawn and respawn distances (a car only stays while another player is inside its own radius and sees it). Protect = strict old rule (450 m, or a clear line up to 1 km), can make respawns far and repetitive. Off = no protection.")
   local mode = L.get(st, {"police", "bubbleMode"}, "original")
@@ -399,17 +414,14 @@ end
 local function sectionFence(ui)
   ui.TextWrapped("The fence turns stolen cars into money at the black market's drop spot. The shares are of the car's value.")
   checkbox(ui, "Fence open", {"fence", "enabled"})
+  checkbox(ui, "Strip, sell and resell from the phone app (any stolen car)", {"fence", "phone"})
   num(ui, "Strip pays", {"fence", "stripRate"}, 0, 1)
   num(ui, "Resell with all papers pays", {"fence", "resellRate"}, 0, 1)
-  num(ui, "Gamble pays (one paper)", {"fence", "gambleBase"}, 0, 1)
-  num(ui, "Gamble: more per extra paper", {"fence", "gamblePerPaper"}, 0, 0.5)
-  num(ui, "Gamble uses at most (papers)", {"fence", "gambleMaxPapers"}, 1, 3, "%.0f")
-  num(ui, "Gamble: chance of a trap", {"fence", "gambleBust"}, 0, 1)
   intInput(ui, "Value of a car with no price", {"fence", "minValue"}, 0, 1000000)
   intInput(ui, "Highest car value counted", {"fence", "maxValue"}, 0, 100000000)
   ui.Separator()
   ui.Text("Reputation for a good sale")
-  for _, mode in ipairs({"strip", "sell", "resell", "gamble"}) do
+  for _, mode in ipairs({"strip", "sell", "resell"}) do
     num(ui, "  " .. mode, {"fence", "rep", mode}, 0, 25, "%.0f")
   end
   ui.TextWrapped("\"Sell\" pays the black market's fence share (Market section).")

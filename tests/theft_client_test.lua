@@ -216,6 +216,11 @@ local cars = theft.stolenCars()
 check(#cars == 1 and cars[1].vehId == newId and cars[1].plate == "CVT 42", "stolenCars lists it")
 server("rlsmpTheftReported", {plate = "CVT 42"})
 check(theft.stolenCars()[1].reported == true, "reported marked")
+-- 6a. The phone's old "fence" button no longer knows gambling
+local askedBefore = count("rlsmpFenceSell")
+theft.fence("gamble")
+check(count("rlsmpFenceSell") == askedBefore, "no gamble: a gamble request from the phone sends nothing")
+
 -- 6b. The fence: /fence asks, the client names the stolen car next to the player, deletes it only when the server says so
 local sentBefore = count("rlsmpFenceSell")
 walkerObj.pos = {x = spotA.x + 100, y = spotA.y, z = 0}
@@ -228,11 +233,11 @@ playerId = newId
 server("rlsmpFenceAsk", {mode = "strip"})
 check(count("rlsmpFenceSell") == sentBefore and toasts[#toasts]:find("Get out"), "fence: must be on foot")
 playerId = 1
-server("rlsmpFenceAsk", {mode = "gamble"})
+server("rlsmpFenceAsk", {mode = "resell"})
 local fs = last("rlsmpFenceSell")
-check(count("rlsmpFenceSell") == sentBefore + 1 and fs.plate == "CVT 42" and fs.mode == "gamble", "fence: the plate and mode are sent")
+check(count("rlsmpFenceSell") == sentBefore + 1 and fs.plate == "CVT 42" and fs.mode == "resell", "fence: the plate and mode are sent")
 check(reported == 1, "fence: a fresh position report is asked for before the sale")
-server("rlsmpFenceResult", {ok = false, mode = "gamble", err = "The fence works at Joe's Junkyard right now. Bring the car there."})
+server("rlsmpFenceResult", {ok = false, mode = "resell", err = "The fence works at Joe's Junkyard right now. Bring the car there."})
 check(objects[newId] ~= nil and #theft.stolenCars() == 1 and toasts[#toasts]:find("Bring the car"), "fence refused: the car stays, the reason is shown")
 order = {}
 server("rlsmpFenceAsk", {mode = "strip"})

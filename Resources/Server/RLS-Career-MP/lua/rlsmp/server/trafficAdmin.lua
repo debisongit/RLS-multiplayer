@@ -94,6 +94,12 @@ local STATIC = {
   ["weather.force"] = {"enum", values = {[""] = true, clear = true, partlyCloudy = true, overcast = true, drizzle = true, rain = true, storm = true}},
   ["police.antiTeleport"] = {"bool"},
   ["police.blockRoadblocks"] = {"bool"},
+  ["police.noFineInStolenCar"] = {"bool"},
+  ["police.respawnBehind"] = {"bool"},
+  ["police.respawnPerMinute"] = {"number", 0, 30, true},
+  ["police.respawnGap"] = {"number", 20, 500},
+  ["police.copCount"] = {"number", 0, 4, true},
+  ["police.copTopUpSeconds"] = {"number", 5, 600, true},
   ["police.bubbleMode"] = {"enum", values = {original = true, protect = true, off = true}},
   ["police.enabled"] = {"bool"},
   ["police.plateFlagSeconds"] = {"number", 60, 86400, true},
@@ -110,7 +116,10 @@ STATIC["modPrice.sell"] = {"bool"}
 STATIC["modPrice.max"] = {"number", 1000, 100000000, true}
 STATIC["modPrice.min"] = {"number", 100, 100000, true}
 STATIC["modPrice.tolerance"] = {"number", 0, 2}
-for _, name in ipairs(PERSONALITIES) do STATIC["smartTraffic.mix." .. name] = {"number", 0, 100} end
+for _, name in ipairs(PERSONALITIES) do
+  STATIC["smartTraffic.mix." .. name] = {"number", 0, 100}
+  STATIC["smartTraffic.nightMult." .. name] = {"number", 0, 20}
+end
 for _, name in ipairs(CONDITIONS) do STATIC["weather.mix." .. name] = {"number", 0, 100} end
 
 -- Car theft, the fence and the black market (all read live by their modules, except what is said in the comments).
@@ -130,9 +139,8 @@ rules("theft.", {
 })
 rules("fence.", {
   enabled = {"bool"}, maxValue = {"number", 0, 100000000, true}, minValue = {"number", 0, 1000000, true},
-  stripRate = {"number", 0, 1}, resellRate = {"number", 0, 1}, gambleBase = {"number", 0, 1}, gamblePerPaper = {"number", 0, 0.5},
-  gambleMaxPapers = {"number", 1, 3, true}, gambleBust = {"number", 0, 1},
-  ["rep.strip"] = {"number", 0, 25, true}, ["rep.sell"] = {"number", 0, 25, true}, ["rep.resell"] = {"number", 0, 25, true}, ["rep.gamble"] = {"number", 0, 25, true},
+  stripRate = {"number", 0, 1}, resellRate = {"number", 0, 1}, phone = {"bool"},
+  ["rep.strip"] = {"number", 0, 25, true}, ["rep.sell"] = {"number", 0, 25, true}, ["rep.resell"] = {"number", 0, 25, true},
 })
 rules("market.", {
   enabled = {"bool"}, bustRep = {"number", 0, 100, true}, bustTakesPapers = {"bool"}, bustTakesTools = {"bool"},
@@ -338,7 +346,7 @@ function M.snapshot()
     traffic = {enabled = t.enabled, totalBudget = t.totalBudget, baseBudget = t.baseBudget, perPlayerBudget = t.perPlayerBudget,
       minPerPlayer = t.minPerPlayer, maxPerPlayer = t.maxPerPlayer,
       respawnRange = t.respawnRange, respawnDistance = t.respawnDistance, respawnDelay = t.respawnDelay, unjam = copyMap(t.unjam)},
-    smartTraffic = {enabled = s.enabled, policeReact = s.policeReact, mix = copyMap(s.mix)},
+    smartTraffic = {enabled = s.enabled, policeReact = s.policeReact, mix = copyMap(s.mix), nightMult = copyMap(s.nightMult)},
     trafficVariety = {enabled = v.enabled, applyToTraffic = v.applyToTraffic, applyToParked = v.applyToParked,
       maxShare = v.maxShare, oversample = v.oversample, maxCandidates = v.maxCandidates,
       typeWeights = copyMap(v.typeWeights), models = copyMap(v.models), mods = copyMap(v.mods),
@@ -356,7 +364,7 @@ function M.snapshot()
         slowFrameMs = pl.slowFrameMs, settleSeconds = pl.settleSeconds, warmShare = pl.warmShare},
       simplified = {enabled = sm.enabled, parked = sm.parked, traffic = sm.traffic, nearRadius = sm.nearRadius, perMinute = sm.perMinute}},
     weather = {enabled = w.enabled, force = w.force, mix = copyMap(w.mix), periodMinutes = w.periodMinutes},
-    police = {enabled = p.enabled, antiTeleport = p.antiTeleport, blockRoadblocks = p.blockRoadblocks, bubbleMode = p.bubbleMode,
+    police = {enabled = p.enabled, antiTeleport = p.antiTeleport, blockRoadblocks = p.blockRoadblocks, noFineInStolenCar = p.noFineInStolenCar ~= false, respawnBehind = p.respawnBehind ~= false, respawnPerMinute = p.respawnPerMinute, respawnGap = p.respawnGap, copCount = p.copCount, copTopUpSeconds = p.copTopUpSeconds, bubbleMode = p.bubbleMode,
       plateFlagSeconds = p.plateFlagSeconds, descriptionSeconds = p.descriptionSeconds,
       plateReading = {enabled = pr.enabled, rangeMeters = pr.rangeMeters, maxSpeedKmh = pr.maxSpeedKmh, readChance = pr.readChance,
         afterEscapeChance = pr.afterEscapeChance, skipChance = pr.skipChance}},

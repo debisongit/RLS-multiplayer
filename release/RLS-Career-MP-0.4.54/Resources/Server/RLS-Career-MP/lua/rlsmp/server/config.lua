@@ -98,6 +98,19 @@ M.defaults = {
     antiTeleport = true,
     -- Refuse RLS roadblocks (they put police cars on the road ahead of you).
     blockRoadblocks = true,
+    -- RLS charges a "Police fine" when a chase ends in a citation or an arrest. Driving a car that is not registered to you (a stolen car) means
+    -- the fine is not charged: the car is not on your name. The chase, the arrest and the plate flag still happen.
+    noFineInStolenCar = true,
+    -- A police car that RLS re-places comes back as a DIFFERENT model on the road BEHIND the player (client rlsmp_policeRespawn), not where the game
+    -- puts it (often in front, same model). `respawnPerMinute` limits how many we build (BeamMP sends every spawn and delete to everybody);
+    -- `respawnGap` is the multi spawn gap in metres (how far behind it asks for).
+    respawnBehind = true,
+    respawnPerMinute = 4,
+    respawnGap = 150,
+    -- How many AI police cars should be on the map. The game puts only ONE ("requested 1, allocated 1"); the client builds more behind you, one every
+    -- `copTopUpSeconds`, up to this number (client rlsmp_policeRespawn). 0 = leave the game's number. Each cop is one more BeamMP car for everybody (MaxCars).
+    copCount = 3,
+    copTopUpSeconds = 30,
     -- Which traffic cars another player's game may not recycle (client rlsmp/bubble.lua):
     -- "original" = RLS's own spawn and respawn distances, a car is only kept while another player is within its
     --   own active radius AND has a clear line to it; "protect" = the old strict rule (450 m, or a clear line up to 1 km);
@@ -207,6 +220,9 @@ M.defaults = {
   smartTraffic = {
     enabled = true,
     mix = {normal = 80, slow = 10, aggressive = 6, racer = 3, drunk = 1},
+    -- At night every personality's weight is multiplied by this (so night traffic has more racers, aggressive and drunk drivers and fewer slow ones).
+    -- With the default mix: about 68% normal, 4% slow, 13% aggressive, 10% racers, 5% drunk. 1 = no change. Cars get a new personality when day turns to night and back.
+    nightMult = {normal = 1, slow = 0.5, aggressive = 2.5, racer = 4, drunk = 6},
     policeReact = true,
   },
 
@@ -369,17 +385,16 @@ M.defaults = {
     garage = true,            -- the "Strip / illegal parts" button in the RLS garage computer (client rlsmp/garage.lua)
     garageCooldown = 20,      -- seconds between two strips of ordinary (not stolen) garage cars per player
     -- The car value is the USED price of the car (the client asks RLS's own valuation, see docs/RESEARCH_STOLEN_VALUE.md).
-    -- Payouts, as a share of that value: sell without papers market.fenceCarRate 0.40 < gamble about 0.55 (risk) < resell 0.70, strip 0.45.
+    -- Payouts, as a share of that value: sell without papers market.fenceCarRate 0.40 < resell 0.70, strip 0.45.
     minValue = 2000,         -- the value is never below this (also used when the game had no price for the car)
     maxValue = 300000,        -- the car value the fence works from is capped here (the value comes from the client)
     modelCaps = {},           -- optional: model name -> highest value accepted for that model, e.g. {bastion = 40000}
     stripRate = 0.45,         -- parts for cash, no papers
     resellRate = 0.70,        -- fake plate + VIN plate + part number, all used up
-    gambleBase = 0.55,        -- swap one or two papers: base share with one paper...
-    gamblePerPaper = 0.05,    -- ...plus this for each extra paper
-    gambleMaxPapers = 2,
-    gambleBust = 0.20,        -- chance the buyer is a trap: no money, car gone, market.bust
-    rep = {strip = 1, sell = 1, resell = 3, gamble = 2},   -- reputation for a good sale
+    -- Strip / sell / resell can also be done from the Black Market phone app, for any stolen car (no drop spot, the garage rules). false = only the garage computer
+    -- and the drop spot.
+    phone = true,
+    rep = {strip = 1, sell = 1, resell = 3},   -- reputation for a good sale
   },
   market = {
     enabled = true,

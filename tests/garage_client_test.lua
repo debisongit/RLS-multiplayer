@@ -25,6 +25,8 @@ overhaul_career_permissions = {getStatusForTag = function(_, _) return {allow = 
 overhaul_career_logistics_general = {canRemoveLogisticsVehicle = function() return true end}
 local stolenNear
 local goneByPlate = {}
+local notes = {}
+rlsmp_market = {note = function(text) notes[#notes + 1] = text end}
 rlsmp_theft = {nearestStolenToPlayer = function() return stolenNear end, removeStolenByPlate = function(p) goneByPlate[#goneByPlate + 1] = p end}
 
 local net = require("rlsmp/lib/net")
@@ -114,17 +116,30 @@ check(lastSent("rlsmpGarageQuote").plate == "STL 1", "stolen quote")
 server("rlsmpGarageMenu", {ok = true, kind = "stolen", plate = "STL 1", model = "etk800", strip = 6000, items = {},
   fit = {{name = "fake_plate", label = "Fake plate"}, {name = "x; y", label = "bad"}}, fitted = {"VIN plate"}})
 dlg = dialogs[#dialogs]
-check(#dlg.buttons == 6 and dlg.buttons[5].luaCallback == 'rlsmp_garage.choose("fit:fake_plate")' and dlg.text:find("Fitted: VIN plate"), "stolen dialog: strip, sell, resell, gamble, fit, close; bad names dropped")
-check(dlg.buttons[3].enabled == false and dlg.buttons[4].enabled == false and dlg.buttons[2].enabled == true, "resell and gamble greyed out without papers")
-server("rlsmpGarageMenu", {ok = true, kind = "stolen", plate = "STL 1", model = "etk800", strip = 6000, sell = 7000, resell = 12000, gamble = 9000, trap = 30,
+check(#dlg.buttons == 5 and dlg.buttons[4].luaCallback == 'rlsmp_garage.choose("fit:fake_plate")' and dlg.text:find("Fitted: VIN plate"), "stolen dialog: strip, sell, resell, fit, close (no gamble); bad names dropped")
+check(dlg.buttons[3].enabled == false and dlg.buttons[2].enabled == true, "resell greyed out without papers")
+server("rlsmpGarageMenu", {ok = true, kind = "stolen", plate = "STL 1", model = "etk800", strip = 6000, sell = 7000, resell = 12000,
   items = {}, fit = {}, fitted = {}})
 dlg = dialogs[#dialogs]
-check(dlg.buttons[3].enabled == true and dlg.buttons[3].luaCallback == 'rlsmp_garage.choose("resell")' and dlg.buttons[4].label:find("30%%") and dlg.buttons[4].label:find("9000"),
-  "with papers: resell and gamble are buttons with prices and the trap chance")
+check(#dlg.buttons == 4 and dlg.buttons[3].enabled == true and dlg.buttons[3].luaCallback == 'rlsmp_garage.choose("resell")', "with papers: resell is a button, and there is no gamble button")
 garage.choose("gamble")
-check(lastSent("rlsmpGarageDo").action == "gamble", "gamble request")
-server("rlsmpGarageResult", {ok = false, action = "gamble", takeCar = true, busted = true, err = "The buyer was a trap."})
-check(goneByPlate[#goneByPlate] == "STL 1" and toasts[#toasts]:find("trap"), "a trap still takes the car away and tells the player")
+check(lastSent("rlsmpGarageDo") == nil or lastSent("rlsmpGarageDo").action ~= "gamble", "a gamble request is never sent")
+-- the phone: one thing to do with one stolen car by its plate, no dialog
+check(garage.doStolen("PH 77", "sell") == true, "phone: sell request goes out")
+local pd = lastSent("rlsmpGarageDo")
+check(pd.action == "sell" and pd.plate == "PH 77" and pd.phone == true, "phone: the request carries the plate and the phone flag")
+check(garage.doStolen("PH 77", "gamble") == false and garage.doStolen("PH 77", "fit:x; y") == false and garage.doStolen(5, "sell") == false and garage.doStolen("PH 77", nil) == false
+  and garage.doStolen(string.rep("X", 40), "sell") == false, "phone: gamble, bad part names, bad input and long plates are refused here")
+local dialogsBefore = #dialogs
+server("rlsmpGarageResult", {ok = true, action = "fit:fake_plate", fitted = "Fake plate"})
+check(#dialogs == dialogsBefore and toasts[#toasts]:find("fitted"), "phone: a fitted part opens no dialog again")
+check(notes[#notes] and notes[#notes]:find("fitted"), "phone: the result also goes to the phone's message box")
+garage.doStolen("PH 77", "sell")
+server("rlsmpGarageResult", {ok = true, action = "sell", pay = 4000, takeCar = true})
+check(goneByPlate[#goneByPlate] == "PH 77" and notes[#notes]:find("4000"), "phone: a sale removes the car and tells the phone")
+garage.doStolen("PH 77", "strip")
+server("rlsmpGarageResult", {ok = false, action = "strip", err = "The fence only deals with black market members."})
+check(notes[#notes]:find("members") and toasts[#toasts]:find("members"), "phone: a refusal is shown on the phone and as a toast")
 server("rlsmpGarageMenu", {ok = true, kind = "stolen", plate = "STL 1", model = "etk800", strip = 6000, items = {}, fit = {{name = "fake_plate", label = "Fake plate"}}, fitted = {}})
 f.general.rlsmpStolen.callback()
 server("rlsmpGarageMenu", {ok = true, kind = "stolen", plate = "STL 1", model = "etk800", strip = 6000, items = {},
@@ -137,7 +152,7 @@ server("rlsmpGarageResult", {ok = true, action = "fit:fake_plate", fitted = "Fak
 check(sent[nq + 1].name == "rlsmpGarageQuote", "after fitting the dialog is refreshed")
 garage.choose("strip")
 server("rlsmpGarageResult", {ok = true, action = "strip", pay = 6000, takeCar = true})
-check(goneByPlate[1] == "STL 1" and #removed == removedBefore, "stolen car deleted through the theft module, not the RLS inventory")
+check(goneByPlate[#goneByPlate] == "STL 1" and #removed == removedBefore, "stolen car deleted through the theft module, not the RLS inventory")
 
 -- items button
 f.general.rlsmpItems.callback()

@@ -31,12 +31,13 @@ local M = {}
 
 local net = require("rlsmp/lib/net")
 local p3 = require("rlsmp/lib/p3")
+local theftLib = require("rlsmp/lib/theft")
 
 local CHECK_EVERY = 0.5   -- seconds between pursuit checks
 local FREEZE_RADIUS = 300 -- metres: police this close to the player's car are frozen
 local RELEASE_RADIUS = 350 -- metres: frozen units further than this (and not in the pursuit data) are released
 
-local settings = {antiTeleport = true, blockRoadblocks = true}
+local settings = {antiTeleport = true, blockRoadblocks = true, noFineInStolenCar = true}
 local pursuit = false
 local timer = 0
 local frozen = {}         -- police vehicle id -> its enableRespawn before we touched it (held near the player, chase or not)
@@ -270,6 +271,55 @@ local function patch()
   end, false))
 end
 
+
+-- No fine in a car that is not yours -------------------------------------------------------------------------------------------------------
+-- RLS ends a chase with a citation or an arrest by charging a money fine: playerDriving.onPursuitAction -> overhaul_career_economy_payment.pay(...,
+-- reason.label == "Police fine"), then shows "Citation fine: $X" / "Arrest fine: $X". A car we turned from a parked car into a stolen car is not
+-- registered to the player (it is not in their RLS garage), so that one payment is skipped and the message says so. The chase itself, the arrest and
+-- the plate flag are untouched. (The payment function is called by name each time, so replacing it works; a hook function would not be safe to replace.)
+local fineSkipped = nil        -- os.time() of the last skipped fine (the message that follows within 2 s is rewritten); nil = none
+
+local function inStolenCar()
+  return settings.noFineInStolenCar and isMP() and overhaul_career_career ~= nil and overhaul_career_career.isActive()
+    and be ~= nil and theftLib.isConverted(be:getPlayerVehicleID(0))
+end
+
+local function isPoliceFine(reason)
+  return type(reason) == "table" and reason.label == "Police fine"
+end
+
+-- Wrap tbl[name] (once; re-wrapped if the function is replaced). `around(original, ...)` returns the results.
+local function wrapAround(tbl, name, key, around)
+  if type(tbl) ~= "table" or type(tbl[name]) ~= "function" then return false end
+  local mine = tbl["__rlsmp_" .. key]
+  if mine ~= nil and tbl[name] == mine then return true end
+  local original = tbl[name]
+  local wrapper = function(...) return around(original, ...) end
+  tbl[name] = wrapper
+  tbl["__rlsmp_" .. key] = wrapper
+  p3.log("I", "patched " .. key .. " = true")
+  return true
+end
+
+local function patchFines()
+  wrapAround(overhaul_career_economy_payment, "pay", "finePay", function(original, price, reason, ...)
+    if isPoliceFine(reason) and inStolenCar() then
+      fineSkipped = os.time()
+      p3.count("police fine skipped (stolen car)")
+      p3.log("I", "police fine NOT charged: the car is not registered to the player (stolen)")
+      return true
+    end
+    return original(price, reason, ...)
+  end)
+  wrapAround(_G, "ui_message", "fineMessage", function(original, msg, ...)
+    if type(msg) == "string" and fineSkipped ~= nil and os.time() - fineSkipped <= 2 and (msg:find("^Citation fine") or msg:find("^Arrest fine")) then
+      fineSkipped = nil
+      msg = (msg:find("^Citation") and "Citation" or "Arrest") .. ": no fine, this car is not registered to you."
+    end
+    return original(msg, ...)
+  end)
+end
+
 -- The player's real pursuit level. Falls back to what the RLS hook told us if the player's car
 -- is not in the traffic data (then the probe line says so).
 local function playerPursuitMode()
@@ -304,6 +354,7 @@ end
 local function sync()
   if not isMP() or not be or not overhaul_career_career or not overhaul_career_career.isActive() then return end
   setPursuit(playerPursuitMode() >= 1)
+  patchFines()   -- independent of antiTeleport: the fine wrappers only act when the player is in a stolen car
   if not watching() then return end
   patch()   -- retry wrappers until RLS's police service exists (installed before a chase, not after)
   freezePolice()
@@ -338,6 +389,7 @@ local function onConfig(data)
   p3.log("I", string.format("config received antiTeleport=%s blockRoadblocks=%s", tostring(data.antiTeleport), tostring(data.blockRoadblocks)))
   if type(data.antiTeleport) == "boolean" then settings.antiTeleport = data.antiTeleport end
   if type(data.blockRoadblocks) == "boolean" then settings.blockRoadblocks = data.blockRoadblocks end
+  if type(data.noFineInStolenCar) == "boolean" then settings.noFineInStolenCar = data.noFineInStolenCar end
   if type(data.bubbleMode) == "string" then
     local b = rawget(_G, "rlsmp_bubble") or package.loaded["rlsmp/bubble"]
     if b and b.setMode then b.setMode(data.bubbleMode) end
@@ -349,6 +401,8 @@ local function onConfig(data)
     local u = rawget(_G, "rlsmp_unjam") or package.loaded["rlsmp/unjam"]
     if u and u.configure then u.configure(b and b.getRange and b.getRange().unjam or data.range.unjam) end
   end
+  local pr = rawget(_G, "rlsmp_policeRespawn") or package.loaded["rlsmp/policeRespawn"]
+  if pr and pr._onConfig then pr._onConfig(data) end   -- cops that come back behind the player (rlsmp/policeRespawn.lua)
   if not settings.antiTeleport then releaseAll() end
 end
 

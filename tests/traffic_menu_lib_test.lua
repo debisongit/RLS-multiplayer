@@ -98,6 +98,16 @@ local base = {"a"}
 local c = L.child(base, "b")
 check(#base == 1 and #c == 2, "child copies the path")
 
+-- night shares: the day weights times the night multipliers, in percent
+st = L.new()
+L.setSnapshot(st, {smartTraffic = {mix = {normal = 80, slow = 10, aggressive = 6, racer = 3, drunk = 1}, nightMult = {normal = 1, slow = 0.5, aggressive = 2.5, racer = 4, drunk = 6}}})
+local ns = L.nightShares(st)
+check(math.abs(ns.normal - 80 / 118 * 100) < 1e-9 and math.abs(ns.drunk - 6 / 118 * 100) < 1e-9, "night shares follow the multipliers")
+L.set(st, {"smartTraffic", "nightMult", "drunk"}, 0)
+check(L.nightShares(st).drunk == 0, "a pending multiplier shows at once")
+L.setSnapshot(st, {smartTraffic = {mix = {normal = 1}}})
+check(L.nightShares(L.new()).normal == 0 and L.nightShares(st).normal == 100, "no multipliers: the day mix; nothing at all: zeros")
+
 -- names under a section (theft methods, market items)
 st = L.new()
 check(#L.names(st, "theft", "methods") == 0, "names: no snapshot, no names")
