@@ -41,6 +41,8 @@ M.DEFAULTS = {
     rareModels = {"scintilla", "bolide"}, uncommonValue = 45000, rareValue = 120000},
   -- Preload: frame guard, a small reserve of picks prepared ahead, bias to models that are already loaded (lib/trafficPreload.lua).
   preload = {enabled = true, reserve = 3, prepareSeconds = 4, minGapSeconds = 6, slowFrameMs = 45, calmFrames = 45, settleSeconds = 3, warmShare = 0.7, ageMax = 240},
+  -- Simplified (cheap stand-in) cars: lib/simplified.lua. Off by default.
+  simplified = {enabled = false, parked = true, traffic = false, nearRadius = 250, perMinute = 4, checkSeconds = 2},
 }
 
 local MAX_ENTRIES = 64
@@ -205,6 +207,7 @@ function M.sanitize(src)
     parked = parkedSettings(src.parked),
     rarity = raritySettings(src.rarity),
     preload = require("rlsmp/lib/trafficPreload").sanitize(src.preload),
+    simplified = require("rlsmp/lib/simplified").sanitize(src.simplified),
   }
 end
 

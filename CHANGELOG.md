@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased: simplified (cheap stand-in) cars (all untested in-game, off by default)
+- New setting `trafficVariety.simplified` (`enabled`, `parked`, `traffic`, `nearRadius`, `perMinute`; also in the `[` menu): keep BeamNG's cheap `simple_traffic` stand-ins where nobody looks and use real cars where it matters, for a better frame rate. Everything is off until you switch `enabled` on. (Claude A)
+- Parked cars: they are stand-ins already. A stand-in at a stealable spot (the same pick as the theft code) becomes a real car when a player comes within `nearRadius` (default 250 m), and goes back when its spot is no longer stealable and everybody is far away. Never within 120 m of a player or in front of the camera; then the steal code still converts it as before. (Claude A)
+- Moving traffic (`traffic`, default off): a respawned car far from every player may come back as a stand-in of the same model, and a stand-in that comes within `nearRadius` is made a real car. Cars that approach from ahead cannot be changed in view, so they arrive as stand-ins; that is a limit of the view rule, see the research. (Claude A)
+- Police, taxis, jobs, chases and all players' cars are never touched; changes are limited per minute and wait for calm frames. Logs start with `simplified:` (counts of stand-ins and real cars, upgrades, ms per change, and what RLS's filter said about the stand-in configs). Research and what is unverified: `docs/RESEARCH_SIMPLIFIED.md`. (Claude A)
+
 ## 0.4.39 (all untested in-game)
 - Stealing no longer needs chat commands. Near a parked car press the interact key (default Y, set in Controls under RLS Career MP) for a small popup: Inspect, a button per steal method you have tools for, Cancel. Fence (strip, sell, resell, gamble) lives in the garage and the Black Market app, pickup is automatic in the drop circle. The old chat commands are off unless `ui.chatCommands` is true. (Claude A)
 

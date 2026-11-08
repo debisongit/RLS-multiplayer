@@ -182,6 +182,11 @@ M.defaults = {
     -- chase. `reserve` picks are made ahead and their data read ahead (one per prepareSeconds, only in calm moments); warmShare of the picks come from models
     -- that are already loaded (on the street or built this session). No spare car is ever built or hidden: BeamMP would send it to everybody.
     preload = {enabled = true, reserve = 3, prepareSeconds = 4, minGapSeconds = 6, slowFrameMs = 45, calmFrames = 45, settleSeconds = 3, warmShare = 0.7, ageMax = 240},
+    -- Simplified (cheap "simple_traffic" stand-in) cars, see docs/RESEARCH_SIMPLIFIED.md. OFF by default and never tried in the game.
+    -- parked: a stand-in parked car at a stealable spot becomes a real car when a player is within nearRadius (m, at least 120); traffic: a respawned
+    -- traffic car farther than nearRadius from every player may come back as a stand-in, and a stand-in that comes within nearRadius is made real.
+    -- perMinute = most changes per minute in one game (BeamMP sends every change to everybody). Never police, taxis, jobs, chases or players' cars.
+    simplified = {enabled = false, parked = true, traffic = false, nearRadius = 250, perMinute = 4, checkSeconds = 2},
   },
 
   smartTraffic = {

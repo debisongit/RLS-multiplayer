@@ -19,6 +19,7 @@ local mp = require("rlsmp/lib/mp")
 local p3 = require("rlsmp/lib/p3")
 local V = require("rlsmp/lib/trafficVariety")
 local PL = require("rlsmp/lib/trafficPreload")
+local SM = require("rlsmp/lib/simplified")
 
 local MOD_CONFIGS_PER_MODEL = 4   -- how many eligible configs of a modded model join the candidate pool
 
@@ -238,6 +239,12 @@ local function build(original, amount, params)
   end
   local mods = modCandidates(params)
   for _, e in ipairs(mods) do candidates[#candidates + 1] = e end
+  if parked and config.simplified.enabled and config.simplified.parked then
+    -- the cheap stand-ins only (when the game offered enough of them): real parked cars come later, one by one, where a player can steal them
+    local only, n = SM.preferSimple(candidates, want)
+    p3.log("I", string.format("simplified: parked group offered %d stand-ins of %d entries (%s)", n, #candidates, only ~= candidates and "stand-ins only" or "list kept"))
+    candidates = only
+  end
   local ctx = context()
   local function infoOf(e) return {type = typeOfModel(e.model), mod = config.mods[e.model] ~= nil, brand = brandOfModel(e.model)} end
   if not parked then remember(candidates) end
@@ -547,6 +554,13 @@ function M.pickReplacement(current, census)
   if not ok then p3.log("W", "pickReplacement failed: " .. tostring(entry)) return nil end
   if entry then p3.count("pool picks (stage " .. tostring(stage) .. ")") end
   return entry, stage
+end
+-- A real (full) car entry of `model` from the premade pool, or nil (rlsmp_simplified upgrades a stand-in with it).
+function M.fullEntryFor(model)
+  local list = {}
+  for _, e in ipairs(premadeList or {}) do if e.model == model then list[#list + 1] = e end end
+  if #list == 0 then return nil end
+  return list[math.random(#list)]
 end
 function M.report() return p3.report() end
 

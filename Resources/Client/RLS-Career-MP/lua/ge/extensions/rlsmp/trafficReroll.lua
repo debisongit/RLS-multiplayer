@@ -86,7 +86,13 @@ function M.check()
       tracker.due[id] = nil                                     -- looked at: once per respawn, swapped or not
       if not S.allowed(tracker, clock, cfg.respawn) then p3.count("reroll skipped (rate)") return nil end
       local model, name = ts.modelOf(id, veh), ts.configOf(id)
-      if not model or model == "simple_traffic" then return nil end
+      if not model then goto continue end
+      local simp = ext("simplified")
+      if model == "simple_traffic" then
+        -- a cheap stand-in: only handled when rlsmp_simplified manages traffic stand-ins (then its real model is the "current" one)
+        model = simp and simp.trafficActive and simp.trafficActive() and simp.realOf and simp.realOf(name) or nil
+        if not model then goto continue end
+      end
       local current = {model = model, config = name}
       local census = R.census(ids, function(other)
         local m = ts.modelOf(other, data[other])
@@ -102,9 +108,10 @@ function M.check()
       end
       if not entry then entry, stage = v.pickReplacement(current, census) end
       if not entry then p3.count("reroll: nothing to pick") return nil end
+      if simp and simp.adapt then entry = simp.adapt(veh, entry) end   -- far from every player: a cheap stand-in of the same model
       local started, why = ts.replace(id, entry, cfg.swap.maxFailures, function(newId)
         p3.count("reroll done")
-        if v.noteWarm then v.noteWarm(entry.model) end
+        if v.noteWarm then v.noteWarm(entry.realModel or entry.model) end
         if math.random() < cfg.respawn.repaintChance then repaint(newId) end
       end)
       if not started then

@@ -143,7 +143,8 @@ local function resolvePending()
     local how, ids = "new id", table.concat(fresh, ",")
     if #fresh == 0 then how, ids = "replaced in place, same id", tostring(pending.oldId) end
     local results = {}
-    if #fresh > 0 then for _, id in ipairs(fresh) do results[#results + 1] = toTraffic(id) end
+    if pending.entry.noTraffic then results[1] = "not traffic (parked car)"   -- rlsmp_simplified: the caller puts the car back where it belongs
+    elseif #fresh > 0 then for _, id in ipairs(fresh) do results[#results + 1] = toTraffic(id) end
     else results[1] = toTraffic(pending.oldId) end
     p3.count("swap done")
     p3.count(#fresh > 0 and "swap done (new id)" or "swap done (in place)")
@@ -202,7 +203,9 @@ function M.replace(id, entry, maxFailures, onDone)
     end
   end
   local t0 = os.clock()
-  local ok, err = pcall(vanilla, entry.model, {config = entry.config, autoEnterVehicle = false}, obj)
+  local options = {config = entry.config, autoEnterVehicle = false}
+  for k, v in pairs(entry.opts or {}) do options[k] = v end   -- e.g. paint and plate of a parked car (rlsmp_simplified)
+  local ok, err = pcall(vanilla, entry.model, options, obj)
   local ms = (os.clock() - t0) * 1000
   PL.built(guard, clock)
   if not ok then fail(maxFailures, err) return false, "error" end

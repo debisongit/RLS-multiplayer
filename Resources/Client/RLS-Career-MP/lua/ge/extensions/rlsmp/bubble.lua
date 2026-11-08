@@ -49,6 +49,8 @@ local function playerPositions()
   return list
 end
 
+M.otherPlayers = playerPositions   -- for rlsmp_simplified (distance to every player)
+
 -- true = keep this car where it is. `canSee(a, b)` is true when nothing static is between the points.
 function M.mustStay(carPos, players, canSee)
   local limit = BUBBLE * BUBBLE

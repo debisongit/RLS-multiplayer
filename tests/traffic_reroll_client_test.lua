@@ -267,4 +267,25 @@ respawn(10) respawn(11)
 runDt(10, 0.1)
 check(#replaceCalls == 1, "minGapSeconds: two builds are never closer than that")
 
+-- 11. stand-in cars (rlsmp_simplified) ---------------------------------------------------------------------------------------------------------------
+-- without the stand-in module a simple_traffic car is skipped, and the loop goes on to the next car (it used to stop at the first one)
+reset() addObject(1, "unicycle") addCar(10, "simple_traffic") addCar(11, "van") setConfig()
+runDt(1, 0.1)
+respawn(10) respawn(11)
+runDt(3, 0.1)
+check(#replaceCalls == 1 and replaceCalls[1].old:getID() == 11, "a stand-in is skipped, the next respawned car is still re-rolled")
+local adaptCalls = 0
+package.loaded["rlsmp/simplified"] = {
+  trafficActive = function() return true end,
+  realOf = function() return "sedan" end,
+  adapt = function(veh, entry) adaptCalls = adaptCalls + 1 return {model = "simple_traffic", config = "x_traffic", realModel = entry.model} end,
+}
+reset() addObject(1, "unicycle") addCar(10, "simple_traffic") setConfig()
+runDt(1, 0.1)
+respawn(10)
+runDt(3, 0.1)
+check(#replaceCalls == 1 and replaceCalls[1].model == "simple_traffic" and adaptCalls == 1, "with the stand-in module: the pick goes through adapt() and a stand-in is built")
+check(saw("reroll: respawned car 10 sedan/cfg -> simple_traffic/x_traffic"), "the current model is the real one behind the stand-in; logged")
+package.loaded["rlsmp/simplified"] = nil
+
 print(string.format("traffic_reroll_client_test: %d checks passed", passed))

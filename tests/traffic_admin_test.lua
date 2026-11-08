@@ -287,4 +287,12 @@ set(0, {{p = {"theft", "enabled"}, v = false}})
 take()
 check(cfg.theft.enabled == false and admin.snapshot().theft.enabled == false, "theft can be switched off again")
 
+-- simplified (stand-in) cars: off by default, editable with ranges, in the snapshot
+check(cfg.trafficVariety.simplified.enabled == false and cfg.trafficVariety.simplified.traffic == false and cfg.trafficVariety.simplified.nearRadius == 250, "simplified: off by default")
+set(0, {{p = {"trafficVariety", "simplified", "enabled"}, v = true}, {p = {"trafficVariety", "simplified", "nearRadius"}, v = 300}, {p = {"trafficVariety", "simplified", "nearRadius"}, v = 50}, {p = {"trafficVariety", "simplified", "perMinute"}, v = 99}})
+r = lastResult()
+check(r.applied == 2 and #r.rejected == 2 and cfg.trafficVariety.simplified.enabled == true and cfg.trafficVariety.simplified.nearRadius == 300, "simplified: switch and radius edited, radius under 120 m and 99 per minute refused")
+check(admin.snapshot().trafficVariety.simplified.enabled == true and admin.snapshot().trafficVariety.simplified.nearRadius == 300, "simplified: in the snapshot")
+cfg.trafficVariety.simplified.enabled = false
+
 print(string.format("traffic_admin_test: %d checks passed", passed))
