@@ -32,6 +32,7 @@ local WITNESS_PLAYERS = 80    -- metres: other players' cars and walkers
 local enabled = false
 local cfg                      -- last rlsmpTheftConfig
 local clock, scanTimer = 0, 0
+local lastCensus = -999
 local spots = {}               -- vehicle id -> {key, stealable}
 local target                   -- {id, key, info, can, method, label, seconds, asked}
 local action                   -- {id, info, method, seconds, elapsed, startPos, noise, lastShown, finishing}
@@ -252,6 +253,19 @@ function M.onUpdate(dtReal)
   if scanTimer < SCAN_EVERY then return end
   scanTimer = 0
   if not pos then target = nil return end
+  -- Why can nobody find a car to steal? Log what exists around a walking player, at most every 30 s (parked cars are few in RLS).
+  if clock - lastCensus >= 30 then
+    lastCensus = clock
+    local total, near, nearest = 0, 0, math.huge
+    for _, pid in ipairs(parkedIds()) do
+      local d = T.dist(pos, posOf(objOf(pid)))
+      total = total + 1
+      if d <= 60 then near = near + 1 end
+      if d < nearest then nearest = d end
+    end
+    say("I", string.format("parked cars known: %d, within 60 m: %d, nearest: %s m, stealable share: %s/1000", total, near,
+      nearest == math.huge and "none" or tostring(math.floor(nearest)), tostring(cfg.perMille)))
+  end
   local id = M.nearestStealable(pos)
   if not id then target = nil return end
   if target and target.id == id then

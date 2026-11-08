@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.4.34
+- Car theft now logs `parked cars known: N, within 60 m: M, nearest ...` every 30 s while you walk, to find out why so few cars can be stolen. Your last log showed RLS only spawned 2 parked cars in total. (Claude A)
+
 ## 0.4.33
 - Traffic variety no longer misses the first traffic group: a real log showed RLS built it about 1 s before the server's settings arrived, so every car kept its model for the whole session. Now the built-in defaults are used until the server speaks. (Claude A)
 - Live swapping of hidden traffic cars is **on by default** on new servers (`trafficVariety.swap.enabled` and `live`), so respawned cars change model. It stops itself after 3 failures. Existing servers: set both to `true` in `config.json` or in the traffic menu. Untested in-game.
