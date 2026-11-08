@@ -80,6 +80,11 @@ local STATIC = {
   ["trafficVariety.preload.slowFrameMs"] = {"number", 10, 2000},
   ["trafficVariety.preload.settleSeconds"] = {"number", 0, 60},
   ["trafficVariety.preload.warmShare"] = {"number", 0, 1},
+  ["trafficVariety.simplified.enabled"] = {"bool"},
+  ["trafficVariety.simplified.parked"] = {"bool"},
+  ["trafficVariety.simplified.traffic"] = {"bool"},
+  ["trafficVariety.simplified.nearRadius"] = {"number", 120, 1000, true},
+  ["trafficVariety.simplified.perMinute"] = {"number", 0, 12, true},
   ["weather.enabled"] = {"bool"},
   ["weather.force"] = {"enum", values = {[""] = true, clear = true, partlyCloudy = true, overcast = true, drizzle = true, rain = true, storm = true}},
   ["police.antiTeleport"] = {"bool"},
@@ -309,6 +314,7 @@ function M.snapshot()
   local pk = type(v.parked) == "table" and v.parked or {}
   local ra = type(v.rarity) == "table" and v.rarity or {}
   local pl = type(v.preload) == "table" and v.preload or {}
+  local sm = type(v.simplified) == "table" and v.simplified or {}
   local extra = copyRuled({theft = true, fence = true, market = true})
   -- A method without an "enabled" key is ON (theft.lua: enabled ~= false); show it that way, or the menu would list every method as off.
   for name, m in pairs(type(extra.theft) == "table" and type(extra.theft.methods) == "table" and extra.theft.methods or {}) do
@@ -334,7 +340,8 @@ function M.snapshot()
       parked = {amount = pk.amount},
       rarity = {enabled = ra.enabled, common = ra.common, uncommon = ra.uncommon, rare = ra.rare, uncommonValue = ra.uncommonValue, rareValue = ra.rareValue},
       preload = {enabled = pl.enabled, reserve = pl.reserve, prepareSeconds = pl.prepareSeconds, minGapSeconds = pl.minGapSeconds,
-        slowFrameMs = pl.slowFrameMs, settleSeconds = pl.settleSeconds, warmShare = pl.warmShare}},
+        slowFrameMs = pl.slowFrameMs, settleSeconds = pl.settleSeconds, warmShare = pl.warmShare},
+      simplified = {enabled = sm.enabled, parked = sm.parked, traffic = sm.traffic, nearRadius = sm.nearRadius, perMinute = sm.perMinute}},
     weather = {enabled = w.enabled, force = w.force, mix = copyMap(w.mix), periodMinutes = w.periodMinutes},
     police = {enabled = p.enabled, antiTeleport = p.antiTeleport, blockRoadblocks = p.blockRoadblocks, bubbleMode = p.bubbleMode,
       plateFlagSeconds = p.plateFlagSeconds, descriptionSeconds = p.descriptionSeconds,

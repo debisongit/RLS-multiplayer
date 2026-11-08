@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.4.40 (all untested in-game, off by default)
+- Simplified cars (`trafficVariety.simplified`, off): stealable parked spots turn into real cars when a player comes within 250 m, other parked cars stay simplified; far-away traffic can return as simplified cars and is upgraded when it comes near. Details and limits in `docs/RESEARCH_SIMPLIFIED.md`. (Claude A)
+
 ## Unreleased: simplified (cheap stand-in) cars (all untested in-game, off by default)
 - New setting `trafficVariety.simplified` (`enabled`, `parked`, `traffic`, `nearRadius`, `perMinute`; also in the `[` menu): keep BeamNG's cheap `simple_traffic` stand-ins where nobody looks and use real cars where it matters, for a better frame rate. Everything is off until you switch `enabled` on. (Claude A)
 - Parked cars: they are stand-ins already. A stand-in at a stealable spot (the same pick as the theft code) becomes a real car when a player comes within `nearRadius` (default 250 m), and goes back when its spot is no longer stealable and everybody is far away. Never within 120 m of a player or in front of the camera; then the steal code still converts it as before. (Claude A)

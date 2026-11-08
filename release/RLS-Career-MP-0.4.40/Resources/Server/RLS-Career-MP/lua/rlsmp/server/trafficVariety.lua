@@ -106,6 +106,12 @@ function M.preload()
     ageMax = tonumber(p.ageMax)}
 end
 
+function M.simplified()
+  local k = type(cfg.simplified) == "table" and cfg.simplified or {}
+  return {enabled = k.enabled == true, parked = k.parked ~= false, traffic = k.traffic == true, nearRadius = tonumber(k.nearRadius),
+    perMinute = tonumber(k.perMinute), checkSeconds = tonumber(k.checkSeconds)}
+end
+
 function M.payload()
   local zones = {}
   if type(cfg.zones) == "table" then
@@ -135,6 +141,7 @@ function M.payload()
     parked = M.parked(),
     rarity = M.rarity(),
     preload = M.preload(),
+    simplified = M.simplified(),
   }
 end
 
