@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.38 (all untested in-game)
+- Theft hints for black market members: `/inspect` near a parked car (3 s) tells its weakness, tools and risk; a Scout tip in the black market app marks 2 to 3 stealable cars for about 10 minutes. (Claude A)
+- The big debug text labels on meetup and drop markers are gone. (Claude A)
+
+## Unreleased (inspect hint and scout tip, build number not bumped, all untested in-game)
+- Black market members get a small toast when they walk within about 15 m of a stealable parked car ("type /inspect"). Everyone else never sees it. (Claude A)
+- `/inspect` takes 3 s and tells the car's tier, the tools it needs (missing ones listed) and the rough risk (alarm, GPS tracker, loud). Boring cars and non-members get the same wait and a plain "nothing stands out"; the server judges distance, membership and the pick itself. (Claude A)
+- Black Market phone app: "Scout tip" button. It marks 2 to 3 stealable parked cars within 800 m with small floating dots for up to 10 minutes. Price, rep, cooldown in `market.scout`; more than 3 tips an hour cost 1 reputation each. (Claude A)
+- Settings: `theft.inspect` and `market.scout` (also in the `[` menu). Docs: PROTOCOL "Inspect hint" and "Scout tip". (Claude A)
+
 ## 0.4.37 (all untested in-game)
 - Less lag from car changes: a frame guard postpones changes after slow frames, picks are prepared ahead. Hidden spare cars are not possible with BeamMP. (Claude A)
 - Realistic mix: everyday cars about 88%, rare ones (race, drift, hotrod, junk) about 2%; trucks and vans favoured on highways. (Claude A)

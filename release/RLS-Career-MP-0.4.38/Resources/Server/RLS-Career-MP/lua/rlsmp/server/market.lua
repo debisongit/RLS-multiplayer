@@ -368,6 +368,83 @@ function cmds.fence(pid)
     math.floor(c().fenceCarRate * 100 + 0.5), math.floor(c().fencePartRate * 100 + 0.5)))
 end
 
+-- Scout tip (phone app only): marks a few stealable parked cars near the player for a while. The server does not know any parked car
+-- (each game spawns its own), so the game sends the ones it sees ({x, y, z} list); the server keeps only those that are inside the
+-- radius of the player's own server-side position and that the theft rule (theft.stealableAt) picks, then charges and answers
+-- rlsmpMarketScout {marks = [{x, y, z}], seconds}. Nothing found = nothing charged. Too many tips in an hour cost a little reputation.
+
+local function sn(v, d, lo, hi)
+  v = tonumber(v)
+  if not finite(v) then v = d end
+  return math.max(lo, math.min(hi, v))
+end
+
+local function scoutCfg()
+  local t = type(c().scout) == "table" and c().scout or {}
+  local lo = math.floor(sn(t.minCount, 2, 1, 6))
+  return {enabled = t.enabled ~= false, price = math.floor(sn(t.price, 3000, 0, 10000000)), minRep = sn(t.minRep, 5, 0, 1000),
+    radius = sn(t.radius, 800, 50, 5000), seconds = math.floor(sn(t.seconds, 600, 30, 3600)), minCount = lo,
+    maxCount = math.max(lo, math.floor(sn(t.maxCount, 3, 1, 6))), cooldown = sn(t.cooldownSeconds, 120, 0, 3600),
+    freeUses = math.floor(sn(t.freeUsesPerHour, 3, 0, 100)), repCost = math.floor(sn(t.repCost, 1, 0, 25))}
+end
+
+local function theftModule()
+  local ok, theft = pcall(require, "rlsmp.server.theft")
+  if ok and type(theft) == "table" and theft.isEnabled() then return theft end
+end
+
+function cmds.scout(pid, cars)
+  local m, s = memberState(pid)
+  if not m then return say(pid, "Members only.") end
+  if type(cars) ~= "table" then return say(pid, "Scout tips are bought in the Black Market phone app.") end
+  local sc, theft = scoutCfg(), theftModule()
+  if not (sc.enabled and theft) then return say(pid, "No scout tips right now.") end
+  if m.rep < sc.minRep then return say(pid, "Scout tips need reputation " .. sc.minRep .. ".") end
+  local now = util.now()
+  if (s.scoutNext or 0) > now then return say(pid, string.format("The scout needs %d s before the next tip.", s.scoutNext - now)) end
+  local pos = positions.get(pid)
+  if not pos or now - pos.t > c().positionMaxAge then return say(pid, "The server has no fresh position from you yet. Try again in a few seconds.") end
+  local period = theft.periodAt(now)
+  local left = (period + 1) * theft.periodSeconds() - now
+  if left < 60 then return say(pid, "The picks are about to change. Try again in a minute.") end
+  local good, seen = {}, {}
+  for i = 1, math.min(#cars, 8) do
+    local car = cars[i]
+    local ok = type(car) == "table"
+    local x, y, z = ok and tonumber(car.x), ok and tonumber(car.y), ok and tonumber(car.z)
+    if ok and finite(x) and finite(y) and finite(z) then
+      local key = math.floor(x / 4) .. ":" .. math.floor(y / 4)
+      if not seen[key] and math.sqrt((pos.x - x) ^ 2 + (pos.y - y) ^ 2) <= sc.radius + 25 and theft.stealableAt(period, {x = x, y = y}) then
+        seen[key] = true
+        good[#good + 1] = {x = x, y = y, z = z}
+      end
+    end
+  end
+  if #good == 0 then return say(pid, "The scout finds no easy marks near you right now. Nothing charged.") end
+  local ledger = s.profile.ledger
+  if not ledger.seeded then return say(pid, "Wait for your first save, then try again.") end
+  if ledger.money < sc.price then return say(pid, "A scout tip costs " .. dollars(sc.price) .. ".") end
+  for i = #good, 2, -1 do local j = math.random(i) good[i], good[j] = good[j], good[i] end
+  local want = math.min(#good, math.random(sc.minCount, sc.maxCount))
+  while #good > want do table.remove(good) end
+  ledger.money = ledger.money - sc.price
+  if not profiles.persist(s.profile) then
+    ledger.money = ledger.money + sc.price
+    return say(pid, "The server could not save. Nothing was charged.")
+  end
+  s.scoutNext = now + sc.cooldown
+  local uses = {}
+  for _, t in ipairs(s.scoutUses or {}) do if now - t < 3600 then uses[#uses + 1] = t end end
+  uses[#uses + 1] = now
+  s.scoutUses = uses
+  net.send(pid, "rlsmpWalletSet", {money = ledger.money, why = "market"})
+  local seconds = math.min(sc.seconds, left)
+  net.send(pid, "rlsmpMarketScout", {marks = good, seconds = seconds})
+  util.info(string.format("Market: %s bought a scout tip (%d cars, %d s)", s.name, #good, seconds))
+  say(pid, string.format("Paid %s. %d car(s) are marked for about %d min.", dollars(sc.price), #good, math.floor(seconds / 60 + 0.5)))
+  if #uses > sc.freeUses and sc.repCost > 0 then M.lossRep(pid, sc.repCost, "too many scout tips") end
+end
+
 local function onChat(pid, rest)
   if not c().enabled then return say(pid, "The black market is closed on this server.") end
   local sub, arg = tostring(rest or ""):match("^(%S*)%s*(.-)$")
@@ -380,7 +457,7 @@ end
 -- The RLS phone app (ui/ui-vue/mods/rls_career_mp/phone/PhoneBlackMarket.vue) talks to us through the client's rlsmp_market.
 --   C>S rlsmpMarketGet {}                      -> S>C rlsmpMarketState {...}
 --   C>S rlsmpMarketAct {a, item?, n?, who?}    -> S>C rlsmpMarketResult {text}, then a fresh rlsmpMarketState
--- a = buy | pickup | invite | accept: the same commands as the chat, run for the player; what the command would have said in chat comes
+-- a = buy | pickup | invite | accept | scout (scout carries cars = [{x, y, z}] the game sees): the same commands as the chat, run for the player; what the command would have said in chat comes
 -- back as `text`. At most one Get and one Act per player per second.
 
 local appLast = {get = {}, act = {}}   -- pid -> time of the last request, per kind (a click must not be eaten by the refresh that came first)
@@ -411,6 +488,11 @@ local function appState(pid)
     out.items[#out.items + 1] = {name = o.name, label = o.label, price = o.price, minRep = o.minRep, durable = o.durable,
       locked = m.rep < o.minRep, have = items.count(pid, o.name), onOrder = hasOnOrder(m, o.name)}
   end
+  local sc = scoutCfg()
+  if sc.enabled and theftModule() then
+    out.scout = {price = sc.price, minRep = sc.minRep, locked = m.rep < sc.minRep, radius = sc.radius, minCount = sc.minCount,
+      maxCount = sc.maxCount, minutes = math.floor(sc.seconds / 60 + 0.5), wait = math.max(0, (s.scoutNext or 0) - now)}
+  end
   return out
 end
 
@@ -426,7 +508,7 @@ local function onAppGet(pid)
   net.send(pid, "rlsmpMarketState", appState(pid))
 end
 
-local APP_ACTIONS = {buy = true, pickup = true, invite = true, accept = true}
+local APP_ACTIONS = {buy = true, pickup = true, invite = true, accept = true, scout = true}
 
 local function onAppAct(pid, d)
   if not c().enabled or type(d) ~= "table" or appTooFast(pid, "act") then return end
@@ -439,6 +521,8 @@ local function onAppAct(pid, d)
     arg = item .. " " .. math.max(1, math.min(10, n))
   elseif a == "invite" then
     arg = type(d.who) == "string" and d.who:sub(1, 64) or ""
+  elseif a == "scout" then
+    arg = d.cars
   end
   sink = {pid = pid}
   local ok, err = pcall(cmds[a], pid, arg)

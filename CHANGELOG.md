@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.38 (all untested in-game)
+- Theft hints for black market members: `/inspect` near a parked car (3 s) tells its weakness, tools and risk; a Scout tip in the black market app marks 2 to 3 stealable cars for about 10 minutes. (Claude A)
+- The big debug text labels on meetup and drop markers are gone. (Claude A)
+
 ## Unreleased (inspect hint and scout tip, build number not bumped, all untested in-game)
 - Black market members get a small toast when they walk within about 15 m of a stealable parked car ("type /inspect"). Everyone else never sees it. (Claude A)
 - `/inspect` takes 3 s and tells the car's tier, the tools it needs (missing ones listed) and the rough risk (alarm, GPS tracker, loud). Boring cars and non-members get the same wait and a plain "nothing stands out"; the server judges distance, membership and the pick itself. (Claude A)

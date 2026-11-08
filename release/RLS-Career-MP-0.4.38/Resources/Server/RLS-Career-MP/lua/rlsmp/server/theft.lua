@@ -22,12 +22,19 @@
 --   client rlsmpTheftDone {plate, model, color, value, year, x, y, z, witnesses}   (after the car was converted)
 --   client rlsmpTheftCancel {}                       (walked away)
 --   server rlsmpTheftReported {plate}                (the car was reported stolen; nothing else to do on the client)
+-- Inspect hint (black market members only, config theft.inspect; the server answers only inside the real distance):
+--   client rlsmpTheftHint {id, x, y}                -> rlsmpTheftHint {id, ok = true} ONLY for a member in range at a stealable car (else silence)
+--   chat /inspect                                   -> rlsmpTheftInspectAsk {} (the client picks the nearest parked car)
+--   client rlsmpTheftInspect {id, x, y, value, year}-> rlsmpTheftInspectGo {ok, seconds}  (same for everybody)
+--   client rlsmpTheftInspectFinish {}               -> rlsmpTheftInspected {id, found, text}  (non-members and boring cars get the same text)
 
 local util = require("rlsmp.server.util")
 local net = require("rlsmp.server.net")
 local sessions = require("rlsmp.server.sessions")
 local storage = require("rlsmp.server.storage")
 local items = require("rlsmp.server.items")
+local positions = require("rlsmp.server.positions")
+local market = require("rlsmp.server.market")
 
 local M = {}
 
@@ -39,6 +46,9 @@ local pending = {}   -- pid -> {accountId, method, seconds, noise, tier, value, 
 local cooldown = {}  -- pid -> time before which no new start is accepted
 local told = {}      -- pid -> period the config was sent for
 local lastCheck = {} -- pid -> time of the last answered check (rate limit)
+local inspecting = {} -- pid -> {accountId, id, x, y, value, year, started, seconds}
+local inspectNext = {} -- pid -> time before which no new inspect starts
+local lastHint = {}  -- pid -> time of the last answered hint request (rate limit)
 
 local random = math.random
 function M.setRandom(fn) random = fn or math.random end
@@ -216,11 +226,36 @@ function M.periodSeconds() return math.max(60, math.floor(n(cfg.periodSeconds, 3
 function M.periodAt(epoch) return math.floor(epoch / M.periodSeconds()) end
 function M.seedFor(period) return (tagSeed(serverTag) * 7919 + period * 104729) % 1000003 end
 
+-- The same pick as the client (rlsmp/lib/theft.lua stealable): FNV-1a over "seed|period|cellX|cellY", 4 m cells. Used so the server can
+-- answer hints and scout tips from the real rule without trusting the client.
+local CELL = 4
+local function fnv(str)
+  local h = 2166136261
+  for i = 1, #str do h = ((h ~ str:byte(i)) * 16777619) & 0xFFFFFFFF end
+  return h
+end
+M.hash = fnv
+function M.stealableAt(period, pos)
+  local pm = clamp(math.floor(n(cfg.perMille, 150)), 0, 1000)
+  local x, y = n(pos and pos.x, nil), n(pos and pos.y, nil)
+  if pm <= 0 or not x or not y then return false end
+  period = math.floor(period)
+  return fnv(string.format("%d|%d|%d|%d", math.floor(M.seedFor(period)), period, math.floor(x / CELL), math.floor(y / CELL))) % 1000 < pm
+end
+
+-- Inspect settings, clamped.
+function M.inspectCfg()
+  local i = type(cfg.inspect) == "table" and cfg.inspect or {}
+  return {enabled = enabled() and i.enabled ~= false, range = clamp(n(i.range, 15), 3, 100),
+    seconds = math.floor(clamp(n(i.seconds, 3), 1, 30)), cooldown = clamp(n(i.cooldown, 2), 0, 60)}
+end
+
 function M.payload()
   local period = M.periodAt(util.now())
+  local ic = M.inspectCfg()
   return {enabled = enabled(), seed = M.seedFor(period), period = period,
     perMille = clamp(math.floor(n(cfg.perMille, 150)), 0, 1000), periodSeconds = M.periodSeconds(),
-    radius = clamp(n(cfg.radius, 3), 1, 10)}
+    radius = clamp(n(cfg.radius, 3), 1, 10), inspect = {enabled = ic.enabled, range = ic.range}}
 end
 
 local function save() if file then storage.writeJson(file, {stolen = stolen}) end end
@@ -270,6 +305,78 @@ local function onCheck(pid, d)
   else
     net.send(pid, "rlsmpTheftCan", {ok = false, id = n(d.id, nil), err = err})
   end
+end
+
+-- Inspect hint ---------------------------------------------------------------------------------------
+-- The car's x/y come from the client, but the player's own server-side position (positions.lua) must be within range of them, and
+-- the pick is judged here with the same rule as the client. A non-member, a boring car or a player too far away gets no hint at all.
+
+local MAX_POS_AGE = 20
+
+local function carNear(pid, d, ic)
+  local x, y = n(d.x, nil), n(d.y, nil)
+  local pos = positions.get(pid)
+  if not (x and y and pos) or util.now() - pos.t > MAX_POS_AGE then return nil end
+  if math.sqrt((pos.x - x) ^ 2 + (pos.y - y) ^ 2) > ic.range + 5 then return nil end   -- +5: the last report is a moment old
+  return {x = x, y = y}
+end
+
+local function onHint(pid, d)
+  local ic = M.inspectCfg()
+  if not ic.enabled or type(d) ~= "table" or not sessions.isLoaded(pid) or not market.isMember(pid) then return end
+  local now = util.now()
+  if lastHint[pid] == now then return end
+  lastHint[pid] = now
+  local car = carNear(pid, d, ic)
+  if car and M.stealableAt(M.periodAt(now), car) then net.send(pid, "rlsmpTheftHint", {id = n(d.id, nil), ok = true}) end
+end
+
+local BORING = "Just a parked car. Nothing stands out."
+
+-- What a member learns about a stealable car: tier, the ways in (missing tools named), rough risk.
+function M.inspectText(pid, value, year)
+  local tier = M.tierFor(value, year)
+  local ways, alarm, tracker, loud = {}, false, false, false
+  for _, name in ipairs(M.methodsFor(tier)) do
+    local m = cfg.methods[name]
+    local lack = M.missing(pid, name)
+    local labels = {}
+    for _, it in ipairs(lack) do labels[#labels + 1] = labelOf(it) end
+    ways[#ways + 1] = (type(m.label) == "string" and m.label or name) .. (#lack == 0 and " (you have the tools)" or " (missing: " .. table.concat(labels, ", ") .. ")")
+    alarm, tracker, loud = alarm or m.alarm == true, tracker or m.tracker == true, loud or n(m.noise, 0) >= 0.6
+  end
+  local risk = {}
+  if alarm then risk[#risk + 1] = "alarm" end
+  if tracker then risk[#risk + 1] = "GPS tracker" end
+  if loud then risk[#risk + 1] = "loud" end
+  return string.format("Easy mark, %s car. Ways in: %s. Risk: %s.", tier, #ways > 0 and table.concat(ways, "; ") or "none you know",
+    #risk > 0 and table.concat(risk, ", ") or "low")
+end
+
+local function onInspect(pid, d)
+  local ic = M.inspectCfg()
+  if not ic.enabled or type(d) ~= "table" or not sessions.isLoaded(pid) then return end
+  local now = util.now()
+  if inspectNext[pid] and now < inspectNext[pid] then return end
+  inspectNext[pid] = now + ic.cooldown
+  inspecting[pid] = {accountId = accountOf(pid), id = n(d.id, nil), x = n(d.x, nil), y = n(d.y, nil), value = M.cleanValue(d.value),
+    year = M.cleanYear(d.year), started = now, seconds = ic.seconds}
+  net.send(pid, "rlsmpTheftInspectGo", {ok = true, seconds = ic.seconds})   -- the same for everybody and every car
+end
+
+local function onInspectFinish(pid)
+  local p = inspecting[pid]
+  if not p or p.accountId ~= accountOf(pid) then return end
+  inspecting[pid] = nil
+  local ic = M.inspectCfg()
+  if not ic.enabled or util.now() - p.started < p.seconds - 1 then return end
+  local found = market.isMember(pid) and carNear(pid, p, ic) ~= nil and M.stealableAt(M.periodAt(util.now()), p)
+  net.send(pid, "rlsmpTheftInspected", {id = p.id, found = found == true, text = found and M.inspectText(pid, p.value, p.year) or BORING})
+end
+
+local function onInspectChat(pid)
+  if not M.inspectCfg().enabled then return chat(pid, "Car theft is off on this server.") end
+  if sessions.isLoaded(pid) then net.send(pid, "rlsmpTheftInspectAsk", {}) end
 end
 
 local function goFail(pid, err) net.send(pid, "rlsmpTheftGo", {ok = false, err = err}) end
@@ -383,7 +490,8 @@ function M.pushConfig()
       end
     end
   end
-  for pid in pairs(told) do if not live[pid] then told[pid], pending[pid], cooldown[pid], lastCheck[pid] = nil, nil, nil, nil end end
+  for pid in pairs(told) do if not live[pid] then told[pid], pending[pid], cooldown[pid], lastCheck[pid] = nil, nil, nil, nil
+    inspecting[pid], inspectNext[pid], lastHint[pid] = nil, nil, nil end end
 end
 
 local offTold = false
@@ -421,6 +529,7 @@ function M.init(config, pluginRoot)
   cfg = config.theft
   serverTag = tostring(config.serverTag or "")
   stolen, pending, cooldown, told, lastCheck = {}, {}, {}, {}, {}
+  inspecting, inspectNext, lastHint = {}, {}, {}
   file = pluginRoot and (pluginRoot .. "stolen.json") or nil
   offTold = false
   -- Always listening: every handler checks enabled() itself, so the in-game menu can switch theft on and off without a restart.
@@ -435,7 +544,11 @@ function M.init(config, pluginRoot)
   net.onClient("rlsmpTheftFinish", onFinish)
   net.onClient("rlsmpTheftDone", onDone)
   net.onClient("rlsmpTheftCancel", onCancel)
+  net.onClient("rlsmpTheftHint", onHint)
+  net.onClient("rlsmpTheftInspect", onInspect)
+  net.onClient("rlsmpTheftInspectFinish", onInspectFinish)
   net.onChat("steal", onSteal)
+  net.onChat("inspect", onInspectChat)
   net.on("rlsmpTheftTick", M.tick)
   MP.CreateEventTimer("rlsmpTheftTick", 1000)
   util.info(enabled() and string.format("Car theft on: %d per mille of parked cars, new pick every %d min", M.payload().perMille, M.periodSeconds() // 60)
