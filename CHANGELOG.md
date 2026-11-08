@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.4.63 (untested in-game)
+- Parked cars follow you. Cause: RLS switches off every parked car more than 50 m from you when the career starts and only recycles active ones, so the 9 parked cars stayed where they were created. Now, when fewer than `parked.nearCount` (6 by day, `nearNightCount` 10 at night) parked cars are within `parked.nearRadius` (350 m), the farthest one (over 700 m from everyone, out of view) is teleported to a free parking spot 120 to 350 m from you, one move every 8 s, only while the frame rate is fine. Log lines `parked near:`. Existing servers: add the new keys to the `parked` block or use the [ menu. (Claude A)
+
 ## Unreleased (untested in-game)
 - Parked cars now stay near you. RLS switches far parked cars off and never moves them again, so all of them sat where they were created (the log showed the nearest 425 to 832 m away for 8 minutes). Every 8 seconds, while you walk or drive slowly, if fewer than 6 parked cars (10 at night) are within 350 m, one parked car that is farther than 700 m from every player is moved to a free parking spot 120 to 350 m from you, out of view, using RLS's own parking spot functions. Cars being stolen or inspected are never moved. Config `trafficVariety.parked.nearCount`, `nearNightCount`, `nearRadius`, `farRadius`, `moveEverySeconds` (0 `nearCount` = off); menu fields. Log lines `parked near:`. See `docs/RESEARCH_PARKED_NEAR.md`. (Claude A)
 
