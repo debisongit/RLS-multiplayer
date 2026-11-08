@@ -17,6 +17,7 @@ local MAX_ENTRIES = 64
 local MAX_NAME = 64
 
 local cfg
+local trafficCfg = {}   -- config.traffic (minAmount)
 local told = {}   -- pid -> true once they have the settings
 
 -- {name = weight}: short string names, finite weights >= 0, at most MAX_ENTRIES (a bad config.json cannot flood the clients).
@@ -111,6 +112,13 @@ function M.simplified()
     perMinute = tonumber(k.perMinute), checkSeconds = tonumber(k.checkSeconds)}
 end
 
+-- BeamMP's per-player car limit (MaxCars), or 0 when this server cannot say. The client stops adding traffic cars a few below it.
+local function maxCars()
+  local ok, n = pcall(function() return MP.Get(MP.Settings.MaxCars) end)
+  n = ok and tonumber(n) or 0
+  return n and n >= 1 and math.floor(n) or 0
+end
+
 function M.payload()
   local zones = {}
   if type(cfg.zones) == "table" then
@@ -130,6 +138,9 @@ function M.payload()
     oversample = tonumber(cfg.oversample),
     maxShare = tonumber(cfg.maxShare),
     maxCandidates = tonumber(cfg.maxCandidates),
+    minAmount = math.max(0, math.floor(tonumber(trafficCfg.minAmount) or 0)),   -- traffic.minAmount, so the client builds the first traffic group big enough
+    maxCars = maxCars(),
+    excludeWords = type(cfg.excludeWords) == "table" and wordList(cfg.excludeWords) or nil,
     applyToTraffic = cfg.applyToTraffic ~= false,
     applyToParked = cfg.applyToParked ~= false,
     zoneSpeedLimits = {city = tonumber(limits.city), main = tonumber(limits.main)},
@@ -170,6 +181,7 @@ function M.resend() told = {} end
 
 function M.init(config)
   cfg = config.trafficVariety
+  trafficCfg = type(config.traffic) == "table" and config.traffic or {}
   told = {}
   net.on("rlsmpTrafficVarietyTick", function() M.push() end)
   MP.CreateEventTimer("rlsmpTrafficVarietyTick", 1000)

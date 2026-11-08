@@ -19,7 +19,7 @@ local told = {}   -- pid -> true once they have the settings
 function M.range()
   local t = type(tcfg) == "table" and tcfg or {}
   local u = type(t.unjam) == "table" and t.unjam or {}
-  return {respawnRange = tonumber(t.respawnRange), respawnDelay = tonumber(t.respawnDelay),
+  return {respawnRange = tonumber(t.respawnRange), respawnDistance = tonumber(t.respawnDistance), respawnDelay = tonumber(t.respawnDelay),
     unjam = {enabled = u.enabled ~= false, seconds = tonumber(u.seconds), distance = tonumber(u.distance)}}
 end
 

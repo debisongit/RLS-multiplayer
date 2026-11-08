@@ -36,6 +36,7 @@ local STATIC = {
   ["traffic.minPerPlayer"] = {"number", 0, 50, true},
   ["traffic.maxPerPlayer"] = {"number", 1, 100, true},
   ["traffic.respawnRange"] = {"number", 0.5, 3},
+  ["traffic.respawnDistance"] = {"number", 0, 6000},
   ["traffic.respawnDelay"] = {"number", 0, 600},
   ["traffic.unjam.enabled"] = {"bool"},
   ["traffic.unjam.seconds"] = {"number", 30, 1800, true},
@@ -336,7 +337,7 @@ function M.snapshot()
     modPrice = {enabled = mpr.enabled, sell = mpr.sell, max = mpr.max, min = mpr.min, tolerance = mpr.tolerance},
     traffic = {enabled = t.enabled, totalBudget = t.totalBudget, baseBudget = t.baseBudget, perPlayerBudget = t.perPlayerBudget,
       minPerPlayer = t.minPerPlayer, maxPerPlayer = t.maxPerPlayer,
-      respawnRange = t.respawnRange, respawnDelay = t.respawnDelay, unjam = copyMap(t.unjam)},
+      respawnRange = t.respawnRange, respawnDistance = t.respawnDistance, respawnDelay = t.respawnDelay, unjam = copyMap(t.unjam)},
     smartTraffic = {enabled = s.enabled, policeReact = s.policeReact, mix = copyMap(s.mix)},
     trafficVariety = {enabled = v.enabled, applyToTraffic = v.applyToTraffic, applyToParked = v.applyToParked,
       maxShare = v.maxShare, oversample = v.oversample, maxCandidates = v.maxCandidates,
@@ -418,7 +419,7 @@ local function onSet(pid, data)
   watchers[pid] = true       -- somebody who changes settings has the menu open
   local t0 = type(config.traffic) == "table" and config.traffic or {}
   local u0 = type(t0.unjam) == "table" and t0.unjam or {}
-  local before = {["traffic.respawnRange"] = t0.respawnRange, ["traffic.respawnDelay"] = t0.respawnDelay,
+  local before = {["traffic.respawnRange"] = t0.respawnRange, ["traffic.respawnDistance"] = t0.respawnDistance, ["traffic.respawnDelay"] = t0.respawnDelay,
     ["traffic.unjam.enabled"] = u0.enabled, ["traffic.unjam.seconds"] = u0.seconds, ["traffic.unjam.distance"] = u0.distance}
   local applied, rejected, done = M.applyPatch(data)
   local saved = true

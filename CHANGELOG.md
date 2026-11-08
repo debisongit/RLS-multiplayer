@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.46 (all untested in-game)
+- No more broken junk cars in traffic (`trafficVariety.excludeWords`). (Claude A)
+- Traffic is only recycled when farther than 4 km from every player (`traffic.respawnDistance`, 0 = the game's own distance). (Claude A)
+- The traffic car count now really reaches `traffic.minAmount`: the first group is made bigger, missing cars are added one every 4 s through the smooth spawn path (`fill:` log lines). (Claude A)
+
 ## Unreleased (untested in-game)
 - The traffic car COUNT now reaches the server minimum. The owner's log showed 5 cars for an amount of 4: `setActiveAmount` only limits how many existing cars are active, it never makes a car, so raising it to 10 changed nothing. Now (1) the first traffic group the game asks for is built as big as `min(quota, traffic.minAmount)` when the client already knows it (the minimum now also travels in `rlsmpTrafficVariety`), and (2) when fewer cars exist than that, the missing ones are built one at a time, at most one every 4 s, through the same hitch-free one-car group spawn as the re-roll, placed out of sight behind the camera and given to RLS traffic; they take their model from the variety pool like the others. Not in a chase, not while a job or race has cut the traffic amount, not on slow frames, not within 3 cars of BeamMP's `MaxCars`; the cars it added are left alone by the stuck-car recycling, re-roll and swap for 2 minutes. Never above the minimum. Log lines start with `fill:`. Untested. (Claude A)
 - Junk cars are gone from traffic: the owner's log showed the re-roll picking `joesjunk_career_*` configs (RLS's broken junkyard cars that do not drive). New server setting `trafficVariety.excludeWords` (default junk, wreck, derby, crash, rolling, shell, undriveable, parts): a model, config or Config Type containing one of these is never picked by group building, the pool, the re-roll or live swapping. A junk car in the game's own group is re-picked away too. (Claude A)
