@@ -37,7 +37,7 @@ local CHECK_EVERY = 0.5   -- seconds between pursuit checks
 local FREEZE_RADIUS = 300 -- metres: police this close to the player's car are frozen
 local RELEASE_RADIUS = 350 -- metres: frozen units further than this (and not in the pursuit data) are released
 
-local settings = {antiTeleport = true, blockRoadblocks = true, noFineInStolenCar = true, holdNearBeforeChase = false}
+local settings = {antiTeleport = true, blockRoadblocks = true, noFineInStolenCar = true, noRadarFineIllegal = true, holdNearBeforeChase = false}
 local pursuit = false
 local timer = 0
 local frozen = {}         -- police vehicle id -> its enableRespawn before we touched it (held near the player, chase or not)
@@ -287,6 +287,27 @@ local function inStolenCar()
     and be ~= nil and theftLib.isConverted(be:getPlayerVehicleID(0))
 end
 
+-- Speed cameras are another RLS system (career/police/speedTraps.lua onSpeedTrapTriggered / onRedLightCamTriggered): they call
+-- overhaul_career_economy_payment.pay(fine, reason.label "ui.career.attributeLog.fineSpeeding" | "fineRedLight"), then ui_message and
+-- overhaul_career_garage_inventory.addTicket. The camera only ever fines the player's own car, so we test that car: stolen (converted by the
+-- theft code or restored by recall) or fitted with a fake plate. Returns "stolen" | "fakeplate" | nil.
+local radarSkipped = nil          -- os.time() of the last refused radar fine (the message and ticket that follow within 2 s are replaced)
+
+local function illegalReason()
+  if not (settings.noRadarFineIllegal and isMP() and overhaul_career_career ~= nil and overhaul_career_career.isActive() and be ~= nil) then return nil end
+  local id = be:getPlayerVehicleID(0)
+  if theftLib.isConverted(id) then return "stolen" end
+  local t = rawget(_G, "rlsmp_theft")
+  if t and t.hasFakePlate and t.hasFakePlate(id) then return "fakeplate" end
+  return nil
+end
+
+local function isRadarFine(reason)
+  return type(reason) == "table" and (reason.label == "ui.career.attributeLog.fineSpeeding" or reason.label == "ui.career.attributeLog.fineRedLight")
+end
+
+local function radarRecent() return radarSkipped ~= nil and os.time() - radarSkipped <= 2 end
+
 local function isPoliceFine(reason)
   return type(reason) == "table" and reason.label == "Police fine"
 end
@@ -312,9 +333,26 @@ local function patchFines()
       p3.log("I", "police fine NOT charged: the car is not registered to the player (stolen)")
       return true
     end
+    if isRadarFine(reason) then
+      local why = illegalReason()
+      radarSkipped = nil
+      if why then
+        radarSkipped = os.time()
+        p3.count("radar fine refused (" .. why .. ")")
+        p3.log("I", string.format("RLSMP-FINE refused (radar) id=%s reason=%s", tostring(be:getPlayerVehicleID(0)), why))
+        return true
+      end
+    end
     return original(price, reason, ...)
   end)
+  wrapAround(overhaul_career_garage_inventory, "addTicket", "radarTicket", function(original, ...)
+    if radarRecent() then return end   -- no ticket record for a refused radar fine
+    return original(...)
+  end)
   wrapAround(_G, "ui_message", "fineMessage", function(original, msg, ...)
+    if radarRecent() and ((type(msg) == "string" and msg:find("^Traffic Violation")) or (type(msg) == "table" and msg.txt == "ui.career.speedTrap.redLightMessage")) then
+      msg = "Radar flashed a car that is not yours: no fine."
+    end
     if type(msg) == "string" and fineSkipped ~= nil and os.time() - fineSkipped <= 2 and (msg:find("^Citation fine") or msg:find("^Arrest fine")) then
       fineSkipped = nil
       msg = (msg:find("^Citation") and "Citation" or "Arrest") .. ": no fine, this car is not registered to you."
@@ -394,6 +432,7 @@ local function onConfig(data)
   if type(data.blockRoadblocks) == "boolean" then settings.blockRoadblocks = data.blockRoadblocks end
   if type(data.holdNearBeforeChase) == "boolean" then settings.holdNearBeforeChase = data.holdNearBeforeChase end
   if type(data.noFineInStolenCar) == "boolean" then settings.noFineInStolenCar = data.noFineInStolenCar end
+  if type(data.noRadarFineIllegal) == "boolean" then settings.noRadarFineIllegal = data.noRadarFineIllegal end
   if type(data.bubbleMode) == "string" then
     local b = rawget(_G, "rlsmp_bubble") or package.loaded["rlsmp/bubble"]
     if b and b.setMode then b.setMode(data.bubbleMode) end

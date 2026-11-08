@@ -301,4 +301,41 @@ mp = true
 theftLib.forget(playerId)
 handlers["rlsmpPoliceConfig"](json.encode({antiTeleport = true}))
 
+-- No radar fine in a stolen car or with a fake plate -------------------------------------------------------------------------------------
+local tickets = {}
+overhaul_career_garage_inventory = {addTicket = function(inv) tickets[#tickets + 1] = inv end}
+rlsmp_theft = {hasFakePlate = function(id) return id == 7 end}
+handlers["rlsmpPoliceConfig"](json.encode({antiTeleport = true}))
+tick()
+check(saw("patched radarTicket = true"), "the ticket function is wrapped")
+local SP, RL = {label = "ui.career.attributeLog.fineSpeeding", tags = {"fine"}}, {label = "ui.career.attributeLog.fineRedLight"}
+local function flash(reason, msg)
+  paid, messages, tickets = {}, {}, {}
+  local r = overhaul_career_economy_payment.pay({money = {amount = 750}}, reason)
+  ui_message(msg)
+  overhaul_career_garage_inventory.addTicket(5)
+  return r
+end
+flash(SP, "Traffic Violation (Speeding): \n - \"X\" | Fine 750$")
+check(#paid == 1 and messages[1]:find("^Traffic Violation") and #tickets == 1, "own car: the radar fine, message and ticket stay")
+theftLib.markConverted(playerId)
+local r = flash(SP, "Traffic Violation (Speeding): \n - \"X\" | Fine 750$")
+check(#paid == 0 and r == true and #tickets == 0 and messages[1] == "Radar flashed a car that is not yours: no fine.", "stolen car: no radar fine, no ticket, message says so")
+check(saw("RLSMP-FINE refused (radar) id=1 reason=stolen"), "...and it is logged")
+flash(RL, {txt = "ui.career.speedTrap.redLightMessage"})
+check(#paid == 0 and messages[1] == "Radar flashed a car that is not yours: no fine.", "red-light camera too")
+overhaul_career_economy_payment.pay({money = {amount = 50}}, {label = "Fuel"})
+check(#paid == 1, "other payments are charged")
+handlers["rlsmpPoliceConfig"](json.encode({noRadarFineIllegal = false}))
+flash(SP, "Traffic Violation (Speeding): x")
+check(#paid == 1 and #tickets == 1, "noRadarFineIllegal = false: charged")
+handlers["rlsmpPoliceConfig"](json.encode({noRadarFineIllegal = true}))
+theftLib.forget(playerId)
+playerId = 7
+flash(SP, "Traffic Violation (Speeding): x")
+check(#paid == 0 and saw("reason=fakeplate"), "fake plate: no radar fine")
+playerId = 1
+flash(SP, "Traffic Violation (Speeding): x")
+check(#paid == 1, "back in an own car: charged")
+
 print(string.format("police_client_test: %d checks passed", passed))

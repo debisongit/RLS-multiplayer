@@ -349,6 +349,14 @@ function M.stolenCars()
   return out
 end
 
+-- Fake plate fitted at the fence (garage.lua calls markFakePlate when the server says "fit:fake_plate" worked). Used by police.lua: no radar fine.
+local fakePlates = {}
+function M.markFakePlate(plate) local p = T.cleanPlate(plate) if p then fakePlates[p] = true end end
+function M.hasFakePlate(vehId)
+  local rec = stolen[vehId]
+  return rec ~= nil and (rec.fakePlate == true or fakePlates[rec.plate] == true)
+end
+
 -- Put a stolen car back (rlsmp/recall.lua). spec = {plate, model, config, look, value, year, color}; pos {x,y,z}, rot {x,y,z,w} or nil.
 -- Same safe spawn as the theft convert: never isParked, the guard lets the owner in, off the walk blacklist. Returns the vehicle or nil + why.
 function M.spawnStolen(spec, pos, rot)
@@ -760,6 +768,7 @@ end
 function M.onServerLeave()
   cfg, target, action, inspectAct, pendingEnter = nil, nil, nil, nil, nil
   spots, stolen, hintAsked, hinted, toldKey, popupCar = {}, {}, {}, {}, {}, nil
+  fakePlates = {}
   T.clearConverted()
 end
 

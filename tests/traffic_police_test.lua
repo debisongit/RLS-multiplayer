@@ -31,7 +31,7 @@ stages[0] = "loaded"
 tick()
 local m = take()
 check(#m == 1 and m[1].name == "rlsmpPoliceConfig" and m[1].data.antiTeleport == true
-  and m[1].data.blockRoadblocks == true and m[1].data.noFineInStolenCar == true, "settings sent on load (no fine in a stolen car is on by default)")
+  and m[1].data.blockRoadblocks == true and m[1].data.noFineInStolenCar == true and m[1].data.noRadarFineIllegal == true, "settings sent on load (no fine in a stolen car, no radar fine in one: on by default)")
 check(m[1].data.respawnBehind == true and m[1].data.respawnPerMinute == 4 and m[1].data.respawnGap == 150, "cops that come back behind the player: on by default, 4 a minute, gap 150")
 check(m[1].data.copCount == 3 and m[1].data.copTopUpSeconds == 30, "more cops: three police cars wanted by default, one new every 30 s")
 check(m[1].data.respawnRebuildSeconds == 90 and m[1].data.copRespawnDistance == 450, "a rebuild at most every 90 s, cops re-placed only beyond 450 m")

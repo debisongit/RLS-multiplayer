@@ -217,6 +217,7 @@ local function onResult(d)
       note(t, text)
     end
   else
+    if d.action == "fit:fake_plate" and t and rlsmp_theft and rlsmp_theft.markFakePlate then rlsmp_theft.markFakePlate(t.plate) end
     local text = tostring(d.fitted or "Part") .. " fitted."
     toast("success", text)
     note(t, text)
