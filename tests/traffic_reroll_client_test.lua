@@ -79,7 +79,7 @@ local R = require("rlsmp/lib/trafficReroll")
 local passed = 0
 local function check(c, m) if not c then error("FAIL: " .. m, 2) end passed = passed + 1 end
 local function setConfig(over)
-  local c = {respawn = {perMinute = 3, waitSeconds = 3, checkSeconds = 0.5, repaintChance = 0}}
+  local c = {respawn = {perMinute = 3, chance = 1, waitSeconds = 3, checkSeconds = 0.5, repaintChance = 0}}
   for k, v in pairs(over or {}) do if k == "respawn" then for a, b in pairs(v) do c.respawn[a] = b end else c[k] = v end end
   c.preload = c.preload or {slowFrameMs = 2000, minGapSeconds = 0, settleSeconds = 0, reserve = 3, prepareSeconds = 1}   -- the tests step 0.5 s per frame
   config = V.sanitize(c)
