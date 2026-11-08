@@ -20,10 +20,14 @@
 -- OPTIONAL TOP-UP (default OFF, police.copCount = 0 = leave the game's number, the owner never asked for more cops): when it is above 0 and fewer AI
 -- police units exist, one more is built the same way at a spot from step 3, at most one per `topUpSeconds` (30).
 -- Failures are counted separately for the two jobs (3 each). Pure helpers are exported for tests/police_respawn_client_test.lua.
+-- HOW MANY cops and in which AREA (rlsmp/lib/copBudget.lua): the optional top-up asks it before every build. The number follows the area type (city, main road,
+-- highway, other) and the time of day (night asks for more), never above police.maxCops (3), and at most ONE cop per area cell (police.areaSize, 1500 m).
+-- The exact spawn spot is the placement code's job; until it hands its spot to budgetAllows, the player's position stands in for the cell.
 
 local M = {}
 
 local p3 = require("rlsmp/lib/p3")
+local B = require("rlsmp/lib/copBudget")
 
 local CHECK_EVERY = 0.5
 local BUILD_TIMEOUT = 25          -- seconds to wait for onVehicleGroupSpawned
@@ -32,7 +36,7 @@ local NAME = "rlsmpCop"
 local CORRIDOR = 40            -- m: "straight ahead of / behind the player" (lib/spawnSpot.lua)
 local RING = 2.5                  -- the ring for a new spot is [min, RING x min]
 local SLACK = 50                  -- a built car may come out this much closer than asked (lane laying moves it a little)
-local settings = {respawnBehind = true, perMinute = 4, maxFailures = 3, copCount = 0, topUpSeconds = 30, rebuildSeconds = 90, respawnDistance = 450,
+local settings = {budget = B.clean(nil), respawnBehind = true, perMinute = 4, maxFailures = 3, copCount = 0, topUpSeconds = 30, rebuildSeconds = 90, respawnDistance = 450,
   spawnMinDistance = 1000, chaseSpawnMinDistance = 600, preferRight = true}
 local seen = {}                   -- police unit id -> respawnCount last time we looked
 local mine = {}                   -- ids of the cops we built (for the log and the tests)
@@ -42,6 +46,8 @@ local recent = {}                 -- os.time() of our builds in the last minute
 local failures = {respawn = 0, top = 0}
 local off = {respawn = false, top = false}
 local lastTop = -math.huge        -- clock of the last top-up build
+local lastBudget = -math.huge     -- clock of the last time the cop budget was asked (it reads the road under the player)
+local BUDGET_EVERY = 5
 local clock, timer = 0, 0
 local lastBuild = -math.huge      -- clock of the last replacement build (the freeze); between builds a bad cop is only moved
 local moveFailures, moveOff = 0, false
@@ -100,6 +106,28 @@ local function findSpot(why)
   if not (sp and sp.find) then return nil end
   local min, max = M.limits(pursuit())
   return sp.find({minDist = min, maxDist = max, preferRight = settings.preferRight, corridor = CORRIDOR, why = why})
+end
+
+-- The spot whose area cell must be free of cops for a top-up. The car is built behind the player, so the player's position stands in for it;
+-- the placement code that picks a far spot replaces this one function.
+local function topUpSpot(ppos) return ppos end
+
+-- May one more cop be built now, by area type, time of day and area cell? Asked at most every BUDGET_EVERY seconds (it reads the road under the player).
+-- A "no" is not a failure of the build: nothing is counted against the top-up.
+local function budgetAllows(copPos, ppos)
+  if clock - lastBudget < BUDGET_EVERY then return false end
+  lastBudget = clock
+  local zone, night = false, false          -- false = no area information: only the caps apply
+  local v = ext("trafficVariety")
+  if v and v.contextNow then
+    local ok, ctx = pcall(v.contextNow)
+    if ok and type(ctx) == "table" then zone, night = ctx.zone, ctx.night == true end
+  end
+  local ok, why = B.canAdd(settings.budget, copPos, zone, night, topUpSpot(ppos), settings.copCount)
+  p3.logOnChange("cop-budget", tostring(ok) .. tostring(why) .. tostring(zone) .. tostring(night), "I",
+    string.format("police budget: %s (area %s, %s, %d cops out, at most %d)%s", ok and "one more cop" or "no new cop", tostring(zone or "other"),
+      night and "night" or "day", #copPos, settings.budget.maxCops, ok and "" or ": " .. tostring(why)))
+  return ok
 end
 
 local function isPoliceUnit(id, veh, playerId)
@@ -251,10 +279,11 @@ local function step()
   for id in pairs(seen) do if traffic[id] == nil then seen[id] = nil end end
   for id in pairs(mine) do if traffic[id] == nil then mine[id] = nil end end
   for id in pairs(grace) do if traffic[id] == nil then grace[id] = nil end end
-  local cops = 0
+  local cops, copPos = 0, {}
   for id, veh in pairs(traffic) do
     if isPoliceUnit(id, veh, playerId) then
       cops = cops + 1
+      if veh.pos then copPos[#copPos + 1] = {x = veh.pos.x, y = veh.pos.y} end
       local rc = tonumber(veh.respawnCount) or 0
       if seen[id] == nil then
         seen[id] = rc
@@ -284,7 +313,7 @@ local function step()
     end
   end
   -- more cops: one more when there are fewer than copCount, at most one per topUpSeconds, and not while another build is running
-  if topOn() and not job and cops < settings.copCount and clock - lastTop >= settings.topUpSeconds and ppos then
+  if topOn() and not job and cops < settings.copCount and clock - lastTop >= settings.topUpSeconds and ppos and budgetAllows(copPos, ppos) then
     lastTop = clock
     local spot = findSpot("top-up")
     if spot then build("top", nil, nil, cops, false, spot) end
@@ -315,6 +344,7 @@ local function onConfig(data)
   if rebuild and rebuild >= 10 and rebuild <= 1800 then settings.rebuildSeconds = rebuild end
   local rd = tonumber(data.copRespawnDistance)
   if rd and rd >= 0 and rd <= 4000 then settings.respawnDistance = rd end
+  if data.maxCops ~= nil or data.areaSize ~= nil or data.copTargets ~= nil then settings.budget = B.clean(data) end
   local topUp = tonumber(data.copTopUpSeconds)
   if topUp and topUp >= 5 and topUp <= 600 then settings.topUpSeconds = topUp end
 end
@@ -323,7 +353,7 @@ M._onConfig = onConfig
 function M.onServerLeave()
   seen, mine, grace, job, recent = {}, {}, {}, nil, {}
   lastBuild, moveFailures, moveOff = -math.huge, 0, false
-  failures, off, lastTop = {respawn = 0, top = 0}, {respawn = false, top = false}, -math.huge
+  failures, off, lastTop, lastBudget = {respawn = 0, top = 0}, {respawn = false, top = false}, -math.huge, -math.huge
 end
 
 -- The least radius (m) a police unit gets before RLS re-places it (rlsmp/bubble.lua reads this); 0 = the game's own.

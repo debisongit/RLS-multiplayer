@@ -282,6 +282,16 @@ r = lastResult()
 check(r and r.applied == 2 and #r.rejected == 2 and cfg.police.copCount == 2 and cfg.police.copTopUpSeconds == 45, "police car count and top-up time: in range accepted, out of range refused")
 check(admin.snapshot().police.copCount == 2 and admin.snapshot().police.copTopUpSeconds == 45, "the snapshot carries them")
 cfg.police.copCount, cfg.police.copTopUpSeconds = 3, 30
+set(0, {{p = {"police", "maxCops"}, v = 2}, {p = {"police", "maxCops"}, v = 9}, {p = {"police", "areaSize"}, v = 50}, {p = {"police", "areaSize"}, v = 2000},
+  {p = {"police", "copTargets", "city", "night"}, v = 3}, {p = {"police", "copTargets", "city", "night"}, v = 7}, {p = {"police", "copTargets", "other", "day"}, v = 1}})
+r = lastResult()
+check(r and r.applied == 4 and #r.rejected == 3 and cfg.police.maxCops == 2 and cfg.police.areaSize == 2000 and cfg.police.copTargets.city.night == 3
+  and cfg.police.copTargets.other.day == 1, "cop budget settings: maximum, area size and the area/time table take values in range, refuse the rest")
+check(admin.snapshot().police.maxCops == 2 and admin.snapshot().police.areaSize == 2000 and admin.snapshot().police.copTargets.city.night == 3, "...and the snapshot carries them")
+cfg.police.maxCops, cfg.police.areaSize, cfg.police.copTargets.city.night, cfg.police.copTargets.other.day = 3, 1500, 2, 0
+set(0, {{p = {"vehicles", "allowPassengers"}, v = false}})
+check(cfg.vehicles.allowPassengers == false and admin.snapshot().vehicles.allowPassengers == false, "the menu can switch passengers off")
+cfg.vehicles.allowPassengers = true
 set(0, {{p = {"police", "respawnRebuildSeconds"}, v = 5}, {p = {"police", "respawnRebuildSeconds"}, v = 120}, {p = {"police", "copRespawnDistance"}, v = 9000}, {p = {"police", "copRespawnDistance"}, v = 600}})
 r = lastResult()
 check(cfg.police.respawnRebuildSeconds == 120 and cfg.police.copRespawnDistance == 600, "rebuild interval and cop respawn distance: in range accepted")

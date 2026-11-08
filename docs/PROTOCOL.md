@@ -187,11 +187,11 @@ S->C `rlsmpClaimPenalty {damage}` makes the at-fault game file an RLS insurance 
 
 | Direction | Event | Body |
 |---|---|---|
-| S→C | `rlsmpVehicleConfig` | `{allowPassengers}` sent once when a player finishes loading |
+| S→C | `rlsmpVehicleConfig` | `{allowPassengers}` (default true) sent when a player finishes loading and again to everybody when the menu changes it |
 
 The client vehicle guard refuses other players' cars, AI traffic and parked cars. Exceptions: the taxi RLS hailed for the player
 (decided by RLS's own taxi state: `pullingOverForPickup`, `waitingForPickup`, `occupied`, `pullingOverForDropoff`, `waitingForDropoff`),
-and, when `allowPassengers` is on, another player's car for a player who is on foot (a passenger; BeamMP gives the passenger camera).
+and, when `allowPassengers` is on, another PLAYER's car for a player who is on foot, as a passenger only: not their AI traffic or parked cars (`hideNametag`), only after that owner's traffic list arrived, only while the owner is driving (no remote walking character of the same player number), and the seat is always a passenger seat (`gameplay_seatOccupants.requestEnterBestSeat` is redirected to RLS's `passengerSeats.enter`). A watchdog puts the passenger on foot when the seat mode is not passenger, the driver gets out, the car is deleted or passengers are switched off. See `docs/RESEARCH_PASSENGERS.md`.
 A parked car the player stole (car theft, below) may be entered: exactly the vehicle ids `rlsmp_theft` converted.
 Log lines use the tag `RLSMP-GUARD`.
 
@@ -348,10 +348,10 @@ Weights are `{name = number >= 0}` (at most 64 entries, names up to 64 character
 | Direction | Event | Body |
 |---|---|---|
 | S→C | `rlsmpTheftConfig` | `{enabled, seed, period, perMille, periodSeconds, radius}` sent when a player is loaded and again when the period changes |
-| C→S | `rlsmpTheftCheck` | `{id, value, year}` the player stands within `radius` m of a stealable parked car (`id` = local game id, only echoed back) |
+| C→S | `rlsmpTheftCheck` | `{id, sid, value, year}` (`sid` = the car's BeamMP server id "pid-vid"; every theft message that names a car carries it and the server refuses an id with another player's number: `RLSMP-THEFT refused: not our car id=...`; scout cars carry `sid` too) the player stands within `radius` m of a stealable parked car (`id` = local game id, only echoed back) |
 | S→C | `rlsmpTheftCan` | `{ok, id, method, label, seconds, noise, methods = [{method, label, seconds}]}` or `{ok = false, id, err}`; `methods` = every method the player has the tools for (the popup buttons); the key toast is shown only on `ok` (at most one answer per second per player) |
 | S→C | `rlsmpTheftSteal` | `{method?}` from the hidden chat fallback `/steal [method]`; `{stop = true}` from `/steal stop`. The popup does not use it: its button calls `rlsmp_theft.choose("steal:<method>")`, which sends `rlsmpTheftStart` |
-| C→S | `rlsmpTheftStart` | `{method?, value, year}` |
+| C→S | `rlsmpTheftStart` | `{sid, method?, value, year}` |
 | S→C | `rlsmpTheftGo` | `{ok, method, label, seconds, noise}` or `{ok = false, err}` |
 | C→S | `rlsmpTheftCancel` | `{}` the player walked away |
 | C→S | `rlsmpTheftFinish` | `{}` the timer ran out |
@@ -366,7 +366,7 @@ Weights are `{name = number >= 0}` (at most 64 entries, names up to 64 character
 
 | Direction | Event | Body |
 |---|---|---|
-| C→S | `rlsmpTheftHint` | `{id, x, y}` the player is within `inspect.range` of a stealable parked car (the game asks again every 15 s while it stands there and nothing came back) |
+| C→S | `rlsmpTheftHint` | `{id, sid, x, y}` the player is within `inspect.range` of a stealable parked car (the game asks again every 15 s while it stands there and nothing came back) |
 | S→C | `rlsmpTheftHint` | `{id, ok = true}` ONLY for a black market member whose server-side position is within range (+5 m) of x/y at a car `theft.stealableAt` picks. Everybody else gets no answer at all |
 | S→C | `rlsmpTheftInspectAsk` | `{}` from the hidden chat fallback `/inspect`; the game picks the nearest parked car of ANY kind within range. The popup's Inspect button does the same for the car it was opened for |
 | C→S | `rlsmpTheftInspect` | `{id, x, y, z, value, year}` |
@@ -483,3 +483,6 @@ SUPERSEDED (docs/RESEARCH_POLICE_SPAWN.md): the "behind the player, `roadBehind`
 `rlsmpPoliceConfig` also carries `respawnRebuildSeconds` (90, 10 to 1800: least seconds between two replacement builds; a cop RLS puts in front in between is moved onto the player's trail `respawnGap` m back with `spawn.safeTeleport`) and `copRespawnDistance` (450, 0 to 4000: least respawn radius of police units, applied in `rlsmp/bubble.lua`). `rlsmp/plates.lua` reports no plate flag (`rlsmpPlateEscaped`) for outcomes while the player walks or for the car RLS keeps a chase on after the player got out.
 
 `rlsmpPoliceConfig` also carries `copCount` (default 0 since the cop spawn rules = the game's own number; it was 3 in 0.4.54 to 0.4.57, an old config.json with 3 is reset to 0 once) and `copTopUpSeconds` (30). The client (`rlsmp_policeRespawn`) counts AI police units (role police, not the player's) and, below `copCount`, builds one more the same way as a replacement (`spawnGroup(..., mode = "roadBehind")`, `insertTraffic`, `setRole('police')`, placement check), at most one per `copTopUpSeconds`; the two jobs (top-up, replacement) count their failures apart (3 each).
+`rlsmpPoliceConfig` also carries `maxCops` (3, hard maximum), `areaSize` (1500 m) and `copTargets` (`{city, main, highway, other}` each `{day, night}`, default city 1/2, main 1/1, highway 1/1, other 0/1): the number of cops asked for by road class and time of day, at most one cop per `areaSize` square (client `lib/copBudget.lua`, asked before every top-up at most every 5 s; a refusal is logged `police budget:` and is not a failure).
+
+`rlsmpPoliceConfig` also carries `copCount` (default 3, 0 = the game's own number) and `copTopUpSeconds` (30). The client (`rlsmp_policeRespawn`) counts AI police units (role police, not the player's) and, below `copCount`, builds one more the same way as a replacement (`spawnGroup(..., mode = "roadBehind")`, `insertTraffic`, `setRole('police')`, placement check), at most one per `copTopUpSeconds`; the two jobs (top-up, replacement) count their failures apart (3 each).

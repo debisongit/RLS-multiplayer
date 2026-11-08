@@ -400,6 +400,7 @@ do
   client(1, "rlsmpTheftDone", {plate = "NEW 1", model = "covet", value = 5000, year = 1990, valueSource = "rls valuation", config = "vehicles/covet/base.pc"})
   r["OLD 1"], r["OTH 1"] = nil, nil
 end
+check(require("rlsmp.server.config").defaults.theft.perMille == 150, "the stealable share still defaults to 150 per mille")
 -- Only parked cars of the sender's OWN game: the car's BeamMP id must carry the sender's player number
 do
   cfg.theft.enabled = true

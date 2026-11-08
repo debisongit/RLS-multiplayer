@@ -128,6 +128,17 @@ M.defaults = {
     -- one every `copTopUpSeconds`, up to this number (rlsmp_policeRespawn). Each cop is one more BeamMP car for everybody (MaxCars).
     copCount = 0,
     copTopUpSeconds = 30,
+    -- How many of those cops the area and the time of day ask for, and where. The map is cut into squares of `areaSize` metres and at most ONE cop
+    -- stands in each square. `copTargets` = cops asked for by area type (road class: city, main road, highway, other = rural / unknown) by day and
+    -- by night. Never more than `maxCops` (hard maximum), never more than `copCount`. Client: rlsmp/lib/copBudget.lua.
+    maxCops = 3,
+    areaSize = 1500,
+    copTargets = {
+      city = {day = 1, night = 2},
+      main = {day = 1, night = 1},
+      highway = {day = 1, night = 1},
+      other = {day = 0, night = 1},
+    },
     -- Which traffic cars another player's game may not recycle (client rlsmp/bubble.lua):
     -- "original" = RLS's own spawn and respawn distances, a car is only kept while another player is within its
     --   own active radius AND has a clear line to it; "protect" = the old strict rule (450 m, or a clear line up to 1 km);

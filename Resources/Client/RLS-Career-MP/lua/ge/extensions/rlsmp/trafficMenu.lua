@@ -362,6 +362,13 @@ local function sectionPolice(ui)
   ui.TextWrapped("0 = the game's own number of police cars. Above 0, extra cops are built far away, one at a time, until this many are out.")
   num(ui, "Police cars on the map", {"police", "copCount"}, 0, 4, "%.0f")
   num(ui, "A new cop at most every (seconds)", {"police", "copTopUpSeconds"}, 5, 600, "%.0f")
+  ui.TextWrapped("How many cops the area and the time of day ask for. At most one cop per area square; never more than the maximum.")
+  num(ui, "Cops at most (hard maximum)", {"police", "maxCops"}, 0, 3, "%.0f")
+  num(ui, "Area square size (m)", {"police", "areaSize"}, 300, 10000, "%.0f")
+  for _, zone in ipairs({{"city", "City"}, {"main", "Main road"}, {"highway", "Highway"}, {"other", "Rural / other"}}) do
+    num(ui, zone[2] .. " by day", {"police", "copTargets", zone[1], "day"}, 0, 3, "%.0f")
+    num(ui, zone[2] .. " at night", {"police", "copTargets", zone[1], "night"}, 0, 3, "%.0f")
+  end
   ui.Separator()
   ui.TextWrapped("Traffic cars near other players. Original = RLS's own spawn and respawn distances (a car only stays while another player is inside its own radius and sees it). Protect = strict old rule (450 m, or a clear line up to 1 km), can make respawns far and repetitive. Off = no protection.")
   local mode = L.get(st, {"police", "bubbleMode"}, "original")
@@ -382,6 +389,7 @@ local function sectionPolice(ui)
 end
 
 local function sectionTheft(ui)
+  checkbox(ui, "Players can ride along in other players' cars (passengers)", {"vehicles", "allowPassengers"})
   ui.TextWrapped("Car theft: stealing a parked car with the right tools, and when it gets reported. Switching it on or off works at once.")
   checkbox(ui, "Car theft on", {"theft", "enabled"})
   num(ui, "Stealable parked cars (per 1000)", {"theft", "perMille"}, 0, 1000, "%.0f")

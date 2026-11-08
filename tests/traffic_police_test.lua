@@ -35,6 +35,9 @@ check(#m == 1 and m[1].name == "rlsmpPoliceConfig" and m[1].data.antiTeleport ==
 check(m[1].data.respawnBehind == true and m[1].data.respawnPerMinute == 4 and m[1].data.respawnGap == nil, "re-placed cops are judged and moved: on by default, 4 builds a minute, no gap setting any more")
 check(m[1].data.spawnMinDistance == 1000 and m[1].data.chaseSpawnMinDistance == 600 and m[1].data.spawnPreferRight == true, "cops appear at least 1000 m away (600 m in a chase), right side preferred")
 check(m[1].data.copCount == 0 and m[1].data.copTopUpSeconds == 30, "no extra cops by default (copCount 0 = the game's own number)")
+check(m[1].data.maxCops == 3 and m[1].data.areaSize == 1500, "cops by area: at most 3, one per 1500 m square")
+check(m[1].data.copTargets.city.day == 1 and m[1].data.copTargets.city.night == 2 and m[1].data.copTargets.highway.day == 1
+  and m[1].data.copTargets.other.day == 0 and m[1].data.copTargets.other.night == 1, "...city 1 by day and 2 at night, highway 1, rural 0 by day and 1 at night")
 check(m[1].data.respawnRebuildSeconds == 90 and m[1].data.copRespawnDistance == 450, "a rebuild at most every 90 s, cops re-placed only beyond 450 m")
 check(m[1].data.bubbleMode == "original", "the traffic bubble mode is sent and defaults to original (RLS's own distances)")
 tick()

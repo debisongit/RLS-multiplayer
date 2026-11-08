@@ -25,6 +25,16 @@ function M.range()
       crashed = u.crashed ~= false, crashedSeconds = tonumber(u.crashedSeconds), inViewSeconds = tonumber(u.inViewSeconds)}}
 end
 
+-- Cops asked for by area type and time of day (plain numbers, for the client's copBudget lib).
+function M.targets()
+  local out, t = {}, type(cfg.copTargets) == "table" and cfg.copTargets or {}
+  for _, zone in ipairs({"city", "main", "highway", "other"}) do
+    local row = type(t[zone]) == "table" and t[zone] or {}
+    out[zone] = {day = tonumber(row.day), night = tonumber(row.night)}
+  end
+  return out
+end
+
 function M.payload()
   return {
     antiTeleport = cfg.antiTeleport == true,
@@ -40,6 +50,9 @@ function M.payload()
     copRespawnDistance = tonumber(cfg.copRespawnDistance),
     copCount = tonumber(cfg.copCount),
     copTopUpSeconds = tonumber(cfg.copTopUpSeconds),
+    maxCops = tonumber(cfg.maxCops),
+    areaSize = tonumber(cfg.areaSize),
+    copTargets = M.targets(),
     bubbleMode = cfg.bubbleMode,
     holdNearBeforeChase = cfg.holdNearBeforeChase == true,
     range = M.range(),

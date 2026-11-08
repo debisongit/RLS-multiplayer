@@ -285,4 +285,57 @@ mp = false
 check(R.respawnDistance() == 0, "outside multiplayer the game's own radius is used")
 mp = true
 
+-- 15. COP BUDGET: how many by area type and time of day, one per area cell, never above maxCops
+R.onServerLeave()
+reset()
+for id in pairs(traffic) do traffic[id] = nil end
+for id in pairs(objects) do objects[id] = nil end
+local ctx = {zone = "city", night = false}
+rlsmp_trafficVariety.contextNow = function() return ctx end
+local function copAt(id, x, y)
+  newObject(id, y, "bastion")
+  objects[id].pos = {x = x, y = y, z = 0}
+  traffic[id] = {isAi = true, role = {name = "police"}, respawnCount = 0, pos = {x = x, y = y, z = 0}, jbeam = "bastion"}
+end
+R._onConfig({copCount = 3, copTopUpSeconds = 5, respawnPerMinute = 30, maxCops = 3, areaSize = 1500,
+  copTargets = {city = {day = 1, night = 2}, main = {day = 1, night = 1}, highway = {day = 1, night = 1}, other = {day = 0, night = 1}}})
+copAt(300, 0, -3000)                               -- the game's own cop, two areas away
+tick(12)
+check(#groups == 0 and saw("police budget: no new cop (area city, day"), "city by day asks for 1 cop: it is out, no top-up (and the log says why)")
+ctx.night = true
+tick(12)
+check(#groups == 1 and R.getState().job.kind == "top" and saw("police budget: one more cop (area city, night"), "city at night asks for 2: one more is built")
+newObject(301, -150, "vivace")
+R.onVehicleGroupSpawned({301}, 40, "rlsmpCop")
+copAt(301, 0, 200)                                 -- the new cop stands in the player's area (the player is at 0,0)
+reset()
+tick(12)
+check(#groups == 0 and saw("2 cops out"), "two cops out for the night: no third")
+traffic[300], objects[300] = nil, nil                -- the far cop is gone: one cop left, and it stands in the player's area
+reset()
+tick(12)
+check(#groups == 0 and saw("a cop is already in area"), "one cop out, two asked for, but the one wanted spot is in an area that has a cop: never two in one area")
+ctx.zone, ctx.night = nil, false
+tick(12)
+check(#groups == 0, "rural by day: no new cop")
+R.onServerLeave()
+for id in pairs(traffic) do traffic[id] = nil end
+reset()
+R._onConfig({copCount = 3, copTopUpSeconds = 5, respawnPerMinute = 30, maxCops = 3, areaSize = 1500,
+  copTargets = {city = {day = 3, night = 3}, other = {day = 3, night = 3}}})
+ctx.zone, ctx.night = "city", true
+copAt(310, 0, -3000)
+copAt(311, 4000, 0)
+copAt(312, -4000, 0)
+tick(12)
+check(#groups == 0, "three cops out in three areas: the maximum of 3 holds even when the table asks for more")
+R._onConfig({maxCops = 4, copTargets = {city = {day = 3, night = 3}}})
+check(R.getState().settings.budget.maxCops == 4 and R.getState().settings.budget.areaSize == 1500, "maxCops comes from the server settings")
+traffic[312] = nil
+objects[312] = nil
+tick(12)
+check(#groups == 1, "one cop gone: one more, in an area without a cop")
+R.onServerLeave()
+reset()
+
 print(string.format("police_respawn_client_test: %d checks passed", passed))
