@@ -55,13 +55,20 @@ end
 
 -- Chat commands: net.onChat("biz", fn(pid, rest)) handles "/biz <rest>". The message is hidden from other players.
 -- (One BeamMP event can only have one handler, so every module goes through this router.)
-local chatCommands = {}
-function M.onChat(command, fn) chatCommands[command] = fn end
+-- A command registered with ui = true is a hidden developer fallback for something that has a real in-game UI (theft, fence, market,
+-- meetup, items). It only works while config ui.chatCommands is true (default false); otherwise the player gets one plain line.
+local chatCommands, gated = {}, {}
+function M.onChat(command, fn, ui) chatCommands[command] = fn gated[command] = ui == true end
 
 local function chatRouter(pid, _, message)
   local command, rest = tostring(message):match("^/(%S+)%s*(.-)%s*$")
-  local fn = command and chatCommands[command:lower()]
+  command = command and command:lower()
+  local fn = command and chatCommands[command]
   if not fn then return nil end
+  if gated[command] and not (cfg and cfg.ui and cfg.ui.chatCommands == true) then
+    MP.SendChatMessage(pid, "That is done in the game menus now (popup, phone, garage).")
+    return 1
+  end
   fn(pid, rest)
   return 1
 end

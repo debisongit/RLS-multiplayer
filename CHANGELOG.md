@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.4.39 (all untested in-game)
+- Stealing no longer needs chat commands. Near a parked car press the interact key (default Y, set in Controls under RLS Career MP) for a small popup: Inspect, a button per steal method you have tools for, Cancel. Fence (strip, sell, resell, gamble) lives in the garage and the Black Market app, pickup is automatic in the drop circle. The old chat commands are off unless `ui.chatCommands` is true. (Claude A)
+
 ## Unreleased: no more chat commands for stealing (all untested in-game)
 - Stealing and inspecting: walk up to a parked car and a small toast says "Press [Y]". The key opens a small popup: Inspect, the ways to steal it you have the tools for, Cancel. No typing. (Claude A)
 - Fence: the garage computer now has Strip, Sell, Resell and Gamble for a stolen car; the Black Market phone app has the same four buttons for the stolen car you stand next to at the drop spot. (Claude A)

@@ -10,7 +10,7 @@
 --
 -- Flow: client rlsmpMeetupRequest {kind, inv, plate, model, price} -> server rlsmpMeetupSet {id, kind, spot, x, y, z, radius, expiresIn}
 --       or rlsmpMeetupDenied {err}. Client drives there, stops: rlsmpMeetupArrive {id} -> rlsmpMeetupResult {id, ok, kind, setup, cops, pay, takeCar, err}.
---       rlsmpMeetupCancel {}; chat /meetup [black|cancel|status] (the server asks the client with rlsmpMeetupAsk {kind}).
+--       rlsmpMeetupCancel {}; hidden developer chat /meetup [black|cancel|status] (the server asks the client with rlsmpMeetupAsk {kind}).
 
 local util = require("rlsmp.server.util")
 local net = require("rlsmp.server.net")
@@ -115,7 +115,7 @@ function M.request(pid, d)
   local m = current(pid)
   if m then
     sendSet(pid, m)
-    return say(pid, "You already have a meetup at " .. m.spot.name .. ". /meetup cancel to drop it.")
+    return say(pid, "You already have a meetup at " .. m.spot.name .. ". Drop it in the Black Market app if you do not want it.")
   end
   local now = util.now()
   local wait = (cooldown[s.accountId] or 0) - now
@@ -233,7 +233,7 @@ end
 function M.init(config)
   cfg = config
   open, cooldown, lastSpot, nextId = {}, {}, {}, 0
-  net.onChat("meetup", onChat)
+  net.onChat("meetup", onChat, true)
   net.onClient("rlsmpMeetupRequest", M.request)
   net.onClient("rlsmpMeetupArrive", M.arrive)
   net.onClient("rlsmpMeetupCancel", function(pid) M.cancel(pid) end)

@@ -2,7 +2,7 @@
 -- SPDX-License-Identifier: AGPL-3.0-only
 --
 -- RLS has no item system, so we keep one on the server, inside the player's profile: profile.items = {name = count}.
--- The server is the only writer. Other modules (blackmarket, theft) use give/take/has. /items lists yours.
+-- The server is the only writer. Other modules (blackmarket, theft) use give/take/has. The Black Market app and the garage computer list yours (/items is a hidden fallback).
 -- Item names are plain words (see M.CATALOG); unknown names are refused so a bug cannot invent items.
 
 local net = require("rlsmp.server.net")
@@ -94,7 +94,7 @@ local function onItems(pid)
 end
 
 function M.init()
-  net.onChat("items", onItems)
+  net.onChat("items", onItems, true)   -- hidden fallback; players see their items in the Black Market app and the garage
 end
 
 return M

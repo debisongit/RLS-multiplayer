@@ -244,7 +244,7 @@ M.defaults = {
     maxValueGapPercent = 0,
   },
 
-  -- Car theft (/steal next to a parked car). OFF until the owner has tried it in the game.
+  -- Car theft (a popup next to a parked car). OFF until the owner has tried it in the game.
   -- Each game marks about perMille/1000 of its parked cars stealable; the pick changes every periodSeconds (same for everyone).
   -- A car's tier comes from its year and value (tiers); each method works on one tier, needs the listed items (see server
   -- items.lua; durable tools stay, the rest is used up on success), takes `seconds`, makes `noise` (0-1, raises the witness
@@ -285,7 +285,7 @@ M.defaults = {
     trackerReportSeconds = 20,
     keepHours = 48,
     -- Inspect hint (black market MEMBERS ONLY): a member on foot within `range` m of a stealable parked car gets a small toast;
-    -- /inspect takes `seconds` and tells tier, tools (missing ones) and rough risk. Everybody else only ever hears "looks boring".
+    -- inspecting takes `seconds` and tells tier, tools (missing ones) and rough risk. Everybody else only ever hears "looks boring".
     inspect = {enabled = true, range = 15, seconds = 3, cooldown = 2},
   },
 
@@ -329,7 +329,7 @@ M.defaults = {
     shared = false,
   },
 
-  -- Black market (server market.lua): invite + reputation, order with /market buy, collect at a drop spot.
+  -- Black market (server market.lua): invite + reputation, order in the phone app, collect at a drop spot.
   -- Nobody is in until the server owner types `rlsmp market grant <player>` in the server console.
   -- The fence sells or strips stolen cars at the black market's active drop spot (needs theft.enabled and a market member).
   -- Rates are shares of the car's value. market.fenceCarRate is what "sell" pays.
@@ -417,6 +417,12 @@ M.defaults = {
     maxChance = 0.85,
     copsMin = 1,
     copsMax = 2,
+  },
+
+  -- ui.chatCommands: the old chat commands for theft, fence, market, meetup and items (/steal, /inspect, /fence, /market, /meetup, /items) are
+  -- hidden developer fallbacks. Players use the popup, the phone app, the garage computer and the Marketplace app instead. Off unless an admin turns it on.
+  ui = {
+    chatCommands = false,
   },
 
   security = {
