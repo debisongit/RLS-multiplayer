@@ -387,4 +387,52 @@ do
   check(fitCalls == 1, "all police weighted 0: the game's group")
 end
 
+-- 11. the premade pool and the re-roll pick ---------------------------------------------------------------------------------------
+do
+  T.onServerLeave()
+  server({enabled = true})
+  local oldGetModel, oldList = core_vehicles.getModel, core_vehicles.getModelList
+  local brandOf = {etk800 = "ETK", sunburst = "Ibishu", pickup = "Gavril", van = "Gavril", modcar = "Mod", simple_traffic = "X", proppy = "Y"}
+  core_vehicles.getModelList = function()
+    local m = {}
+    for name, b in pairs(brandOf) do m[name] = {Type = name == "simple_traffic" and "PropTraffic" or (name == "proppy" and "Prop" or ((name == "pickup" or name == "van") and "Truck" or "Car")), Brand = b} end
+    return {models = m}
+  end
+  core_vehicles.getModel = function(name)
+    local cfgs = {}
+    for i = 1, 8 do cfgs["k" .. i] = {Population = 1000 * i} end
+    cfgs.bad = {}
+    return {configs = cfgs}
+  end
+  gameplay_traffic_trafficUtils = {getBaseGroupParams = function() return {filters = {Type = {Car = 1, Truck = 1}}} end}
+  check(T.premadeCount() == 0, "pool: nothing before the first frames")
+  for _ = 1, 10 do T.onUpdate(0.016) end
+  check(T.premadeCount() > 0, "pool: built over a few frames")
+  check(saw("premade pool: building from 5 models (Types from the game: Car,Truck)"), "pool: only the game's Types (no Prop, no simple_traffic), logged")
+  check(saw("premade pool: 25 configs of 5 models, 4 brands"), "pool: 5 configs per model (the 'bad' one is refused by RLS's filter), brands counted")
+  local sample = core_multiSpawn.createGroup(6, TRAFFIC)
+  check(#sample == 6 and saw("premade=25"), "groups draw from the premade pool too")
+  -- a re-roll pick: another model, round robin, brand census respected
+  local cur = {model = "etk800", config = "k1"}
+  local lastModel
+  for _ = 1, 60 do
+    local e, stage = T.pickReplacement(cur, nil)
+    check(e and e.model ~= cur.model and e.model ~= lastModel and brandOf[e.model], "pick: another model, never the same twice in a row")
+    lastModel, cur = e.model, e
+  end
+  local m = T.getMemory()
+  m.history, m.last = {}, {}
+  local e = T.pickReplacement({model = "pickup", config = "k1"}, {ETK = 3, Ibishu = 3, Mod = 3})
+  check(e and e.model == "van", "pick: brands full on the street are avoided when another exists")
+  -- switched off
+  server({enabled = true, pool = {enabled = false}})
+  check(T.pickReplacement({model = "etk800", config = "k1"}) == nil, "pool.enabled false: no pick (the car stays)")
+  server({enabled = true})
+  -- leaving the server clears the pool
+  T.onServerLeave()
+  check(T.premadeCount() == 0, "pool: cleared when leaving")
+  core_vehicles.getModel, core_vehicles.getModelList = oldGetModel, oldList
+  gameplay_traffic_trafficUtils = nil
+end
+
 print(string.format("traffic_variety_client_test: %d checks passed", passed))

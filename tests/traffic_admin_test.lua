@@ -102,18 +102,22 @@ set(0, {
   {p = {"trafficVariety", "zones", "highway", "Truck"}, v = 2},
   {p = {"trafficVariety", "night", "pickup"}, v = 0},
   {p = {"trafficVariety", "swap", "enabled"}, v = true},
+  {p = {"trafficVariety", "parked", "amount"}, v = 14},
+  {p = {"trafficVariety", "respawn", "perMinute"}, v = 5},
+  {p = {"trafficVariety", "pool", "brandMax"}, v = 2},
   {p = {"weather", "force"}, v = "rain"},
   {p = {"weather", "mix", "storm"}, v = 10},
   {p = {"police", "antiTeleport"}, v = false},
   {p = {"police", "bubbleMode"}, v = "protect"},
 })
 local r = lastResult()
-check(r and r.applied == 12 and #r.rejected == 0 and r.saved == true, "twelve valid changes applied and saved")
+check(r and r.applied == 15 and #r.rejected == 0 and r.saved == true, "fifteen valid changes applied and saved")
 check(cfg.smartTraffic.mix.drunk == 5 and cfg.smartTraffic.policeReact == false, "personality percentage and police reaction changed")
 check(cfg.traffic.totalBudget == 60, "a whole-number setting is rounded")
 check(cfg.trafficVariety.typeWeights.Truck == 0.5 and cfg.trafficVariety.models.pickup == 3, "Type and model weights set")
 check(cfg.trafficVariety.zones.highway.Truck == 2 and cfg.trafficVariety.night.pickup == 0, "where (road class) and when (night) set, a new zone map was created")
 check(cfg.trafficVariety.swap.enabled == true and cfg.weather.force == "rain" and cfg.weather.mix.storm == 10 and cfg.police.antiTeleport == false and cfg.police.bubbleMode == "protect", "swap, weather and police settings set")
+check(cfg.trafficVariety.parked.amount == 14 and cfg.trafficVariety.respawn.perMinute == 5 and cfg.trafficVariety.pool.brandMax == 2, "parked, respawn and pool settings can be set from the menu")
 for name, tbl in pairs(sections) do check(cfg[name] == tbl, "section " .. name .. " is still the same table (the modules keep references to it)") end
 local f = assert(io.open(tmp .. "/config/config.json", "r"))
 local onDisk = json.decode(f:read("*a"))

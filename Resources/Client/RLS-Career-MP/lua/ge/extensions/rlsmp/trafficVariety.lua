@@ -34,6 +34,11 @@ local missingMods = {}  -- mod model name -> true once logged as not installed
 local probed = false
 local recent, recentSeen = {}, {}   -- cars the game offered for traffic groups recently (RLS-approved), for live swapping
 local RECENT_MAX = 120
+local mem = V.newPool()      -- round-robin memory: which models were used lately (groups and re-rolls share it)
+local brandCache = {}       -- model name -> Brand string or false
+local premadeList           -- the premade pool: list of {model, config, pop}; nil until built
+local premadeJob            -- the build in progress: {models, i, out, params, filter}
+local clock = 0
 
 local function careerActive() return overhaul_career_career ~= nil and overhaul_career_career.isActive() end
 
@@ -65,6 +70,21 @@ local function typeOfModel(model)
     end
   end
   typeCache[model] = found
+  return found or nil
+end
+
+-- The model's Brand from the model list, cached (nil when unknown: the per-brand cap then ignores the model).
+local function brandOfModel(model)
+  if brandCache[model] ~= nil then return brandCache[model] or nil end
+  local found = false
+  if core_vehicles and core_vehicles.getModelList then
+    local ok, list = pcall(core_vehicles.getModelList)
+    local models = ok and type(list) == "table" and list.models or nil
+    local info = models and (models[model] or models[string.lower(tostring(model))]) or nil
+    local b = type(info) == "table" and (info.Brand or info.brand) or nil
+    if type(b) == "string" and b ~= "" then found = b end
+  end
+  brandCache[model] = found
   return found or nil
 end
 
@@ -215,15 +235,23 @@ local function build(original, amount, params)
   local mods = modCandidates(params)
   for _, e in ipairs(mods) do candidates[#candidates + 1] = e end
   local ctx = context()
-  local function infoOf(e) return {type = typeOfModel(e.model), mod = config.mods[e.model] ~= nil} end
-  local group, relaxed = V.select(candidates, want, infoOf, ctx, config)
-  if #group == 0 then return nil end
+  local function infoOf(e) return {type = typeOfModel(e.model), mod = config.mods[e.model] ~= nil, brand = brandOfModel(e.model)} end
   if not parked then remember(candidates) end
+  local usePool = config.pool.enabled and not parked
+  if usePool then
+    -- the premade pool: one entry list of every model the game could use, so a group is not limited to what the game offered this time
+    for _, e in ipairs(premadeList or {}) do candidates[#candidates + 1] = e end
+  end
+  local group, relaxed = V.select(candidates, want, infoOf, ctx, config, nil, usePool and mem or nil)
+  if #group == 0 then return nil end
   probe(params, pool, group)
   p3.logOnChange("variety-zone", ctx.zoneSource, "I", "probe: road class source = " .. ctx.zoneSource)
   p3.count(parked and "variety groups (parked)" or "variety groups (traffic)")
-  p3.log("I", string.format("variety %s group: want=%d pool=%d mods=%d picked=%d distinct models=%d relaxed=%d zone=%s night=%s",
-    parked and "parked" or "traffic", want, #pool, #mods, #group, V.distinctModels(group), relaxed, tostring(ctx.zone), tostring(ctx.night)))
+  local names = {}
+  for _, e in ipairs(group) do names[#names + 1] = tostring(e.model) .. "/" .. tostring(e.config) end
+  p3.log("I", string.format("variety %s group: want=%d pool=%d mods=%d premade=%d picked=%d distinct models=%d relaxed=%d zone=%s night=%s cars=%s",
+    parked and "parked" or "traffic", want, #pool, #mods, usePool and #(premadeList or {}) or 0, #group, V.distinctModels(group), relaxed,
+    tostring(ctx.zone), tostring(ctx.night), table.concat(names, ",")))
   return group
 end
 
@@ -294,6 +322,91 @@ local function buildPolice(amount)
   p3.count("variety groups (police)")
   p3.log("I", string.format("variety police group: want=%d pool=%d undercover=%d relaxed=%d cars=%s", want, #pool, undercover, relaxed, table.concat(picked, ",")))
   return group
+end
+
+-- The premade pool: a few eligible configs of EVERY model the game could use as traffic, built once per session, a few models per frame.
+-- Same rules as the game's own groups: model Types from gameplay_traffic_trafficUtils.getBaseGroupParams() (when it lists any), RLS's
+-- trafficConfigFilter.isConfigEligible for every config. Gives groups and re-rolls more than the 5 to 15 cars the game offered last time.
+local PREMADE_MODELS_PER_FRAME = 3
+local BLOCKED_TYPES = {prop = true, propparked = true, proptraffic = true, trailer = true, unicycle = true}   -- used when the game lists no Types
+local BLOCKED_MODELS = {simple_traffic = true, unicycle = true}
+
+local function startPremade()
+  if premadeList or premadeJob then return end
+  if not (core_vehicles and core_vehicles.getModelList and core_vehicles.getModel) then return end
+  local filter = rawget(_G, "overhaul_integration_patches_trafficConfigFilter")
+  if not (filter and filter.isConfigEligible) then
+    p3.logOnChange("variety-nofilter-pool", true, "W", "RLS's traffic config filter is not available yet: no premade pool for now")
+    return
+  end
+  local utils = rawget(_G, "gameplay_traffic_trafficUtils")
+  local params
+  if utils and utils.getBaseGroupParams then
+    local ok, p = pcall(utils.getBaseGroupParams)
+    if ok and type(p) == "table" then params = p end
+  end
+  params = params or {filters = {}}
+  local allowed, any, shown = {}, false, {}
+  local typeFilter = type(params.filters) == "table" and params.filters.Type
+  if type(typeFilter) == "table" then
+    for name, w in pairs(typeFilter) do
+      if (tonumber(w) or 0) > 0 then allowed[string.lower(tostring(name))] = true any = true shown[#shown + 1] = tostring(name) end
+    end
+  end
+  table.sort(shown)
+  local ok, list = pcall(core_vehicles.getModelList)
+  local names = {}
+  for name, info in pairs(ok and type(list) == "table" and type(list.models) == "table" and list.models or {}) do
+    local t = type(info) == "table" and (info.Type or info.type) or nil
+    local tl = type(t) == "string" and string.lower(t) or nil
+    local good = tl ~= nil and (any and allowed[tl] or (not any and not BLOCKED_TYPES[tl]))
+    if good and not BLOCKED_MODELS[name] then names[#names + 1] = name end
+  end
+  table.sort(names)
+  premadeJob = {models = names, i = 1, out = {}, params = params, filter = filter}
+  p3.log("I", string.format("premade pool: building from %d models (Types from the game: %s)", #names, any and table.concat(shown, ",") or "none, using the built-in block list"))
+end
+
+local function stepPremade()
+  local j = premadeJob
+  if not j then return end
+  local perModel = (config or V.DEFAULTS).pool.configsPerModel
+  for _ = 1, PREMADE_MODELS_PER_FRAME do
+    local name = j.models[j.i]
+    if not name then
+      premadeList, premadeJob = j.out, nil
+      local models, brands, bn = {}, {}, 0
+      for _, e in ipairs(j.out) do
+        models[e.model] = true
+        local b = brandOfModel(e.model) or e.model
+        if not brands[b] then brands[b] = true bn = bn + 1 end
+      end
+      local mn = 0
+      for _ in pairs(models) do mn = mn + 1 end
+      p3.log(#j.out > 0 and "I" or "W", string.format("premade pool: %d configs of %d models, %d brands", #j.out, mn, bn))
+      return
+    end
+    j.i = j.i + 1
+    if spawnable(name) then
+      local ok, data = pcall(core_vehicles.getModel, name)
+      if ok and type(data) == "table" and type(data.configs) == "table" then
+        local cfgs = {}
+        for c in pairs(data.configs) do cfgs[#cfgs + 1] = c end
+        table.sort(cfgs)
+        for a = #cfgs, 2, -1 do local b = math.random(a) cfgs[a], cfgs[b] = cfgs[b], cfgs[a] end
+        local taken = 0
+        for _, c in ipairs(cfgs) do
+          if taken >= perModel then break end
+          local good, eligible = pcall(j.filter.isConfigEligible, name, c, j.params)
+          if good and eligible then
+            local info = data.configs[c]
+            j.out[#j.out + 1] = {model = name, config = c, pop = type(info) == "table" and tonumber(info.Population) or nil}
+            taken = taken + 1
+          end
+        end
+      end
+    end
+  end
 end
 
 -- RLS's wrapperLifetime, loaded once. A failed require is not cached by Lua, so it is only retried every 60th call (~1 s).
@@ -381,19 +494,43 @@ local function onConfig(data)
   p3.log("I", string.format("police variety: enabled=%s undercoverShare=%.2f maxShare=%.2f", tostring(config.police.enabled), config.police.undercoverShare, config.police.maxShare))
 end
 
-function M.onUpdate() M.install() end
+function M.onUpdate(dtReal)
+  M.install()
+  clock = clock + (dtReal or 0)
+  if not premadeList and mp.isMPSession() and careerActive() and (config == nil or config.pool.enabled) then
+    startPremade()
+    stepPremade()
+  end
+end
 
 function M.onServerLeave()
   config, provisional, typeCache, missingMods, probed = nil, false, {}, {}, false
   policeCache, policeKeys = nil, {}
   recent, recentSeen = {}, {}
+  mem, brandCache, premadeList, premadeJob = V.newPool(), {}, nil, nil
 end
 
 function M.getConfig() return config end
 -- For live swapping (rlsmp_trafficSwap): the entries seen recently, the current day/night and road class, and a model's Type/mod info.
 function M.candidates() local out = {} for i, e in ipairs(recent) do out[i] = e end return out end
 function M.contextNow() return context() end
-function M.infoOf(e) return {type = typeOfModel(e.model), mod = config ~= nil and config.mods[e.model] ~= nil} end
+function M.infoOf(e) return {type = typeOfModel(e.model), mod = config ~= nil and config.mods[e.model] ~= nil, brand = brandOfModel(e.model)} end
+function M.brandOf(model) return brandOfModel(model) end
+function M.premadeCount() return premadeList and #premadeList or 0 end
+function M.getMemory() return mem end
+
+-- One replacement for a traffic car that is being re-rolled: a different model (different config too) from the premade pool, round robin.
+-- current = {model, config}; census = {brand = cars of that brand on the street now}. nil = leave the car alone.
+function M.pickReplacement(current, census)
+  if not (config and config.enabled and config.pool.enabled) then return nil end
+  local list = {}
+  for _, e in ipairs(premadeList or {}) do list[#list + 1] = e end
+  if #list == 0 then for _, e in ipairs(recent) do list[#list + 1] = e end end   -- no premade pool: only what the game offered lately
+  local ok, entry, stage = pcall(V.pickOne, mem, list, M.infoOf, context(), config, math.random, current, census)
+  if not ok then p3.log("W", "pickReplacement failed: " .. tostring(entry)) return nil end
+  if entry then p3.count("pool picks (stage " .. tostring(stage) .. ")") end
+  return entry, stage
+end
 function M.report() return p3.report() end
 
 function M.onExtensionLoaded()

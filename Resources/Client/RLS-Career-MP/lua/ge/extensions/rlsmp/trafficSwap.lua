@@ -11,6 +11,7 @@
 --             the new car into RLS's traffic with gameplay_traffic.insertTraffic. After `maxFailures` failures it switches itself off.
 -- At most `perMinute` swaps per minute: BeamMP sends every swap (a delete and a spawn) to every player.
 -- Never touches police, taxis, pursuits, jobs, the player's or other players' cars (Claude A's personality.skipReason decides that).
+-- M.replace(id, entry, maxFailures, onDone) is also used by rlsmp/trafficReroll.lua (a respawned car becomes another model).
 -- Pure logic: lib/trafficSwap.lua (tests: tests/traffic_swap_client_test.lua).
 
 local M = {}
@@ -78,11 +79,11 @@ local function configOf(id)
   return type(path) == "string" and path:match("([^/\\]+)%.pc$") or nil
 end
 
-local function fail(cfg, why)
+local function fail(maxFailures, why)
   tracker.failures = tracker.failures + 1
   p3.count("swap failed")
-  p3.log("W", "swap failed: " .. tostring(why) .. " (" .. tracker.failures .. " of " .. cfg.swap.maxFailures .. ")")
-  if tracker.failures >= cfg.swap.maxFailures and not liveOff then
+  p3.log("W", "swap failed: " .. tostring(why) .. " (" .. tracker.failures .. " of " .. maxFailures .. ")")
+  if tracker.failures >= maxFailures and not liveOff then
     liveOff = true
     p3.log("W", "live swapping switched itself off after too many failures; it only watches now")
   end
@@ -102,7 +103,7 @@ end
 
 -- A live swap was asked for. The game may have made a NEW car (a new id) or changed the car IN PLACE (same id, new model): both are a success,
 -- and the log says which one it was (that is the most useful thing to learn from the first real swap).
-local function resolvePending(cfg)
+local function resolvePending()
   if not pending then return end
   local fresh = {}
   local remote = mp.remoteSet()
@@ -129,25 +130,59 @@ local function resolvePending(cfg)
     p3.count(#fresh > 0 and "swap done (new id)" or "swap done (in place)")
     p3.log("I", string.format("swap done (%s): car %s is now car %s (%s/%s); traffic: %s", how, tostring(pending.oldId), ids,
       tostring(pending.entry.model), tostring(pending.entry.config), table.concat(results, ",")))
+    local done, newId = pending.onDone, (#fresh > 0 and fresh[1] or pending.oldId)
+    -- the new car must stand where the old one stood (the game's replaceVehicle is expected to keep the place; checked, and fixed if not)
+    local o, at = objectOf(newId), pending.at0
+    if o and at and o.getPosition then
+      local okp, np = pcall(o.getPosition, o)
+      if okp and np and at.x and ((np.x - at.x) ^ 2 + (np.y - at.y) ^ 2 + (np.z - at.z) ^ 2) > 25 then
+        p3.log("W", string.format("swap: the new car %s is %.0f m from where the old one stood; moving it back", tostring(newId), math.sqrt((np.x - at.x) ^ 2 + (np.y - at.y) ^ 2 + (np.z - at.z) ^ 2)))
+        if o.setPositionRotation and at.q then pcall(o.setPositionRotation, o, at.x, at.y, at.z, at.q.x, at.q.y, at.q.z, at.q.w) end
+      end
+    end
     pending = nil
+    if done then local okd, err = pcall(done, newId, how) if not okd then p3.log("W", "swap: after-swap step failed: " .. tostring(err)) end end
   elseif clock - pending.at > 3 then
+    local maxF = pending.maxFailures
     pending = nil
-    fail(cfg, "no new car appeared after the replace")
+    fail(maxF, "no new car appeared after the replace")
   end
 end
 
-local function performSwap(cfg, id, entry)
+-- Replaces ONE traffic car by `entry` ({model, config}) with the game's own replaceVehicle. The caller has already checked that nobody can see the car.
+-- Returns true when started, or false and a reason. onDone(newId, how) runs after the swap succeeded. Failures count towards maxFailures; after that
+-- live replacing switches itself off (shared by live swapping and the respawn re-roll).
+function M.replace(id, entry, maxFailures, onDone)
+  maxFailures = tonumber(maxFailures) or 3
+  if liveOff then return false, "switched off after failures" end
+  if pending then return false, "busy" end
   local rg = package.loaded["rlsmp/lib/replaceGuard"]
   local vanilla = rg and rg.getVanilla and rg.getVanilla()
   local obj = objectOf(id)
-  if not (vanilla and obj) then return fail(cfg, "the game's own replaceVehicle or the car is not available") end
+  if not (vanilla and obj) then fail(maxFailures, "the game's own replaceVehicle or the car is not available") return false, "unavailable" end
   local before = idSet()
   local oldModel = jbeamOf(obj)
+  -- BeamMP only syncs a change to one of my cars when the car is marked as edited (the same marker lib/replaceGuard.lua uses)
+  local serverId, mpEntry = mp.serverIdOf(id)
+  if serverId ~= nil and type(mpEntry) == "table" and mpEntry.isLocal == true then mpEntry.jbeam = "-" end
+  local at0
+  if obj.getPosition then
+    local okp, pos = pcall(obj.getPosition, obj)
+    if okp and pos and pos.x then
+      at0 = {x = pos.x, y = pos.y, z = pos.z}
+      if obj.getRotation then
+        local okr, q = pcall(obj.getRotation, obj)
+        if okr and q and q.w then at0.q = {x = q.x, y = q.y, z = q.z, w = q.w} end
+      end
+    end
+  end
   local ok, err = pcall(vanilla, entry.model, {config = entry.config, autoEnterVehicle = false}, obj)
-  if not ok then return fail(cfg, err) end
-  pending = {oldId = id, before = before, at = clock, entry = entry, oldModel = oldModel}
-  resolvePending(cfg)
+  if not ok then fail(maxFailures, err) return false, "error" end
+  pending = {oldId = id, before = before, at = clock, entry = entry, oldModel = oldModel, onDone = onDone, maxFailures = maxFailures, at0 = at0}
+  resolvePending()
+  return true
 end
+function M.isBusy() return pending ~= nil end
 
 -- One round. Returns the decision {id, from, to, live} or nil (for tests and logs).
 function M.check()
@@ -155,7 +190,7 @@ function M.check()
   if not cfg then return nil end
   local v, P, ps = variety(), personality(), personalities()
   if not (v and P and ps and ps.context and gameplay_traffic and gameplay_traffic.getTrafficData) then return nil end
-  resolvePending(cfg)
+  resolvePending()
   if pending then return nil end                                   -- one swap at a time
   local pctx = ps.context()
   local b = bubble()
@@ -188,7 +223,7 @@ function M.check()
     live and "LIVE" or "would happen (watch only)", tostring(best.id), tostring(model), tostring((v.infoOf(current) or {}).type),
     wc, tostring(entry.model), tostring(entry.config), tostring((v.infoOf(entry) or {}).type), wr, tostring(c.zone), tostring(c.night)))
   p3.count(live and "swap attempts" or "swap would happen")
-  if live then performSwap(cfg, best.id, entry) end
+  if live then M.replace(best.id, entry, cfg.swap.maxFailures) end
   return {id = best.id, from = current, to = entry, live = live}
 end
 
@@ -196,10 +231,12 @@ function M.onUpdate(dtReal)
   if mp.isMPSession() and careerActive() and not variety() then
     p3.logOnChange("swap-novariety", true, "W", "rlsmp_trafficVariety was not found: live swapping cannot work")
   end
+  dtReal = dtReal or 0
+  clock = clock + dtReal
+  resolvePending()                                                 -- a swap started by the respawn re-roll finishes here even when watching is off
   local cfg = settings()
   if not cfg then return end
-  dtReal = dtReal or 0
-  clock, timer = clock + dtReal, timer + dtReal
+  timer = timer + dtReal
   if timer >= cfg.swap.checkSeconds then
     timer = 0
     M.check()
@@ -212,6 +249,9 @@ end
 
 function M.report() return p3.report() end
 function M.isLiveOff() return liveOff end
+-- The car's current model and config name, for the respawn re-roll (rlsmp/trafficReroll.lua), which swaps through M.replace.
+M.modelOf = modelOf
+M.configOf = configOf
 
 function M.onExtensionLoaded() p3.log("I", "rlsmp_trafficSwap loaded") end
 M.onInit = function() setExtensionUnloadMode(M, "manual") end

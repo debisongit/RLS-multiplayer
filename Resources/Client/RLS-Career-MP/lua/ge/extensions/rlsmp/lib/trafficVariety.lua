@@ -27,6 +27,12 @@ M.DEFAULTS = {
   swap = {enabled = false, live = false, perMinute = 2, hiddenSeconds = 5, checkSeconds = 2, minRatio = 1.5, maxFailures = 3},
   -- Police groups: weight per model (Bastion low), at most `undercoverShare` of the cars undercover, at most `maxShare` of a group one model.
   police = {enabled = true, models = {bastion = 0.3}, undercoverShare = 0.1, maxShare = 0.4, undercoverWords = {"undercover", "unmarked"}},
+  -- Premade pool: every car the game could use, picked round-robin (least recently used first, no model twice in a row, per-brand cap).
+  pool = {enabled = true, avoidLast = 6, brandWindow = 12, brandMax = 3, streetMax = 3, configsPerModel = 5, popPower = 0.5, ageMax = 30},
+  -- Re-roll: a traffic car that RLS respawned out of everybody's sight becomes a different model with a different config.
+  respawn = {enabled = true, perMinute = 3, chance = 1, repaintChance = 0.5, waitSeconds = 3, checkSeconds = 0.5},
+  -- Parked cars: how many RLS keeps (its own game setting trafficParkingAmount). 0 = leave the game's own amount alone.
+  parked = {amount = 10},
 }
 
 local MAX_ENTRIES = 64
@@ -91,6 +97,43 @@ local function policeSettings(src)
 end
 M.sanitizePolice = policeSettings
 
+local function poolSettings(src)
+  src = type(src) == "table" and src or {}
+  local d = M.DEFAULTS.pool
+  return {
+    enabled = src.enabled ~= false,
+    avoidLast = math.floor(number(src.avoidLast, d.avoidLast, 0, 40)),
+    brandWindow = math.floor(number(src.brandWindow, d.brandWindow, 1, 40)),
+    brandMax = math.floor(number(src.brandMax, d.brandMax, 1, 40)),
+    streetMax = math.floor(number(src.streetMax, d.streetMax, 1, 40)),
+    configsPerModel = math.floor(number(src.configsPerModel, d.configsPerModel, 1, 12)),
+    popPower = number(src.popPower, d.popPower, 0, 1),
+    ageMax = number(src.ageMax, d.ageMax, 1, 200),
+  }
+end
+M.sanitizePool = poolSettings
+
+local function respawnSettings(src)
+  src = type(src) == "table" and src or {}
+  local d = M.DEFAULTS.respawn
+  return {
+    enabled = src.enabled ~= false,
+    perMinute = math.floor(number(src.perMinute, d.perMinute, 0, 12)),
+    chance = number(src.chance, d.chance, 0, 1),
+    repaintChance = number(src.repaintChance, d.repaintChance, 0, 1),
+    waitSeconds = number(src.waitSeconds, d.waitSeconds, 0.5, 30),
+    checkSeconds = number(src.checkSeconds, d.checkSeconds, 0.2, 10),
+  }
+end
+M.sanitizeRespawn = respawnSettings
+
+-- Parked cars: 0 leaves the game's own amount alone, otherwise 1..30.
+local function parkedSettings(src)
+  src = type(src) == "table" and src or {}
+  return {amount = math.floor(number(src.amount, M.DEFAULTS.parked.amount, 0, 30))}
+end
+M.sanitizeParked = parkedSettings
+
 -- Turns whatever the server sent (or a hand-edited config.json) into a safe settings table.
 function M.sanitize(src)
   src = type(src) == "table" and src or {}
@@ -120,6 +163,9 @@ function M.sanitize(src)
     zoneSpeedLimits = {city = city, main = main},
     swap = swapSettings(src.swap),
     police = policeSettings(src.police),
+    pool = poolSettings(src.pool),
+    respawn = respawnSettings(src.respawn),
+    parked = parkedSettings(src.parked),
   }
 end
 
@@ -159,10 +205,56 @@ end
 
 local function keyOf(entry) return tostring(entry.model) .. "/" .. tostring(entry.config) end
 
+-- Round-robin memory ("pool"): which models were picked lately, so the street keeps changing.
+--   history = the last picks {model, brand}, newest last; last[model] = the pick number it was used at; lastConfig[model] = its last config.
+function M.newPool() return {tick = 0, last = {}, lastConfig = {}, history = {}} end
+
+local HISTORY_MAX = 60
+
+-- Remember a pick (a group entry or a re-roll).
+function M.poolNote(mem, entry, brand)
+  mem.tick = mem.tick + 1
+  mem.last[entry.model] = mem.tick
+  mem.lastConfig[entry.model] = entry.config
+  mem.history[#mem.history + 1] = {model = entry.model, brand = brand}
+  if #mem.history > HISTORY_MAX then table.remove(mem.history, 1) end
+end
+
+-- 0 = not allowed now (the model was used among the last `avoidLast` picks, or its brand is at the cap). Otherwise a boost for models unused for long.
+-- `distinct` = how many models there are to choose from (avoidLast shrinks so the rule can always be met); `skipBrand` ignores the brand caps.
+function M.poolFactor(mem, model, brand, cfg, distinct, census, skipBrand)
+  local pc = cfg.pool
+  local h = mem.history
+  local avoid = math.min(pc.avoidLast, math.max(0, (distinct or 0) - 1))
+  for i = #h, math.max(1, #h - avoid + 1), -1 do
+    if h[i].model == model then return 0 end
+  end
+  if brand and not skipBrand then
+    local n = 0
+    for i = #h, math.max(1, #h - pc.brandWindow + 1), -1 do
+      if h[i].brand == brand then n = n + 1 end
+    end
+    if n >= pc.brandMax then return 0 end
+    if census and (census[brand] or 0) >= pc.streetMax then return 0 end
+  end
+  local age = mem.last[model] and (mem.tick - mem.last[model]) or pc.ageMax
+  return 1 + math.min(age, pc.ageMax) / 5
+end
+
+-- Popular configs (high Population) are more likely than rare ones; power 0 switches it off. Unknown Population counts as normal.
+function M.popFactor(pop, power)
+  pop = tonumber(pop)
+  if not pop or pop <= 0 or not power or power <= 0 then return 1 end
+  local f = (pop / 1000) ^ power
+  if f < 0.3 then return 0.3 end
+  if f > 3 then return 3 end
+  return f
+end
+
 -- Picks `amount` entries from `candidates` (a list of {model, config, ...}).
 --   infoOf(entry) -> {type =, mod =}   rnd() -> [0,1)
 -- Returns the group (a list) and how many entries came from relaxing the per-model cap or from repeats.
-function M.select(candidates, amount, infoOf, ctx, cfg, rnd)
+function M.select(candidates, amount, infoOf, ctx, cfg, rnd, mem)
   rnd = rnd or math.random
   amount = math.floor(tonumber(amount) or 0)
   local out, relaxed = {}, 0
@@ -175,7 +267,8 @@ function M.select(candidates, amount, infoOf, ctx, cfg, rnd)
       local key = keyOf(entry)
       if not seen[key] then
         seen[key] = true
-        pool[#pool + 1] = {entry = entry, w = M.weight(entry, infoOf and infoOf(entry), ctx, cfg)}
+        local info = infoOf and infoOf(entry)
+        pool[#pool + 1] = {entry = entry, w = M.weight(entry, info, ctx, cfg), brand = info and info.brand}
       end
     end
   end
@@ -184,43 +277,59 @@ function M.select(candidates, amount, infoOf, ctx, cfg, rnd)
   local cap = math.max(1, math.ceil(amount * cfg.maxShare))
   local perModel = {}
 
+  -- With a memory: every MODEL is equally likely whatever its number of configs, times the round-robin factor (0 = not now).
+  local nModel, distinct = {}, 0
+  if mem then
+    for _, p in ipairs(pool) do
+      if not nModel[p.entry.model] then distinct = distinct + 1 end
+      nModel[p.entry.model] = (nModel[p.entry.model] or 0) + 1
+    end
+  end
+  local function eff(p, useCap)
+    if p.w <= 0 or (useCap and (perModel[p.entry.model] or 0) >= cap) then return 0 end
+    if not mem then return p.w end
+    local w = p.w / nModel[p.entry.model] * M.popFactor(p.entry.pop, cfg.pool.popPower)
+    if useCap then w = w * M.poolFactor(mem, p.entry.model, p.brand, cfg, distinct) end
+    return w
+  end
+
   local function pickFrom(list, useCap)
     local total = 0
-    for _, p in ipairs(list) do
-      if p.w > 0 and (not useCap or (perModel[p.entry.model] or 0) < cap) then total = total + p.w end
-    end
+    for _, p in ipairs(list) do total = total + eff(p, useCap) end
     if total <= 0 then return nil end
     local r = rnd() * total
     for i, p in ipairs(list) do
-      if p.w > 0 and (not useCap or (perModel[p.entry.model] or 0) < cap) then
-        r = r - p.w
+      local w = eff(p, useCap)
+      if w > 0 then
+        r = r - w
         if r <= 0 then return i end
       end
     end
     for i = #list, 1, -1 do   -- float rounding: fall back to the last eligible one
-      local p = list[i]
-      if p.w > 0 and (not useCap or (perModel[p.entry.model] or 0) < cap) then return i end
+      if eff(list[i], useCap) > 0 then return i end
     end
     return nil
   end
 
-  -- pass 1: unique entries under the cap
+  local function take(p)
+    out[#out + 1] = p.entry
+    perModel[p.entry.model] = (perModel[p.entry.model] or 0) + 1
+    if mem then M.poolNote(mem, p.entry, p.brand) end
+  end
+
+  -- pass 1: unique entries under the cap (and the round-robin rules when there is a memory)
   local left = {}
   for i, p in ipairs(pool) do left[i] = p end
   while #out < amount do
     local i = pickFrom(left, true)
     if not i then break end
-    local p = table.remove(left, i)
-    out[#out + 1] = p.entry
-    perModel[p.entry.model] = (perModel[p.entry.model] or 0) + 1
+    take(table.remove(left, i))
   end
   -- pass 2: still short -> ignore the cap (small pools), still unique and weighted
   while #out < amount do
     local i = pickFrom(left, false)
     if not i then break end
-    local p = table.remove(left, i)
-    out[#out + 1] = p.entry
-    perModel[p.entry.model] = (perModel[p.entry.model] or 0) + 1
+    take(table.remove(left, i))
     relaxed = relaxed + 1
   end
   -- pass 3: pool exhausted -> repeat weighted picks (never leave the game with a group that is too short)
@@ -229,10 +338,84 @@ function M.select(candidates, amount, infoOf, ctx, cfg, rnd)
     guard = guard + 1
     local i = pickFrom(pool, false)
     if not i then break end
-    out[#out + 1] = pool[i].entry
+    take(pool[i])
     relaxed = relaxed + 1
   end
   return out, relaxed
+end
+
+-- ONE replacement for a car that is respawning. `current` = {model, config} (never picked again; never its model unless nothing else exists).
+-- census = {brand = number of cars of that brand on the street now} (without this car). Stages, relaxing step by step:
+--   1 all rules   2 no brand caps   3 no avoid-last window but not the model picked last   4 any other model   5 same model, other config.
+-- Returns the entry and the stage, or nil (nothing usable: leave the car alone). The pick is remembered in the memory.
+function M.pickOne(mem, candidates, infoOf, ctx, cfg, rnd, current, census)
+  rnd = rnd or math.random
+  current = current or {}
+  local groups, order = {}, {}
+  for _, e in ipairs(type(candidates) == "table" and candidates or {}) do
+    if type(e) == "table" and e.model and e.config and not (e.model == current.model and e.config == current.config) then
+      local g = groups[e.model]
+      if not g then
+        local info = infoOf and infoOf(e) or {}
+        g = {model = e.model, brand = info.brand, w = M.weight(e, info, ctx, cfg), entries = {}, pop = 0}
+        groups[e.model] = g
+        order[#order + 1] = g
+      end
+      g.entries[#g.entries + 1] = e
+      g.pop = g.pop + M.popFactor(e.pop, cfg.pool.popPower)
+    end
+  end
+  local usable, others = {}, 0
+  for _, g in ipairs(order) do
+    if g.w > 0 then
+      usable[#usable + 1] = g
+      if g.model ~= current.model then others = others + 1 end
+    end
+  end
+  if #usable == 0 then return nil end
+  local lastModel = mem.history[#mem.history] and mem.history[#mem.history].model
+  local pc = cfg.pool
+
+  local function choose(allowed)
+    local total, w = 0, {}
+    for i, g in ipairs(usable) do
+      w[i] = allowed(g) * g.w * (g.pop / #g.entries)
+      total = total + w[i]
+    end
+    if total <= 0 then return nil end
+    local r = rnd() * total
+    for i, g in ipairs(usable) do
+      if w[i] > 0 then
+        r = r - w[i]
+        if r <= 0 then return g end
+      end
+    end
+    for i = #usable, 1, -1 do if w[i] > 0 then return usable[i] end end
+  end
+
+  local function notCurrent(g) return g.model ~= current.model end
+  local stages = {
+    function(g) return notCurrent(g) and M.poolFactor(mem, g.model, g.brand, cfg, others, census) or 0 end,
+    function(g) return notCurrent(g) and M.poolFactor(mem, g.model, g.brand, cfg, others, nil, true) or 0 end,
+    function(g) return (notCurrent(g) and g.model ~= lastModel) and 1 or 0 end,
+    function(g) return notCurrent(g) and 1 or 0 end,
+    function(g) return 1 end,
+  }
+  for stage, allowed in ipairs(stages) do
+    local g = choose(allowed)
+    if g then
+      -- a config of that model other than the one it had last time (and than this car's own)
+      local fresh = {}
+      for _, e in ipairs(g.entries) do
+        if e.config ~= mem.lastConfig[g.model] and e.config ~= current.config then fresh[#fresh + 1] = e end
+      end
+      local list = #fresh > 0 and fresh or g.entries
+      local entry = list[math.min(#list, math.floor(rnd() * #list) + 1)]
+      M.poolNote(mem, entry, g.brand)
+      return entry, stage
+    end
+  end
+  return nil
 end
 
 -- Is this config name an undercover / unmarked one (any of the words in its name)?
