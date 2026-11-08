@@ -72,7 +72,7 @@ local function check(c, m) if not c then error("FAIL: " .. m, 2) end passed = pa
 local function setConfig(over)
   local c = {night = {Truck = 0}, swap = {enabled = true, hiddenSeconds = 2, checkSeconds = 0.5, perMinute = 2}}
   for k, v in pairs(over or {}) do if k == "swap" then for a, b in pairs(v) do c.swap[a] = b end else c[k] = v end end
-  c.preload = c.preload or {slowFrameMs = 2000, minGapSeconds = 0, settleSeconds = 0, reserve = 0}   -- the tests step 0.5 s per frame
+  c.preload = c.preload or {slowFrameMs = 2000, minGapSeconds = 0, settleSeconds = 0}   -- the tests step 0.5 s per frame
   config = V.sanitize(c)
 end
 local function run(seconds) for _ = 1, math.floor(seconds / 0.5) do T.onUpdate(0.5) end end

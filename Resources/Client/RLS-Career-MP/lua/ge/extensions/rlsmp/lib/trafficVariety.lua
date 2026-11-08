@@ -30,7 +30,7 @@ M.DEFAULTS = {
   -- Premade pool: every car the game could use, picked round-robin (least recently used first, no model twice in a row, per-brand cap).
   pool = {enabled = true, avoidLast = 6, brandWindow = 12, brandMax = 3, streetMax = 3, configsPerModel = 5, popPower = 0.5, ageMax = 30},
   -- Re-roll: a traffic car that RLS respawned out of everybody's sight becomes a different model with a different config.
-  respawn = {enabled = true, perMinute = 2, chance = 0.25, repaintChance = 0.5, waitSeconds = 3, checkSeconds = 0.5},
+  respawn = {enabled = true, mode = "async", perMinute = 2, chance = 0.25, repaintChance = 0.5, waitSeconds = 3, checkSeconds = 0.5},
   -- Parked cars: how many RLS keeps (its own game setting trafficParkingAmount). 0 = leave the game's own amount alone.
   parked = {amount = 10},
   -- Rarity: everyday cars are the clear majority. Tier shares (of the picks), and what puts a config into a higher tier (words in the model or config
@@ -39,8 +39,8 @@ M.DEFAULTS = {
     rareWords = {"race", "racer", "racing", "drift", "hotrod", "junk", "drag", "crawler", "trophy", "buggy", "formula", "rocket"},
     uncommonWords = {"rally", "offroad", "tuner", "pro", "workpackage", "sport", "taxi", "police", "dune", "turbo"},
     rareModels = {"scintilla", "bolide"}, uncommonValue = 45000, rareValue = 120000},
-  -- Preload: frame guard, a small reserve of picks prepared ahead, bias to models that are already loaded (lib/trafficPreload.lua).
-  preload = {enabled = true, reserve = 3, prepareSeconds = 4, minGapSeconds = 6, slowFrameMs = 45, calmFrames = 45, settleSeconds = 3, warmShare = 0.7, ageMax = 240},
+  -- Preload: frame guard, bias to models that are already loaded (lib/trafficPreload.lua).
+  preload = {enabled = true, minGapSeconds = 6, slowFrameMs = 45, calmFrames = 45, settleSeconds = 3, warmShare = 0.7},
   -- Simplified (cheap stand-in) cars: lib/simplified.lua. Off by default.
   simplified = {enabled = false, parked = true, traffic = false, nearRadius = 250, perMinute = 4, checkSeconds = 2},
 }
@@ -157,6 +157,7 @@ local function respawnSettings(src)
   local d = M.DEFAULTS.respawn
   return {
     enabled = src.enabled ~= false,
+    mode = (src.mode == "inplace" or src.mode == "off") and src.mode or "async",   -- async = the game's group spawn queue, inplace = replaceVehicle (hitches)
     perMinute = math.floor(number(src.perMinute, d.perMinute, 0, 12)),
     chance = number(src.chance, d.chance, 0, 1),
     repaintChance = number(src.repaintChance, d.repaintChance, 0, 1),

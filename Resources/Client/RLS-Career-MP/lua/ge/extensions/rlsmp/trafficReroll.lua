@@ -5,7 +5,9 @@
 -- circle the map. Here: when a car's respawn count goes up and nobody can see it (not on this camera, not near or visible to another player,
 -- same rules as live swapping and the recycling of stuck cars), it is replaced by an entry of the premade pool (rlsmp_trafficVariety.pickReplacement:
 -- a different model, a different config, round robin with a per-brand cap) and sometimes repainted.
--- The replacing itself is rlsmp_trafficSwap.replace (the game's own replaceVehicle, BeamMP marker, result check, switch-off after failures).
+-- The replacing itself is rlsmp_trafficSwap.replace. Default `respawn.mode` "async": the new car is built through the game's group spawn queue (no
+-- freeze), RLS traffic gets it, then the old car goes (and the view rules are checked again first). "inplace" = the game's replaceVehicle (a
+-- freeze of 0.5 to 2 s per re-roll); "off" = no re-rolling. See docs/RESEARCH_ASYNC_SWAP.md.
 -- Never police, taxis, pursuits, jobs, crashed, the player's or other players' cars (personality.skipReason).
 -- At most `respawn.perMinute` per minute: BeamMP sends every swap (a delete and a spawn) to every player.
 -- Anything unexpected leaves the car as it is. Switch: server config trafficVariety.respawn.enabled.
@@ -17,11 +19,9 @@ local R = require("rlsmp/lib/trafficReroll")
 local S = require("rlsmp/lib/trafficSwap")
 local mp = require("rlsmp/lib/mp")
 local p3 = require("rlsmp/lib/p3")
-local PL = require("rlsmp/lib/trafficPreload")
 
 local tracker = R.newTracker()
 local clock, timer = 0, 0
-local queue, prepTimer = PL.newQueue(), 0     -- the reserve: picks made ahead, and the time since the last one
 
 local function careerActive() return overhaul_career_career ~= nil and overhaul_career_career.isActive() end
 local function ext(name) return rawget(_G, "rlsmp_" .. name) or package.loaded["rlsmp/" .. name] end
@@ -36,7 +36,7 @@ end
 local function settings()
   local v = ext("trafficVariety")
   local cfg = v and v.getConfig and v.getConfig()
-  if cfg and cfg.enabled and cfg.pool.enabled and cfg.respawn.enabled and cfg.respawn.perMinute > 0 and mp.isMPSession() and careerActive() then return cfg end
+  if cfg and cfg.enabled and cfg.pool.enabled and cfg.respawn.enabled and cfg.respawn.mode ~= "off" and cfg.respawn.perMinute > 0 and mp.isMPSession() and careerActive() then return cfg end
   return nil
 end
 
@@ -47,6 +47,18 @@ local function repaint(newId)
   if ok then p3.count("reroll repainted") else p3.log("W", "reroll: repaint failed: " .. tostring(err)) end
 end
 
+-- Nobody can see this car and the usual safety rules pass (also asked again when an async build finishes). Returns false, or true and the distance.
+local function hiddenFrom(P, id, veh, pctx, b)
+  if not (veh and veh.pos and b ~= nil and R.skipReason(P, id, veh, pctx) == nil) then return false end
+  if veh.camVisible == true or (b.isEnabled and not b.isEnabled()) or (b.stayFor and b.stayFor(veh)) then return false end
+  if b.viewReason then
+    local seen, dist = b.viewReason(veh)    -- strict: near any player or in front of the camera = leave it
+    if seen then return false, seen end
+    return true, dist
+  end
+  return true
+end
+
 -- One round. Returns {id, from, to} when a swap was started (for tests and logs), else nil.
 function M.check()
   local cfg = settings()
@@ -54,6 +66,10 @@ function M.check()
   local v, ts, P, ps = ext("trafficVariety"), ext("trafficSwap"), personality(), ext("personalities")
   if not (v and v.pickReplacement and ts and ts.replace and P and ps and ps.context and gameplay_traffic and gameplay_traffic.getTrafficData) then return nil end
   if ts.isLiveOff() then return nil end
+  if cfg.respawn.mode == "async" and not (ts.asyncReady and ts.asyncReady()) then
+    p3.logOnChange("reroll-async", "none", "W", "reroll: the game's group spawn (core_multiSpawn.spawnGroup) is not available: no re-rolling until it is (set respawn.mode to inplace to accept the freeze)")
+    return nil
+  end
   local data = gameplay_traffic.getTrafficData()
   local alive, ids = {}, {}
   for id, veh in pairs(data) do
@@ -78,11 +94,9 @@ function M.check()
   local pctx, b = ps.context(), ext("bubble")
   for _, id in ipairs(due) do
     local veh = data[id]
-    if veh and veh.pos and R.skipReason(P, id, veh, pctx) == nil
-        and b ~= nil and veh.camVisible ~= true and not (b.isEnabled and not b.isEnabled()) and not (b.stayFor and b.stayFor(veh)) then
-      local seen, dist = nil, nil
-      if b.viewReason then seen, dist = b.viewReason(veh) end   -- strict: near any player or in front of the camera = leave it
-      if seen then p3.count("reroll skipped (" .. seen .. ")") goto continue end
+    local hidden, dist = hiddenFrom(P, id, veh, pctx, b)     -- dist = the distance, or the reason when seen
+    if not hidden and dist then p3.count("reroll skipped (" .. tostring(dist) .. ")") end
+    if hidden then
       tracker.due[id] = nil                                     -- looked at: once per respawn, swapped or not
       if not S.allowed(tracker, clock, cfg.respawn) then p3.count("reroll skipped (rate)") return nil end
       local model, name = ts.modelOf(id, veh), ts.configOf(id)
@@ -99,21 +113,16 @@ function M.check()
         if m and v.noteWarm then v.noteWarm(m) end            -- its meshes are loaded already
         return m and v.brandOf and v.brandOf(m) or nil
       end, id)
-      local entry, stage
-      local pc = cfg.preload
-      if pc.enabled then
-        local c0 = v.contextNow and v.contextNow() or {}
-        local ready = PL.take(queue, model, clock, pc.ageMax, tostring(c0.zone) .. "/" .. tostring(c0.night))
-        if ready then entry, stage = {model = ready.model, config = ready.config, pop = ready.pop, fromReserve = true}, "reserve" end
-      end
-      if not entry then entry, stage = v.pickReplacement(current, census) end
+      local entry, stage = v.pickReplacement(current, census)
       if not entry then p3.count("reroll: nothing to pick") return nil end
       if simp and simp.adapt then entry = simp.adapt(veh, entry) end   -- far from every player: a cheap stand-in of the same model
       local started, why = ts.replace(id, entry, cfg.swap.maxFailures, function(newId)
         p3.count("reroll done")
         if v.noteWarm then v.noteWarm(entry.realModel or entry.model) end
         if math.random() < cfg.respawn.repaintChance then repaint(newId) end
-      end)
+      end, {mode = cfg.respawn.mode, stillOk = function(oldId)
+        return hiddenFrom(P, oldId, gameplay_traffic.getTrafficData()[oldId], ps.context(), ext("bubble"))
+      end})
       if not started then
         p3.count("reroll not started")
         p3.log("I", "reroll: car " .. tostring(id) .. " not replaced: " .. tostring(why))
@@ -121,8 +130,8 @@ function M.check()
       end
       S.record(tracker, clock)
       p3.count("reroll started")
-      p3.log("I", string.format("reroll: respawned car %s %s/%s -> %s/%s (pool stage %s) dist=%s camVisible=%s", tostring(id), tostring(model), tostring(name),
-        tostring(entry.model), tostring(entry.config), tostring(stage), dist and string.format("%.0f", dist) or "?", tostring(veh.camVisible)))
+      p3.log("I", string.format("reroll: respawned car %s %s/%s -> %s/%s (pool stage %s, mode %s) dist=%s camVisible=%s", tostring(id), tostring(model), tostring(name),
+        tostring(entry.model), tostring(entry.config), tostring(stage), cfg.respawn.mode, tonumber(dist) and string.format("%.0f", dist) or "?", tostring(veh.camVisible)))
       return {id = id, from = current, to = entry}
     end
     ::continue::
@@ -130,47 +139,18 @@ function M.check()
   return nil
 end
 
--- Reads a pick's data ahead (the game caches model info and the part config file). Returns the milliseconds it took.
-local function prefetch(entry)
-  local t0 = os.clock()
-  if core_vehicles and core_vehicles.getModel then pcall(core_vehicles.getModel, entry.model) end
-  if jsonReadFile then pcall(jsonReadFile, "vehicles/" .. entry.model .. "/" .. entry.config .. ".pc") end
-  return (os.clock() - t0) * 1000
-end
-
--- Fills the reserve, one pick per prepareSeconds, only when a build would be allowed now (frames fine, no chase, no build running).
-function M.prepare(cfg)
-  local pc = cfg.preload
-  if not pc.enabled or pc.reserve < 1 or PL.size(queue) >= pc.reserve then return nil end
-  local v, ts = ext("trafficVariety"), ext("trafficSwap")
-  if not (v and v.pickReplacement and ts and ts.canBuild and ts.canBuild() and not (ts.isBusy and ts.isBusy())) then return nil end
-  local entry = v.pickReplacement({}, nil)
-  if not entry then return nil end
-  local ms = prefetch(entry)
-  local c0 = v.contextNow and v.contextNow() or {}
-  PL.push(queue, entry, clock, tostring(c0.zone) .. "/" .. tostring(c0.night))
-  p3.count("preload prepared")
-  p3.log("I", string.format("preload: prepared %s/%s in %.1f ms; ready %d of %d", tostring(entry.model), tostring(entry.config), ms, PL.size(queue), pc.reserve))
-  return entry
-end
-
 function M.onUpdate(dtReal)
   local cfg = settings()
   if not cfg then return end
   dtReal = dtReal or 0
-  clock, timer, prepTimer = clock + dtReal, timer + dtReal, prepTimer + dtReal
-  if prepTimer >= cfg.preload.prepareSeconds then
-    prepTimer = 0
-    M.prepare(cfg)
-  end
+  clock, timer = clock + dtReal, timer + dtReal
   if timer >= cfg.respawn.checkSeconds then
     timer = 0
     M.check()
   end
 end
 
-function M.onServerLeave() tracker, clock, timer, queue, prepTimer = R.newTracker(), 0, 0, PL.newQueue(), 0 end
-function M.reserveSize() return PL.size(queue) end
+function M.onServerLeave() tracker, clock, timer = R.newTracker(), 0, 0 end
 function M.report() return p3.report() end
 function M.onExtensionLoaded() p3.log("I", "rlsmp_trafficReroll loaded") end
 M.onInit = function() setExtensionUnloadMode(M, "manual") end

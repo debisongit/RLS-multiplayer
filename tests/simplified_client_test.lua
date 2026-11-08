@@ -97,7 +97,7 @@ local function check(c, m) if not c then error("FAIL: " .. m, 2) end passed = pa
 local function setConfig(over)
   local simplified = {enabled = true, parked = true, traffic = true, nearRadius = 250, perMinute = 4, checkSeconds = 0.5}
   for k, v in pairs(over or {}) do simplified[k] = v end
-  config = V.sanitize({simplified = simplified, preload = {slowFrameMs = 2000, minGapSeconds = 0, settleSeconds = 0, reserve = 0}})
+  config = V.sanitize({simplified = simplified, preload = {slowFrameMs = 2000, minGapSeconds = 0, settleSeconds = 0}})
 end
 local function reset()
   objects, td, parkedList, replaceCalls, pkCalls, dyn, stealable, blocked = {}, {}, {}, {}, {}, {}, {}, {}

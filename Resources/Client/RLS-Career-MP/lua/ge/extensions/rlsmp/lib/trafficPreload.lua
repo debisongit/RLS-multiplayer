@@ -2,16 +2,15 @@
 -- SPDX-License-Identifier: AGPL-3.0-only
 --
 -- Building a car is expensive (jbeam, parts, meshes, vehicle thread) and cannot be done "hidden" without BeamMP syncing it, so we do not build
--- spare cars. We spread and prepare the work instead:
+-- spare cars. We spread the work instead:
 --   * frame guard: no build while the last frames were slow, and not for `settleSeconds` after a slow frame (a build is itself a slow frame,
 --     so builds are spaced out automatically); never two builds within `minGapSeconds`,
---   * reserve: the next picks are chosen ahead and their data (model info, .pc file) read ahead, one per `prepareSeconds`, in calm moments,
 --   * warm bias: `warmShare` of the picks come from models that are already on the map or were built this session (their meshes are loaded).
+-- (The old "reserve" of picks made ahead was removed: it only picked, it loaded nothing, so it saved nothing.)
 
 local M = {}
 
-M.DEFAULTS = {enabled = true, reserve = 3, prepareSeconds = 4, minGapSeconds = 6, slowFrameMs = 45, calmFrames = 45, settleSeconds = 3,
-  warmShare = 0.7, ageMax = 240}
+M.DEFAULTS = {enabled = true, minGapSeconds = 6, slowFrameMs = 45, calmFrames = 45, settleSeconds = 3, warmShare = 0.7}
 
 local function number(v, default, lo, hi)
   v = tonumber(v)
@@ -26,14 +25,11 @@ function M.sanitize(src)
   local d = M.DEFAULTS
   return {
     enabled = src.enabled ~= false,
-    reserve = math.floor(number(src.reserve, d.reserve, 0, 8)),
-    prepareSeconds = number(src.prepareSeconds, d.prepareSeconds, 1, 60),
     minGapSeconds = number(src.minGapSeconds, d.minGapSeconds, 0, 120),
     slowFrameMs = number(src.slowFrameMs, d.slowFrameMs, 10, 2000),
     calmFrames = math.floor(number(src.calmFrames, d.calmFrames, 5, 300)),
     settleSeconds = number(src.settleSeconds, d.settleSeconds, 0, 60),
     warmShare = number(src.warmShare, d.warmShare, 0, 1),
-    ageMax = number(src.ageMax, d.ageMax, 10, 3600),
   }
 end
 
@@ -61,28 +57,6 @@ function M.canBuild(g, now, pc)
 end
 
 function M.built(g, now) g.lastBuild = now end
-
--- Reserve (picks made ahead) -------------------------------------------------------------------------------------------------------------------
-function M.newQueue() return {} end
-function M.size(q) return #q end
-
--- tag = the context the pick was made for (road class and day or night): a pick is only used in the same context.
-function M.push(q, entry, now, tag)
-  for _, e in ipairs(q) do if e.entry.model == entry.model and e.entry.config == entry.config then return false end end
-  q[#q + 1] = {entry = entry, at = now, tag = tag}
-  return true
-end
-
--- The oldest ready pick that is not the car's own model; stale picks are dropped. nil when none.
-function M.take(q, currentModel, now, ageMax, tag)
-  for i = #q, 1, -1 do if now - q[i].at > ageMax or (tag ~= nil and q[i].tag ~= tag) then table.remove(q, i) end end
-  for i, e in ipairs(q) do
-    if e.entry.model ~= currentModel then table.remove(q, i) return e.entry end
-  end
-  return nil
-end
-
-function M.clear(q) for i = #q, 1, -1 do q[i] = nil end end
 
 -- Warm bias --------------------------------------------------------------------------------------------------------------------------------------
 -- With chance `share` and at least `minModels` warm models in the list, only those are offered; else the whole list.

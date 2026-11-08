@@ -79,9 +79,9 @@ local R = require("rlsmp/lib/trafficReroll")
 local passed = 0
 local function check(c, m) if not c then error("FAIL: " .. m, 2) end passed = passed + 1 end
 local function setConfig(over)
-  local c = {respawn = {perMinute = 3, chance = 1, waitSeconds = 3, checkSeconds = 0.5, repaintChance = 0}}
+  local c = {respawn = {mode = "inplace", perMinute = 3, chance = 1, waitSeconds = 3, checkSeconds = 0.5, repaintChance = 0}}
   for k, v in pairs(over or {}) do if k == "respawn" then for a, b in pairs(v) do c.respawn[a] = b end else c[k] = v end end
-  c.preload = c.preload or {slowFrameMs = 2000, minGapSeconds = 0, settleSeconds = 0, reserve = 3, prepareSeconds = 1}   -- the tests step 0.5 s per frame
+  c.preload = c.preload or {slowFrameMs = 2000, minGapSeconds = 0, settleSeconds = 0}   -- the tests step 0.5 s per frame
   config = V.sanitize(c)
 end
 local function run(seconds) for _ = 1, math.floor(seconds / 0.5) do S.onUpdate(0.5) T.onUpdate(0.5) end end
@@ -231,9 +231,9 @@ for _ in pairs(seenBrands) do nb = nb + 1 end
 check(repeats == 0, "one car respawning 40 times never keeps its model")
 check(nm >= 7 and nb == 4, "over 40 respawns almost all models and all brands show (" .. nm .. " models, " .. nb .. " brands)")
 
--- 10. preload: the frame guard postpones builds, the reserve is filled ahead and used -------------------------------------------------------------------
+-- 10b. preload: the frame guard postpones builds -------------------------------------------------------------------
 local function runDt(seconds, dt) for _ = 1, math.floor(seconds / dt) do S.onUpdate(dt) T.onUpdate(dt) end end
-reset() addObject(1, "unicycle") addCar(10, "sedan") setConfig({preload = {slowFrameMs = 100, minGapSeconds = 0, settleSeconds = 2, reserve = 0}})
+reset() addObject(1, "unicycle") addCar(10, "sedan") setConfig({preload = {slowFrameMs = 100, minGapSeconds = 0, settleSeconds = 2}})
 runDt(2, 0.016)
 S.onUpdate(0.4)                                    -- a hitch
 respawn(10)
@@ -242,18 +242,9 @@ check(#replaceCalls == 0, "right after a slow frame no car is built")
 check(saw("preload: build postponed: slow frame"), "the postponing is logged")
 runDt(1.5, 0.016)
 check(#replaceCalls == 1, "calm again: the re-roll goes ahead")
-check(saw("preload: build "), "the build time is logged")
+check(saw("build: ") and saw("mode=inplace took"), "the build time and mode are logged")
 
-reset() addObject(1, "unicycle") addCar(10, "sedan") setConfig({preload = {slowFrameMs = 100, minGapSeconds = 0, settleSeconds = 0, reserve = 2, prepareSeconds = 1}})
-runDt(5, 0.1)
-check(T.reserveSize() == 2, "the reserve fills up to its size (" .. T.reserveSize() .. ")")
-check(saw("preload: prepared ") and saw("ready 2 of 2"), "preparing is logged with the ready count")
-respawn(10)
-runDt(1, 0.1)
-check(#replaceCalls == 1 and saw("(pool stage reserve)") and saw("from the reserve"), "the re-roll uses a prepared pick")
-runDt(5, 0.1)
-check(T.reserveSize() == 2, "the reserve is refilled afterwards")
-reset() addObject(1, "unicycle") addCar(10, "sedan") setConfig({preload = {slowFrameMs = 100, minGapSeconds = 0, settleSeconds = 0, reserve = 2, prepareSeconds = 1}})
+reset() addObject(1, "unicycle") addCar(10, "sedan") setConfig({preload = {slowFrameMs = 100, minGapSeconds = 0, settleSeconds = 0}})
 runDt(5, 0.1)
 td[10].pursuit = {mode = 2}
 package.loaded["rlsmp/police"] = {isPursuit = function() return true end}
@@ -261,7 +252,7 @@ respawn(10)
 runDt(5, 0.1)
 check(#replaceCalls == 0, "no building in a chase")
 package.loaded["rlsmp/police"] = nil
-reset() addObject(1, "unicycle") addCar(10, "sedan") addCar(11, "van") setConfig({preload = {slowFrameMs = 100, minGapSeconds = 20, settleSeconds = 0, reserve = 0}, respawn = {perMinute = 12}})
+reset() addObject(1, "unicycle") addCar(10, "sedan") addCar(11, "van") setConfig({preload = {slowFrameMs = 100, minGapSeconds = 20, settleSeconds = 0}, respawn = {perMinute = 12}})
 runDt(1, 0.1)
 respawn(10) respawn(11)
 runDt(10, 0.1)
@@ -287,5 +278,81 @@ runDt(3, 0.1)
 check(#replaceCalls == 1 and replaceCalls[1].model == "simple_traffic" and adaptCalls == 1, "with the stand-in module: the pick goes through adapt() and a stand-in is built")
 check(saw("reroll: respawned car 10 sedan/cfg -> simple_traffic/x_traffic"), "the current model is the real one behind the stand-in; logged")
 package.loaded["rlsmp/simplified"] = nil
+
+-- 12. async mode: the new car comes through the game's group spawn queue; the old one goes after it --------------------------------------------------
+local groupCalls = {}
+vec3 = function(x, y, z) return {x = x, y = y, z = z} end
+quat = function(x, y, z, w) return {x = x, y = y, z = z, w = w} end
+core_multiSpawn = {spawnGroup = function(group, amount, params) groupCalls[#groupCalls + 1] = {group = group, amount = amount, params = params} return true end}
+local function newCarFromGroup()
+  nextId = nextId + 1
+  local g = groupCalls[#groupCalls].group[1]
+  local o = addObject(nextId, g.model)
+  o.partConfig = "vehicles/" .. g.model .. "/" .. g.config .. ".pc"
+  local id = nextId
+  o.delete = function() objects[id] = nil end
+  return id
+end
+local function asyncReset(over)
+  reset() groupCalls = {} addObject(1, "unicycle") addCar(10, "sedan") setConfig(over or {})
+  config.respawn.mode = (over and over.respawn and over.respawn.mode) or "async"
+  objects[10].getPosition = function() return {x = 5, y = 6, z = 7} end
+  objects[10].getRotation = function() return {x = 0, y = 0, z = 0, w = 1} end
+  objects[10].delete = function() objects[10] = nil td[10] = nil end
+end
+asyncReset()
+run(1) respawn(10) run(1)
+check(#replaceCalls == 0 and #groupCalls == 1, "async: replaceVehicle is not called, one group spawn is")
+local gc = groupCalls[1]
+check(gc.amount == 1 and #gc.group == 1 and gc.group[1].model ~= "sedan" and gc.group[1].config ~= nil, "async: a one-car group with another model and a config")
+check(gc.params.name == "rlsmpReroll" and gc.params.customTransforms[1].pos.x == 5 and gc.params.customTransforms[1].rot.w == 1, "async: named group, placed where the old car stands")
+check(objects[10] ~= nil and #inserted == 0, "async: the old car is still there until the new one exists")
+run(3)
+check(#groupCalls == 1 and objects[10] ~= nil, "async: waiting for the queue, nothing else is started")
+local newId = newCarFromGroup()
+S.onVehicleGroupSpawned({newId}, 1, "somebodyElse")
+check(objects[10] ~= nil, "async: another group's message is ignored")
+S.onVehicleGroupSpawned({newId}, 1, "rlsmpReroll")
+check(objects[10] == nil and inserted[1] == newId, "async: the new car is in traffic, then the old one is deleted")
+check(saw("build: ") and saw("mode=async total") and saw("worst frame"), "async: the build is logged with mode and times")
+run(10)
+check(#groupCalls == 1, "async: not re-rolled again")
+
+-- the old car became visible while the queue worked: the new car is deleted instead
+asyncReset()
+run(1) respawn(10) run(1)
+newId = newCarFromGroup()
+td[10].camVisible = true
+S.onVehicleGroupSpawned({newId}, 1, "rlsmpReroll")
+check(objects[10] ~= nil and objects[newId] == nil and #inserted == 0, "async: seen meanwhile, the new car goes, the old one stays")
+asyncReset()
+run(1) respawn(10) run(1)
+newId = newCarFromGroup()
+td[10].near = true
+S.onVehicleGroupSpawned({newId}, 1, "rlsmpReroll")
+check(objects[10] ~= nil and objects[newId] == nil and #inserted == 0, "async: near another player meanwhile: the same")
+
+-- the message never comes: the new car is found by looking, else a failure
+asyncReset()
+run(1) respawn(10) run(1)
+newId = newCarFromGroup()
+run(30)
+check(objects[10] == nil and inserted[1] == newId and saw("no group-spawned message"), "async: no message, the new car is adopted after the timeout")
+asyncReset({swap = {maxFailures = 1}})
+run(1) respawn(10) run(1)
+run(30)
+check(S.isLiveOff() and objects[10] ~= nil, "async: no car ever came: a failure, the old car stays")
+S.onServerLeave()
+
+-- no group spawn in the game: no re-rolling, no freeze; off: nothing
+asyncReset()
+core_multiSpawn = nil
+run(1) respawn(10) run(5)
+check(#groupCalls == 0 and #replaceCalls == 0 and saw("group spawn"), "async unavailable: nothing is built")
+core_multiSpawn = {spawnGroup = function() return true end}
+asyncReset({respawn = {mode = "off"}})
+run(1) respawn(10) run(5)
+check(#groupCalls == 0 and #replaceCalls == 0, "mode off: nothing")
+check(V.sanitize({respawn = {mode = "bogus"}}).respawn.mode == "async" and V.sanitize({respawn = {mode = "inplace"}}).respawn.mode == "inplace", "mode is sanitized")
 
 print(string.format("traffic_reroll_client_test: %d checks passed", passed))

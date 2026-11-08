@@ -1,5 +1,7 @@
 # Research: preloading cars (lag when a traffic car is re-rolled)
 
+> Update: the reserve (section 4, item 2) was removed; see `docs/RESEARCH_ASYNC_SWAP.md`. The frame guard and warm bias remain.
+
 Claude A. Sources: the owner's log of build 0.4.36 (`4fbbd693-beamng.log`), our own code, and what I know of BeamNG/BeamMP. The vanilla game files (`core/vehicles.lua`, `core/multiSpawn.lua`, `gameplay/traffic.lua`, `jbeam/*`) and BeamMP's `MPVehicleGE` are NOT in this repo, so everything about their insides is **unverified** and marked so.
 
 ## 1. What the log shows (verified)

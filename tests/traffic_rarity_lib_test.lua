@@ -91,7 +91,7 @@ check(V.zoneFromSpeed(12, zcfg) == "city" and V.zoneFromSpeed(22, zcfg) == "main
 
 -- preload lib ---------------------------------------------------------------------------------------------------------------------------------------
 local pd = PL.sanitize({reserve = 99, slowFrameMs = "x", warmShare = 2})
-check(pd.reserve == 8 and pd.slowFrameMs == 45 and pd.warmShare == 1, "preload sanitize")
+check(pd.reserve == nil and pd.slowFrameMs == 45 and pd.warmShare == 1, "preload sanitize")
 local pc = PL.sanitize({})
 local g = PL.newGuard()
 check(PL.canBuild(g, 100, pc), "calm start: allowed")
@@ -110,14 +110,6 @@ ok, why = PL.canBuild(g, 110, pc)
 check(not ok and why == "gap", "two builds are never closer than minGapSeconds")
 check(PL.canBuild(g, 109 + pc.minGapSeconds + 0.1, pc), "after the gap: allowed")
 
-local q = PL.newQueue()
-check(PL.push(q, {model = "a", config = "1"}, 0, "city/false") and not PL.push(q, {model = "a", config = "1"}, 0, "city/false"), "queue: no duplicates")
-PL.push(q, {model = "b", config = "1"}, 1, "city/false")
-local got = PL.take(q, "a", 2, 240, "city/false")
-check(got and got.model == "b" and PL.size(q) == 1, "take skips the car's own model")
-check(PL.take(q, "x", 2, 240, "highway/false") == nil and PL.size(q) == 0, "a pick made for another zone or time of day is dropped")
-PL.push(q, {model = "c", config = "1"}, 0, "t")
-check(PL.take(q, "x", 500, 240, "t") == nil, "a stale pick is dropped")
 local warm = {a = true, b = true, c = true, d = true, e = true, f = true}
 local list = {}
 for _, m in ipairs({"a", "b", "c", "d", "e", "f", "x", "y"}) do list[#list + 1] = {model = m, config = "1"} end
