@@ -49,7 +49,7 @@ function M.rebalance()
     if known[pid] ~= quota then
       if not bumped then revision, bumped = revision + 1, true end
       known[pid] = quota
-      net.send(pid, "rlsmpTrafficQuota", {active = quota, players = #list, rev = revision})
+      net.send(pid, "rlsmpTrafficQuota", {active = quota, min = math.max(0, math.floor(tonumber(cfg.minAmount) or 0)), players = #list, rev = revision})
       util.info(string.format("RLSMP-P3 traffic quota sent to pid=%s active=%d players=%d rev=%d", tostring(pid), quota, #list, revision))
     end
   end

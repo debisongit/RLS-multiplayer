@@ -50,7 +50,7 @@ or no `rlsmpHello` within `handshake.helloTimeoutSeconds`.
 
 | Direction | Event | Body |
 |---|---|---|
-| S→C | `rlsmpTrafficQuota` | `{active, players, rev}` ceiling for active traffic cars on this client; sent on join and whenever the number of career players changes |
+| S→C | `rlsmpTrafficQuota` | `{active, min, players, rev}` ceiling (`min` = traffic.minAmount, the client lifts a lower own amount to min(active, min) once) for active traffic cars on this client; sent on join and whenever the number of career players changes |
 
 `quota = clamp(floor(budget / players), minPerPlayer, maxPerPlayer)` where `budget` = `traffic.totalBudget` if above 0, else `baseBudget + perPlayerBudget x players` (grows with players online). The client only ever *lowers*
 `gameplay_traffic` active amount to the quota (re-checked every 3 s); RLS events that lower traffic are left alone.

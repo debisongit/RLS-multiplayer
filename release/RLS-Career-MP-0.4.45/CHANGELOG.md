@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.4.45 (untested in-game)
+- Same few cars again and again: the owner's log showed the game's own traffic amount was only 4, so 4 cars kept respawning around the player every few seconds. The server now lifts a lower amount to `traffic.minAmount` (default 10, never above the quota, 0 = leave the player's own). Costs some frame rate on weak PCs: lower it if it lags. (Claude A)
+
 ## 0.4.44 (untested in-game)
 - Selling a modded car uses the same fair price as the dealership (`modPrice.sell`, on by default), so there is no cheap-buy, high-sell trick. Not covered yet: auction pricing, repo jobs, car meet sales and the racing team. (Claude A)
 

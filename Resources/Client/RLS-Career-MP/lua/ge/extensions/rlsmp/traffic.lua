@@ -12,6 +12,7 @@ local p3 = require("rlsmp/lib/p3")
 
 local CHECK_EVERY = 3     -- seconds between ceiling checks
 local quota               -- nil until the server sends one
+local wantMin = 0         -- the server's wished lowest traffic amount (traffic.minAmount), 0 = leave the player's own
 local original, setByUs   -- the player's own traffic amount before we lowered it, and the value we set (to tell our change from RLS's)
 local timer = 0
 
@@ -56,13 +57,30 @@ local function enforce()
   return false
 end
 
+-- A game that starts with a tiny traffic amount (a log showed 4) shows the same few cars again and again. Lift it once to the server's
+-- minimum (never above the quota, never while traffic is off or in a chase). Done when the quota arrives, not every frame, so RLS can still lower it.
+function M.raiseToMin()
+  if not quota or wantMin <= 0 or not isMP() or not careerActive() or chased() then return false end
+  if not gameplay_traffic or not gameplay_traffic.setActiveAmount or not gameplay_traffic.getTrafficVars then return false end
+  local vars = gameplay_traffic.getTrafficVars()
+  local current = vars and tonumber(vars.activeAmount)
+  local target = math.min(quota, wantMin)
+  if not current or current < 1 or current >= target then return false end
+  original = original or current
+  gameplay_traffic.setActiveAmount(target)
+  setByUs = target
+  p3.log("I", string.format("TRAFFIC amount raised %s -> %s (server minimum)", tostring(current), tostring(target)))
+  return true
+end
+
 local function onQuota(data)
   local n = tonumber(data.active)
   if not n or n < 0 then return end
   quota = math.floor(n)
+  wantMin = math.max(0, math.floor(tonumber(data.min) or 0))
   p3.count("quota messages")
-  p3.log("I", string.format("quota received active=%s players=%s rev=%s", tostring(quota), tostring(data.players), tostring(data.rev)))
-  enforce()
+  p3.log("I", string.format("quota received active=%s min=%s players=%s rev=%s", tostring(quota), tostring(wantMin), tostring(data.players), tostring(data.rev)))
+  if not enforce() then M.raiseToMin() end
 end
 
 function M.getQuota() return quota end

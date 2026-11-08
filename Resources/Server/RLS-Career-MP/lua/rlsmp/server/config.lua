@@ -71,6 +71,8 @@ M.defaults = {
     -- (baseBudget + perPlayerBudget x players), so more players means more traffic overall but fewer cars per game.
     -- Any number above 0 fixes the budget instead.
     totalBudget = 0,
+    -- Lowest traffic amount a player starts with (0 = leave each player's own RLS setting). A game set to 4 shows the same few cars again and again.
+    minAmount = 10,
     baseBudget = 30,
     perPlayerBudget = 10,
     -- Every player gets at least / at most this many (a lone player gets maxPerPlayer).

@@ -36,7 +36,7 @@ check(traffic._enforce() == false and calls == 0, "nothing to enforce before the
 
 server({active = 12, players = 2, rev = 3})
 check(traffic.getQuota() == 12 and active == 12, "quota lowers traffic above it")
-check(saw("RLSMP-P3|quota received active=12 players=2 rev=3"), "quota received line")
+check(saw("RLSMP-P3|quota received active=12 min=0 players=2 rev=3"), "quota received line")
 check(saw("RLSMP-P3|TRAFFIC ceiling lowered 30 -> 12"), "ceiling line")
 
 active = 5 -- an RLS event cut traffic
