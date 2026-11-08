@@ -29,6 +29,7 @@ function M.payload()
     antiTeleport = cfg.antiTeleport == true,
     blockRoadblocks = cfg.blockRoadblocks == true,
     noFineInStolenCar = cfg.noFineInStolenCar ~= false,
+    noRadarFineIllegal = cfg.noRadarFineIllegal ~= false,
     respawnBehind = cfg.respawnBehind ~= false,
     respawnPerMinute = tonumber(cfg.respawnPerMinute),
     respawnGap = tonumber(cfg.respawnGap),

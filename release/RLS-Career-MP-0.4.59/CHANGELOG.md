@@ -1,9 +1,13 @@
 # Changelog
 
+## 0.4.59 (untested in-game)
+- No radar fines in a stolen car or a car with a fake plate: speed cameras and red light cameras take no money and add no ticket (`police.noRadarFineIllegal`, default on). The message says the radar flashed a car that is not yours. (Claude A)
+
 ## 0.4.58 (untested in-game)
 - Crashed traffic cars near you now go away: removed 60 s after the crash if nobody sees them, or after 120 s in view (never closer than 40 m to a player). A damaged car that still drives stays. `traffic.unjam.crashed`, `crashedSeconds`, `inViewSeconds`. (Claude A)
 
 ## Unreleased (untested in-game)
+- No radar fine in a stolen car or with a fake plate: the earlier fix only covered the fine when a chase ends. Speed cameras and red-light cameras are another RLS system (`career/police/speedTraps.lua`), which charges `ui.career.attributeLog.fineSpeeding` / `fineRedLight`, shows "Traffic Violation" and adds a ticket. When your car is a stolen one (made from a parked car, or put back by recall) or has a fake plate fitted, no money is taken, no ticket is made, and the message says "Radar flashed a car that is not yours: no fine." Other cars are fined as before. Switch: `police.noRadarFineIllegal` (default on, also in the `[` menu). Log line `RLSMP-FINE refused (radar) id=... reason=stolen|fakeplate`. (Claude A)
 - Crashed traffic cars no longer sit on the road for ever: RLS keeps a crashed car around (it adds 1000 m to its respawn radius) and our stuck rule needs 400 m, so a wreck near you stayed. Now a crashed car that stands still is removed with the game's own fade-out: when nobody can see it, 60 s after the crash; when it stays in sight and is 40 m or more from everyone, 120 s after the crash. A damaged car that still drives, police, taxis, job and pursuit cars, and your own and other players' cars are never touched. Server setting `traffic.unjam.crashed` (default true), `crashedSeconds`, `inViewSeconds`, also in the `[` menu. Log lines `unjam: crashed car id=...`. (Claude A)
 
 ## 0.4.57 (untested in-game)

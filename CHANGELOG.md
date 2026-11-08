@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.4.59 (untested in-game)
+- No radar fines in a stolen car or a car with a fake plate: speed cameras and red light cameras take no money and add no ticket (`police.noRadarFineIllegal`, default on). The message says the radar flashed a car that is not yours. (Claude A)
+
 ## 0.4.58 (untested in-game)
 - Crashed traffic cars near you now go away: removed 60 s after the crash if nobody sees them, or after 120 s in view (never closer than 40 m to a player). A damaged car that still drives stays. `traffic.unjam.crashed`, `crashedSeconds`, `inViewSeconds`. (Claude A)
 
