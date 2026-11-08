@@ -146,7 +146,7 @@ M.defaults = {
     zoneSpeedLimits = {city = 17, main = 27},
     -- Live swapping: a traffic car that nobody can see is replaced by a model that fits the road class and day or night better.
     -- enabled = only watch and log what would happen (changes nothing). live = really replace the cars (EXPERIMENTAL, never tried in the game).
-    swap = {enabled = false, live = false, perMinute = 2, hiddenSeconds = 5, checkSeconds = 2, minRatio = 1.5, maxFailures = 3},
+    swap = {enabled = true, live = true, perMinute = 2, hiddenSeconds = 5, checkSeconds = 2, minRatio = 1.5, maxFailures = 3},
   },
 
   smartTraffic = {

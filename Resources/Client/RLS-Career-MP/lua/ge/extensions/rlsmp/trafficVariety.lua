@@ -34,8 +34,18 @@ local RECENT_MAX = 120
 
 local function careerActive() return overhaul_career_career ~= nil and overhaul_career_career.isActive() end
 
+-- The server's settings can arrive AFTER RLS built its first traffic group (seen in a real log: settings at 57.5 s, group built just before).
+-- Cars keep their model on respawn, so a missed first group means the same few cars for the whole session. Until the server speaks we use
+-- the built-in defaults (same as the server's defaults); the server's real settings replace them as soon as they arrive.
+local provisional = false
 local function active()
-  return config ~= nil and config.enabled and mp.isMPSession() and careerActive()
+  if not (mp.isMPSession() and careerActive()) then return false end
+  if config == nil then
+    config = V.sanitize({})
+    provisional = true
+    p3.log("I", "traffic variety: server settings not here yet, using the defaults for now")
+  end
+  return config.enabled
 end
 
 -- The model's own "Type" in the game's model list ("Car", "Truck", ...), cached.
@@ -262,6 +272,7 @@ end
 
 local function onConfig(data)
   config = V.sanitize(data)
+  provisional = false
   local mods = 0
   for _ in pairs(config.mods) do mods = mods + 1 end
   p3.log("I", string.format("traffic variety settings received: enabled=%s mods=%d maxShare=%.2f oversample=%.1f traffic=%s parked=%s",
@@ -271,7 +282,7 @@ end
 function M.onUpdate() M.install() end
 
 function M.onServerLeave()
-  config, typeCache, missingMods, probed = nil, {}, {}, false
+  config, provisional, typeCache, missingMods, probed = nil, false, {}, {}, false
   recent, recentSeen = {}, {}
 end
 

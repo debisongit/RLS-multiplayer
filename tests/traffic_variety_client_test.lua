@@ -81,10 +81,11 @@ check(ours ~= vanilla and forwarders[ours] == vanilla, "registered as a forwarde
 for _ = 1, 10 do T.install() end
 check(core_multiSpawn.createGroup == ours, "installing every frame never stacks another layer")
 
--- 2. before the server speaks the game's group is untouched -------------------------------------------------------------
+-- 2. before the server speaks the built-in defaults are used (the first group must not be missed) -----------------------
 vanillaCalls = {}
 local g = core_multiSpawn.createGroup(8, TRAFFIC)
-check(#g == 8 and #vanillaCalls == 1 and vanillaCalls[1] == 8, "no settings yet: the game's own call, same size")
+check(#g == 8 and #vanillaCalls == 1 and vanillaCalls[1] == 16, "no settings yet: defaults apply (pool 2x), group of the wanted size")
+check(saw("server settings not here yet, using the defaults"), "the provisional start is logged")
 
 -- 3. with settings: bigger pool in, group of the wanted size out ---------------------------------------------------------
 server({enabled = true})
@@ -290,7 +291,7 @@ T.onServerLeave()
 check(T.getConfig() == nil, "settings forgotten on leaving")
 vanillaCalls = {}
 core_multiSpawn.createGroup(4, TRAFFIC)
-check(vanillaCalls[1] == 4, "after leaving: the game's own group")
+check(vanillaCalls[1] == 8, "after leaving (still flagged as a session): defaults again, never stuck without settings")
 
 -- a model with no .jbeam files (a leftover of a deleted mod; a real log showed G30_Domestic crash the spawn) is never put in a group ------------------------
 server({enabled = true})

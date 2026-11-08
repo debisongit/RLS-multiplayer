@@ -30,7 +30,7 @@ check(cfg.trafficVariety.enabled == true and cfg.trafficVariety.maxShare == 0.25
 check(next(cfg.trafficVariety.mods) == nil and next(cfg.trafficVariety.typeWeights) == nil and next(cfg.trafficVariety.models) == nil, "no mods and no weights out of the box")
 check(cfg.trafficAdmin == nil, "no admin list: the settings menu is open to everybody")
 check(cfg.trafficVariety.zoneSpeedLimits.city == 17 and cfg.trafficVariety.zoneSpeedLimits.main == 27, "road class limits")
-check(cfg.trafficVariety.swap.enabled == false and cfg.trafficVariety.swap.live == false, "live swapping: both switches off out of the box")
+check(cfg.trafficVariety.swap.enabled == true and cfg.trafficVariety.swap.live == true, "live swapping: on out of the box (stops itself after 3 failures)")
 
 -- sent once, when loaded
 stages[0] = "await_hello"
@@ -41,7 +41,7 @@ tick()
 local m = take()
 check(#m == 1 and m[1].name == "rlsmpTrafficVariety" and m[1].data.enabled == true and m[1].data.maxShare == 0.25, "settings sent on load")
 check(m[1].data.applyToTraffic == true and m[1].data.applyToParked == true, "traffic and parked on")
-check(m[1].data.swap.enabled == false and m[1].data.swap.live == false and m[1].data.swap.perMinute == 2, "swap settings are sent, switched off")
+check(m[1].data.swap.enabled == true and m[1].data.swap.live == true and m[1].data.swap.perMinute == 2, "swap settings are sent, switched on")
 tick()
 check(#take() == 0, "sent only once")
 stages[0] = nil

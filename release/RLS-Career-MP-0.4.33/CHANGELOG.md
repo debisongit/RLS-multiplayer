@@ -1,6 +1,10 @@
 # Changelog
 
-## Summary of 0.4.14 to 0.4.32 (what was added, in one place)
+## 0.4.33
+- Traffic variety no longer misses the first traffic group: a real log showed RLS built it about 1 s before the server's settings arrived, so every car kept its model for the whole session. Now the built-in defaults are used until the server speaks. (Claude A)
+- Live swapping of hidden traffic cars is **on by default** on new servers (`trafficVariety.swap.enabled` and `live`), so respawned cars change model. It stops itself after 3 failures. Existing servers: set both to `true` in `config.json` or in the traffic menu. Untested in-game.
+
+## Summary of 0.4.14 to 0.4.33 (what was added, in one place)
 Every line below, and every line of the list further down, ends with who made it: **Claude A** (saves, wallet, business, claims, plates, market, theft core) or **Claude B** (traffic, police, variety, weather, traffic menu, fence, phone app).
 - 0.4.14: police freeze only the cops in your chase, players report positions (`/where`), shared shop stock (off). (Claude A)
 - 0.4.15: smart traffic personalities. 0.4.16: stuck traffic recycling. 0.4.17: duplicate-car cleanup. (Claude A)
