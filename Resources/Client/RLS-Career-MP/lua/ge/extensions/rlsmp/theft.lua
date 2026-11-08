@@ -14,6 +14,10 @@
 --    the player gets in, and the server hears about it (rlsmpTheftDone) and decides when it is reported.
 -- The car is NOT put in the garage inventory: selling and stripping go through the fence (/fence, server/fence.lua) using M.stolenCars().
 -- rlsmpTheftReported needs nothing here: the police find the car by its plate (plate reading).
+-- 6. Inspect hint (black market members only, decided by the SERVER): within cfg.inspect.range of a stealable parked car we ask
+--    (rlsmpTheftHint); only a member in range gets an answer, then one small toast says "type /inspect". /inspect (rlsmpTheftInspectAsk)
+--    works on the nearest parked car of ANY kind, takes a few seconds and the server answers with text; boring cars and non-members
+--    get the same wait and the plain "nothing stands out" text, so the answer never tells who is a member.
 -- Untested in-game. Log tag RLSMP-THEFT.
 
 local M = {}
@@ -36,6 +40,8 @@ local lastCensus = -999
 local spots = {}               -- vehicle id -> {key, stealable}
 local target                   -- {id, key, info, can, method, label, seconds, asked}
 local action                   -- {id, info, method, seconds, elapsed, startPos, noise, lastShown, finishing}
+local inspectAct              -- {id, seconds, elapsed, startPos, lastShown, finishing}
+local hintAsked, hinted = {}, {}   -- parked car id -> time we asked / spot key we got a hint for
 local pendingEnter             -- {id, at}
 local stolen = {}              -- new vehicle id -> {vehId, plate, model, config, color, value, year, t, reported}
 local noiseLevel, noiseUntil = 0, -1
@@ -47,7 +53,7 @@ local function say(level, msg) log(level, TAG, msg) end
 
 function M.enable(on)
   enabled = on == true
-  if not enabled then target, action, pendingEnter = nil, nil, nil end
+  if not enabled then target, action, inspectAct, pendingEnter = nil, nil, nil, nil end
 end
 
 local function active() return enabled and cfg ~= nil and cfg.enabled == true end
@@ -96,6 +102,32 @@ function M.nearestStealable(pos)
     if d <= radius() and (not bestD or d < bestD) and M.isStealable(id) then best, bestD = id, d end
   end
   return best, bestD
+end
+
+-- Parked cars (stealable or not) within `radius` of pos, nearest first: list of {id, pos, d}.
+local function parkedNear(pos, radius)
+  local out = {}
+  for _, id in ipairs(parkedIds()) do
+    local p = posOf(objOf(id))
+    local d = p and T.dist(pos, p) or math.huge
+    if d <= radius then out[#out + 1] = {id = id, pos = p, d = d} end
+  end
+  table.sort(out, function(a, b) return a.d < b.d end)
+  return out
+end
+
+-- Stealable parked cars within `radius` m of the player (on foot or in a car), nearest first, at most `max`: {x, y, z} list for the scout tip
+-- (the server checks each one again, see server/market.lua cmds.scout).
+function M.stealableNear(radius, max)
+  local id = be and be.getPlayerVehicleID and be:getPlayerVehicleID(0)
+  local pos = posOf(objOf(id))
+  local out = {}
+  if not (pos and active()) then return out end
+  for _, c in ipairs(parkedNear(pos, tonumber(radius) or 800)) do
+    if M.isStealable(c.id) then out[#out + 1] = {x = c.pos.x, y = c.pos.y, z = c.pos.z} end
+    if #out >= (tonumber(max) or 8) then break end
+  end
+  return out
 end
 
 -- Model, config, value and year of a parked car (value = RLS's base price of the config, year = first year of the config).
@@ -242,6 +274,42 @@ local function runAction(dt, pos)
   end
 end
 
+-- Ask the server about stealable cars close by; it answers only a member who really stands in range (re-asked every 15 s until it does).
+local function scanHints(pos)
+  local I = cfg.inspect
+  if not (I and I.enabled) then return end
+  for _, c in ipairs(parkedNear(pos, I.range)) do
+    if M.isStealable(c.id) and hinted[c.id] ~= spots[c.id].key and clock - (hintAsked[c.id] or -999) > 15 then
+      hintAsked[c.id] = clock
+      if rlsmp_positions and rlsmp_positions.reportNow then rlsmp_positions.reportNow() end
+      net.send("rlsmpTheftHint", {id = c.id, x = c.pos.x, y = c.pos.y})
+    end
+  end
+end
+
+local function runInspect(dt, pos)
+  local a = inspectAct
+  a.elapsed = a.elapsed + dt
+  if a.waiting then   -- the server's go has not come yet (it stays silent while its short cooldown runs)
+    if a.elapsed > 5 then inspectAct = nil end
+    return
+  end
+  local car = objOf(a.id)
+  if not (car and pos) or T.dist(pos, a.startPos) > CANCEL_MOVE then
+    inspectAct = nil
+    return toast("warning", "You walked away.", 2500)
+  end
+  local shown = math.floor(a.elapsed)
+  if shown > a.lastShown and not a.finishing then
+    a.lastShown = shown
+    toast("info", string.format("Looking the car over... %d / %d s", math.min(shown, a.seconds), a.seconds), 1100)
+  end
+  if a.elapsed >= a.seconds and not a.finishing then
+    a.finishing = true
+    net.send("rlsmpTheftInspectFinish", {})
+  end
+end
+
 function M.onUpdate(dtReal)
   local dt = dtReal or 0
   clock = clock + dt
@@ -249,6 +317,7 @@ function M.onUpdate(dtReal)
   if not active() then return end
   local _, pos = walker()
   if action then return runAction(dt, pos) end
+  if inspectAct then return runInspect(dt, pos) end
   scanTimer = scanTimer + dt
   if scanTimer < SCAN_EVERY then return end
   scanTimer = 0
@@ -266,6 +335,7 @@ function M.onUpdate(dtReal)
     say("I", string.format("parked cars known: %d, within 60 m: %d, nearest: %s m, stealable share: %s/1000", total, near,
       nearest == math.huge and "none" or tostring(math.floor(nearest)), tostring(cfg.perMille)))
   end
+  scanHints(pos)
   local id = M.nearestStealable(pos)
   if not id then target = nil return end
   if target and target.id == id then
@@ -289,12 +359,13 @@ end
 local function onConfig(d)
   local was = cfg and cfg.period
   cfg = {enabled = d.enabled == true, seed = tonumber(d.seed) or 0, period = tonumber(d.period) or 0,
-    perMille = tonumber(d.perMille) or 0, periodSeconds = tonumber(d.periodSeconds) or 3600, radius = tonumber(d.radius) or 3}
-  if was ~= cfg.period then spots, target = {}, nil end
+    perMille = tonumber(d.perMille) or 0, periodSeconds = tonumber(d.periodSeconds) or 3600, radius = tonumber(d.radius) or 3,
+    inspect = type(d.inspect) == "table" and {enabled = d.inspect.enabled == true, range = tonumber(d.inspect.range) or 15} or nil}
+  if was ~= cfg.period then spots, target, hintAsked, hinted = {}, nil, {}, {} end
   if not cfg.enabled then
     -- switched off from the menu: drop the prompt, and stop a steal that is running (the server refuses the finish anyway)
     if action then net.send("rlsmpTheftCancel", {}) toast("warning", "Car theft was switched off.") end
-    target, action = nil, nil
+    target, action, inspectAct = nil, nil, nil
   end
   say("I", string.format("config: enabled=%s period=%s perMille=%s", tostring(cfg.enabled), tostring(cfg.period), tostring(cfg.perMille)))
 end
@@ -305,6 +376,40 @@ local function onCan(d)
   if not target.can then return end
   target.method, target.label, target.seconds = d.method, d.label, d.seconds
   toast("info", string.format("This car could be yours. Type /steal (%s, %s s).", tostring(d.label), tostring(d.seconds)), 6000)
+end
+
+local function onHint(d)
+  if not (active() and d.ok == true and d.id) then return end
+  local c = spots[d.id]
+  if not c or hinted[d.id] == c.key then return end
+  hinted[d.id] = c.key
+  toast("info", "A parked car nearby may be an easy mark. Type /inspect to look closer.", 5000)
+end
+
+-- /inspect: the nearest parked car within range, whatever it is.
+local function onInspectAsk()
+  local I = active() and cfg.inspect
+  if not (I and I.enabled) then return end
+  if action or inspectAct then return toast("warning", "You are already busy.", 2500) end
+  local o, pos = walker()
+  if not pos then return toast("warning", "Get out of your car first.", 3000) end
+  local c = parkedNear(pos, I.range)[1]
+  if not c then return toast("info", "No parked car close enough to look at.", 3000) end
+  local info = M.carInfo(objOf(c.id)) or {}
+  if rlsmp_positions and rlsmp_positions.reportNow then rlsmp_positions.reportNow() end
+  inspectAct = {id = c.id, seconds = 0, elapsed = 0, startPos = pos, lastShown = -1, finishing = false, waiting = true}
+  net.send("rlsmpTheftInspect", {id = c.id, x = c.pos.x, y = c.pos.y, z = c.pos.z, value = info.value or 0, year = info.year})
+end
+
+local function onInspectGo(d)
+  if not inspectAct then return end
+  if not d.ok then inspectAct = nil return end
+  inspectAct.seconds, inspectAct.waiting, inspectAct.elapsed = tonumber(d.seconds) or 3, nil, 0
+end
+
+local function onInspected(d)
+  inspectAct = nil
+  toast(d.found and "warning" or "info", tostring(d.text or ""):sub(1, 400), d.found and 14000 or 4000)
 end
 
 local function onSteal(d)
@@ -423,8 +528,8 @@ function M.onVehicleDestroyed(id)
 end
 
 function M.onServerLeave()
-  cfg, target, action, pendingEnter = nil, nil, nil, nil
-  spots, stolen = {}, {}
+  cfg, target, action, inspectAct, pendingEnter = nil, nil, nil, nil, nil
+  spots, stolen, hintAsked, hinted = {}, {}, {}, {}
   T.clearConverted()
 end
 
@@ -432,6 +537,10 @@ function M.onExtensionLoaded()
   net.on("rlsmpTheftConfig", onConfig)
   net.on("rlsmpTheftCan", onCan)
   net.on("rlsmpTheftSteal", onSteal)
+  net.on("rlsmpTheftHint", onHint)
+  net.on("rlsmpTheftInspectAsk", onInspectAsk)
+  net.on("rlsmpTheftInspectGo", onInspectGo)
+  net.on("rlsmpTheftInspected", onInspected)
   net.on("rlsmpTheftGo", onGo)
   net.on("rlsmpTheftResult", onResult)
   net.on("rlsmpTheftReported", onReported)
@@ -441,6 +550,7 @@ end
 
 M._target = function() return target end
 M._action = function() return action end
+M._inspect = function() return inspectAct end
 M.onInit = function() setExtensionUnloadMode(M, "manual") end
 
 return M

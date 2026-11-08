@@ -260,8 +260,14 @@ The screen has no rules: it shows what the server last sent and relays taps. Not
 |---|---|---|
 | C→S | `rlsmpMarketGet` | `{}` at most one answer per player per second |
 | S→C | `rlsmpMarketState` | `{ready, member, money, spot, invite = {from, seconds}?}` plus, for members, `{rep, invitesLeft, items = [{name, label, price, minRep, durable, locked, have, onOrder}], orders = [{id, item, label, n, spot, readyIn, ready}] (orders also for players who were thrown out but still have paid orders)}` |
-| C→S | `rlsmpMarketAct` | `{a = "buy" \| "pickup" \| "invite" \| "accept", item?, n?, who?}`; at most one per player per second (a separate limit from Get). Runs the same command as the chat |
+| C→S | `rlsmpMarketAct` | `{a = "buy" \| "pickup" \| "invite" \| "accept" \| "scout", item?, n?, who?, cars?}`; at most one per player per second (a separate limit from Get). Runs the same command as the chat (`scout` has no chat form; `cars` = `[{x, y, z}]`, at most 8 stealable parked cars the game sees near the player) |
 | S→C | `rlsmpMarketResult` | `{text}` what the command would have said in chat (collected instead of sent to chat), then a fresh `rlsmpMarketState` |
+| S→C | `rlsmpMarketScout` | `{marks = [{x, y, z}], seconds}` after a bought scout tip: 2 to 3 stealable parked cars, shown as small spheres (no text) for `seconds` |
+
+Scout tip (members, needs `theft.enabled`, config `market.scout`): the server knows no parked car, so the game sends the stealable ones it sees. The server keeps those within `radius` (800 m) of the
+player's own `rlsmpPos` position (fresh, `positionMaxAge`) that `theft.stealableAt` (same hash as the client) also picks, picks `minCount`..`maxCount` at random, charges `price`, and starts a
+`cooldownSeconds` wait. Nothing found = nothing charged. `seconds` is cut to what is left of the current theft pick (a car stealable now may not be next period), and a tip is refused in the last 60 s.
+More than `freeUsesPerHour` tips an hour cost `repCost` reputation each. `rlsmpMarketState.scout = {price, minRep, locked, radius, minCount, maxCount, minutes, wait}` (members only, absent when off).
 
 
 ## Flow control
@@ -348,6 +354,21 @@ Weights are `{name = number >= 0}` (at most 64 entries, names up to 64 character
 | S→C | `rlsmpTheftResult` | `{ok}` or `{ok = false, err}` (failure roll; non-durable items are used up only on `ok`) |
 | C→S | `rlsmpTheftDone` | `{plate, model, color, value, year, x, y, z, witnesses}` after the parked car was turned into a real car |
 | S→C | `rlsmpTheftReported` | `{plate}` the car was reported stolen (the client only marks it; police find it by the plate) |
+
+### Inspect hint (members only; config `theft.inspect`)
+
+| Direction | Event | Body |
+|---|---|---|
+| C→S | `rlsmpTheftHint` | `{id, x, y}` the player is within `inspect.range` of a stealable parked car (the game asks again every 15 s while it stands there and nothing came back) |
+| S→C | `rlsmpTheftHint` | `{id, ok = true}` ONLY for a black market member whose server-side position is within range (+5 m) of x/y at a car `theft.stealableAt` picks. Everybody else gets no answer at all |
+| S→C | `rlsmpTheftInspectAsk` | `{}` from chat `/inspect`; the game picks the nearest parked car of ANY kind within range |
+| C→S | `rlsmpTheftInspect` | `{id, x, y, z, value, year}` |
+| S→C | `rlsmpTheftInspectGo` | `{ok, seconds}` the same for every player and car (`inspect.seconds`, 3) |
+| C→S | `rlsmpTheftInspectFinish` | `{}` the timer ran out (earlier than `seconds - 1` is ignored) |
+| S→C | `rlsmpTheftInspected` | `{id, found, text}` a member in range at a stealable car: tier, ways in with missing tools named, risk (alarm, GPS tracker, loud). Anyone else: `found = false` and the same "Just a parked car" text |
+
+The game shows the hint as a small toast ("type /inspect"), never a text label. One start per `inspect.cooldown` s. `rlsmpTheftConfig` also carries `inspect = {enabled, range}`.
+Honest limit: the seed is still sent to every game (the prompt at 3 m works for everybody), so a modified client can work out the stealable cars itself; the server only never confirms it.
 
 - Stealable pick: every client hashes (`seed`, `period`, x and y of the parked car rounded down to a 4 m grid) with FNV-1a and takes the car when
   `hash % 1000 < perMille`. The seed comes from the server tag and the period (`floor(serverTime / periodSeconds)`), so it is the same for everyone and

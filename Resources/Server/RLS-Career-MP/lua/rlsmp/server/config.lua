@@ -284,6 +284,9 @@ M.defaults = {
     unseenReportSeconds = 600,
     trackerReportSeconds = 20,
     keepHours = 48,
+    -- Inspect hint (black market MEMBERS ONLY): a member on foot within `range` m of a stealable parked car gets a small toast;
+    -- /inspect takes `seconds` and tells tier, tools (missing ones) and rough risk. Everybody else only ever hears "looks boring".
+    inspect = {enabled = true, range = 15, seconds = 3, cooldown = 2},
   },
 
   vehicles = {
@@ -374,6 +377,10 @@ M.defaults = {
     -- The fence pays this share of a stolen car's or part's value (legit sales pay more).
     fenceCarRate = 0.35,
     fencePartRate = 0.3,
+    -- Scout tip (phone app, members, needs theft.enabled): marks minCount..maxCount stealable parked cars within `radius` m for `seconds`
+    -- (never longer than the current theft pick lasts). More than freeUsesPerHour tips an hour cost repCost reputation each.
+    scout = {enabled = true, price = 3000, minRep = 5, radius = 800, seconds = 600, minCount = 2, maxCount = 3,
+      cooldownSeconds = 120, freeUsesPerHour = 3, repCost = 1},
     -- item -> {price, minRep}; item names come from items.lua CATALOG. Set off = true to stop selling one.
     tiers = {
       screwdriver     = {price = 400, minRep = 0},

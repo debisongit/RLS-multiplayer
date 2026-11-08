@@ -82,6 +82,14 @@
           </div>
         </section>
 
+        <section v-if="state.scout" class="card">
+          <h2>Scout tip</h2>
+          <p>A scout marks {{ state.scout.minCount }} to {{ state.scout.maxCount }} easy parked cars within about {{ Math.round(state.scout.radius) }} m of you for about {{ state.scout.minutes }} minutes. Small dots float over them. Too many tips in an hour cost reputation.</p>
+          <button type="button" class="primary" bng-nav-item :disabled="busy || state.scout.locked || state.scout.wait > 0 || state.money < state.scout.price" @click="act('scout')">
+            {{ scoutLabel }}
+          </button>
+        </section>
+
         <section class="card">
           <h2>Stolen cars</h2>
           <p>Drive the car to {{ state.spot || 'the drop spot' }}, get out, stand next to it and type <strong>/fence</strong> in chat for the prices.</p>
@@ -128,6 +136,14 @@ const items = computed(() => asList(state.value && state.value.items))
 const orderList = computed(() => asList(state.value && state.value.orders))
 const available = computed(() => items.value.filter(it => !it.locked))
 const locked = computed(() => items.value.filter(it => it.locked))
+const scoutLabel = computed(() => {
+  const sc = state.value && state.value.scout
+  if (!sc) return ''
+  if (sc.locked) return 'Needs reputation ' + sc.minRep
+  if (sc.wait > 0) return 'Wait ' + Math.ceil(sc.wait) + ' s'
+  if ((Number(state.value.money) || 0) < sc.price) return 'Too expensive'
+  return 'Buy scout tip ' + money(sc.price)
+})
 const anyReady = computed(() => orderList.value.some(o => o.ready))
 
 function money(n) {

@@ -5,6 +5,7 @@ jsonEncode, jsonDecode = json.encode, json.decode
 function log() end
 function setExtensionUnloadMode() end
 local handlers, toasts, drawn, reports = {}, {}, 0, 0
+local scoutAsked
 TriggerServerEvent = function() end
 AddEventHandler = function(name, fn) handlers[name] = fn end
 guihooks = {trigger = function(_, t) toasts[#toasts + 1] = t.msg end}
@@ -126,6 +127,28 @@ check(sentApp[#sentApp].data.a == "accept", "app: accept")
 check(market.uiAct(42) == false and market.uiAct(nil) == false, "app: a non-text action is refused here")
 server("rlsmpMarketState", "garbage")
 check(market.uiGet().state.rep == 12, "app: a bad state message changes nothing")
+-- scout tip: the game sends the stealable parked cars it sees; the marks are small spheres until the time is up
+server("rlsmpMarketState", {ready = true, member = true, rep = 12, scout = {radius = 900}})
+rlsmp_theft = {stealableNear = function(r, max) scoutAsked = {r, max} return {{x = 1, y = 2, z = 3}} end}
+market.uiAct("scout")
+local sa = sentApp[#sentApp]
+check(sa.data.a == "scout" and #sa.data.cars == 1 and sa.data.cars[1].x == 1 and scoutAsked[1] == 900 and scoutAsked[2] == 8, "scout: sends the cars with the app's radius")
+local before = #toasts
+server("rlsmpMarketScout", {marks = {{x = 10, y = 20, z = 5}, {x = 30, y = 40, z = 5}, {x = "a", y = 0, z = 0}}, seconds = 600})
+check(#market._marks() == 2 and #toasts == before + 1 and lastToast():find("2 car"), "scout: two marks, one toast")
+debugDrawer = {drawSphere = function() drawn = drawn + 1 end}
+drawn = 0
+run(1)
+check(drawn >= 20, "scout: a small sphere per mark and frame")
+run(601)
+check(#market._marks() == 0, "scout: marks end with the time")
+drawn = 0
+run(1)
+check(drawn == 0, "scout: nothing drawn after that")
+server("rlsmpMarketScout", {marks = {{x = 10, y = 20, z = 5}}, seconds = 600})
+market.onServerLeave()
+check(#market._marks() == 0, "scout: leaving the server drops the marks")
+market.enable(true)
 market.onServerLeave()
 check(market.uiGet().state == nil and market.uiGet().result == nil, "app: leaving the server forgets the state")
 os.time = realTime

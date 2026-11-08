@@ -7,6 +7,8 @@
 -- server's copy of our position is fresh). Pickup itself is the chat command; the server checks the position.
 -- The phone app (ui/ui-vue/mods/rls_career_mp/phone/PhoneBlackMarket.vue) calls M.uiGet() about every 1.5 s and M.uiAct(...) on a tap; both
 -- only relay to the server (rlsmpMarketGet / rlsmpMarketAct) and hand back what the server last said. No rules here.
+-- Scout tip: the server answers rlsmpMarketScout {marks = [{x, y, z}], seconds}; each mark is a small sphere (no text) over the car until
+-- the time is up. We do not use core_groundMarkers for it either.
 -- We do not use core_groundMarkers: RLS jobs (taxi, bus) own that route and would lose it.
 
 local M = {}
@@ -20,6 +22,7 @@ local CHECK = 1        -- seconds between checks
 local enabled = false
 local drops = {}       -- id -> {label, spot, x, y, z, readyAt, told, near}
 local clock, checkTimer = 0, 0
+local marks = {}       -- scout tip: {x, y, z, till}
 
 local function toast(kind, msg)
   if guihooks then guihooks.trigger("toastrMsg", {type = kind, title = "Black market", msg = msg, config = {timeOut = 8000}}) end
@@ -27,7 +30,7 @@ end
 
 function M.enable(on)
   enabled = on == true
-  if not enabled then drops = {} end
+  if not enabled then drops, marks = {}, {} end
 end
 
 local function num(v)
@@ -75,10 +78,29 @@ local function draw(d)
   end)
 end
 
+local function drawMark(m)
+  if not (debugDrawer and vec3) then return end
+  pcall(function() debugDrawer:drawSphere(vec3(m.x, m.y, m.z + 2.3), 0.4, ColorF(0.2, 0.9, 1, 0.8)) end)
+end
+
+local function onScout(d)
+  if not enabled or type(d.marks) ~= "table" then return end
+  local till = clock + math.max(10, math.min(3600, num(d.seconds) or 600))
+  marks = {}
+  for _, m in ipairs(d.marks) do
+    local x, y, z = num(m.x), num(m.y), num(m.z)
+    if x and y and z then marks[#marks + 1] = {x = x, y = y, z = z, till = till} end
+  end
+  toast("info", string.format("Scout tip: %d car(s) marked for about %d min.", #marks, math.floor((till - clock) / 60 + 0.5)))
+end
+
 function M.onUpdate(dtReal)
-  if not enabled or next(drops) == nil then return end
+  if not enabled or (next(drops) == nil and #marks == 0) then return end
   dtReal = dtReal or 0
   clock, checkTimer = clock + dtReal, checkTimer + dtReal
+  for i = #marks, 1, -1 do
+    if marks[i].till <= clock then table.remove(marks, i) else drawMark(marks[i]) end
+  end
   local p = playerPos()
   if p then
     for _, d in pairs(drops) do
@@ -135,29 +157,35 @@ function M.uiGet()
   return {enabled = true, state = appState, result = appResult}
 end
 
--- action: "buy" (item, n) | "pickup" | "invite" (who) | "accept". The answer arrives as a result and a new state.
+-- action: "buy" (item, n) | "pickup" | "invite" (who) | "accept" | "scout" (sends the stealable parked cars this game sees near us). The answer arrives as a result and a new state.
 function M.uiAct(action, a, b)
   if not enabled then return false end
   if type(action) ~= "string" then return false end
   local body = {a = action}
   if action == "buy" then body.item, body.n = tostring(a or ""), tonumber(b) or 1
-  elseif action == "invite" then body.who = tostring(a or "") end
+  elseif action == "invite" then body.who = tostring(a or "")
+  elseif action == "scout" then
+    local r = appState and appState.scout and tonumber(appState.scout.radius) or 800
+    body.cars = rlsmp_theft and rlsmp_theft.stealableNear and rlsmp_theft.stealableNear(r, 8) or {}
+  end
   if action == "pickup" and rlsmp_positions and rlsmp_positions.reportNow then rlsmp_positions.reportNow() end
   net.send("rlsmpMarketAct", body)
   askedAt = -math.huge                -- the next poll refreshes at once
   return true
 end
 
-function M.onServerLeave() appState, appResult, askedAt = nil, nil, -math.huge end
+function M.onServerLeave() appState, appResult, askedAt, marks = nil, nil, -math.huge, {} end
 
 function M.onExtensionLoaded()
   net.on("rlsmpMarketDrop", onDrop)
   net.on("rlsmpMarketClear", onClear)
   net.on("rlsmpMarketState", onState)
   net.on("rlsmpMarketResult", onResult)
+  net.on("rlsmpMarketScout", onScout)
 end
 
 M._drops = function() return drops end
+M._marks = function() return marks end
 M.onInit = function() setExtensionUnloadMode(M, "manual") end
 
 return M

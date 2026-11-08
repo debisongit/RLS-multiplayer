@@ -248,6 +248,95 @@ theft.reportDue()
 theft.reportDue()   -- a record that was still waiting for its report is reported first and pruned on the next pass
 check(next(theft.records()) == nil, "old records pruned")
 
+-- Inspect hint (members only, server decides) -----------------------------------------------------------
+check(theft.hash("a") == 0xE40C292C, "FNV-1a like the client")
+cfg.theft.enabled = true
+cfg.theft.inspect = {enabled = true, range = 15, seconds = 3, cooldown = 2}
+local period = theft.periodAt(now)
+local yes, no
+for i = 1, 300 do
+  local p = {x = i * 8 + 0.5, y = 3.5}
+  if theft.stealableAt(period, p) then yes = yes or p else no = no or p end
+end
+check(yes and no, "inspect: found a stealable and a boring spot")
+fire("onConsoleInput", "rlsmp market grant ann")
+local stands = 0
+local function stand(pid, x, y) now = now + 1 fire("rlsmpPos", pid, json.encode({x = x, y = y, z = 50, speed = 0, chased = false})) end
+local function got(pid, name) local n = 0 for _, m in ipairs(sent[pid] or {}) do if m.name == name then n = n + 1 end end return n end
+local function hint(pid, p) now = now + 1 client(pid, "rlsmpTheftHint", {id = 7, x = p.x, y = p.y}) end
+stand(1, yes.x + 2, yes.y) stand(2, yes.x + 2, yes.y)
+hint(1, yes) hint(2, yes)
+check(got(1, "rlsmpTheftHint") == 1 and last(1, "rlsmpTheftHint").ok == true and last(1, "rlsmpTheftHint").id == 7, "inspect: a member beside a stealable car gets the hint")
+check(got(2, "rlsmpTheftHint") == 0, "inspect: a non-member gets nothing (not even a no)")
+stand(1, no.x, no.y) hint(1, no)
+check(got(1, "rlsmpTheftHint") == 1, "inspect: a boring car gives no hint")
+stand(1, yes.x + 200, yes.y) hint(1, yes)
+check(got(1, "rlsmpTheftHint") == 1, "inspect: too far from the car gives no hint (server-side distance)")
+-- /inspect, timed, same shape for everybody
+local function inspect(pid, p, year)
+  now = now + 3
+  client(pid, "rlsmpTheftInspect", {id = 9, x = p.x, y = p.y, value = 4000, year = year or 1988})
+  check(last(pid, "rlsmpTheftInspectGo").ok == true and last(pid, "rlsmpTheftInspectGo").seconds == 3, "inspect: go with the time")
+end
+stand(1, yes.x + 2, yes.y) stand(2, yes.x + 2, yes.y)
+inspect(1, yes)
+client(1, "rlsmpTheftInspectFinish", {})
+check(got(1, "rlsmpTheftInspected") == 0, "inspect: finishing too early gives nothing")
+inspect(1, yes)
+now = now + 3
+stand(1, yes.x + 2, yes.y)
+client(1, "rlsmpTheftInspectFinish", {})
+local r1 = last(1, "rlsmpTheftInspected")
+check(r1.found == true and r1.id == 9 and r1.text:find("old car") and r1.text:find("you have the tools") and r1.text:find("loud"), "inspect: a member learns tier, tools and risk")
+items.take(1, "screwdriver", 1)
+inspect(1, yes, 1988)
+now = now + 3
+stand(1, yes.x + 2, yes.y)
+client(1, "rlsmpTheftInspectFinish", {})
+check(last(1, "rlsmpTheftInspected").text:find("missing: Screwdriver"), "inspect: missing tools are named")
+items.give(1, "screwdriver")
+inspect(1, yes, 2016)
+now = now + 3
+stand(1, yes.x + 2, yes.y)
+client(1, "rlsmpTheftInspectFinish", {})
+check(last(1, "rlsmpTheftInspected").text:find("keyless car") and last(1, "rlsmpTheftInspected").text:find("missing: Signal cloner"), "inspect: other tier, other tools")
+inspect(1, yes, 2022)
+now = now + 3
+stand(1, yes.x + 2, yes.y)
+client(1, "rlsmpTheftInspectFinish", {})
+check(last(1, "rlsmpTheftInspected").text:find("alarm, GPS tracker"), "inspect: luxury cars show alarm and tracker")
+inspect(2, yes)
+now = now + 3
+stand(2, yes.x + 2, yes.y)
+client(2, "rlsmpTheftInspectFinish", {})
+local r2 = last(2, "rlsmpTheftInspected")
+check(r2.found == false and r2.text:find("Nothing stands out"), "inspect: a non-member only hears the boring text")
+stand(1, no.x, no.y)
+inspect(1, no)
+now = now + 3
+stand(1, no.x, no.y)
+client(1, "rlsmpTheftInspectFinish", {})
+check(last(1, "rlsmpTheftInspected").text == r2.text and last(1, "rlsmpTheftInspected").found == false, "inspect: a boring car gets the same text as a non-member")
+inspect(1, yes)
+now = now + 3
+stand(1, yes.x + 300, yes.y)
+client(1, "rlsmpTheftInspectFinish", {})
+check(last(1, "rlsmpTheftInspected").text == r2.text, "inspect: walked out of range, boring")
+now = now + 5
+client(1, "rlsmpTheftInspect", {id = 9, x = yes.x, y = yes.y, value = 4000, year = 1988})
+local goN = got(1, "rlsmpTheftInspectGo")
+client(1, "rlsmpTheftInspect", {id = 9, x = yes.x, y = yes.y, value = 4000, year = 1988})
+check(got(1, "rlsmpTheftInspectGo") == goN, "inspect: cooldown between two starts")
+check(theft.payload().inspect.enabled == true and theft.payload().inspect.range == 15, "inspect: the config tells the game range")
+fire("onChatMessage", 1, "ann", "/inspect")
+check(got(1, "rlsmpTheftInspectAsk") == 1, "inspect: /inspect asks the game to start")
+cfg.theft.inspect.enabled = false
+now = now + 5
+hint(1, yes)
+fire("onChatMessage", 1, "ann", "/inspect")
+check(got(1, "rlsmpTheftInspectAsk") == 1, "inspect: switched off, no ask")
+cfg.theft.inspect.enabled = true
+
 -- No plateRecords: the hook is quiet
 package.loaded["rlsmp.server.plateRecords"] = nil
 package.preload["rlsmp.server.plateRecords"] = function() error("no such module") end

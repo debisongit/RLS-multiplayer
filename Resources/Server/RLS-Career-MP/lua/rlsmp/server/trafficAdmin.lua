@@ -110,6 +110,8 @@ rules("theft.", {
   unseenReportSeconds = {"number", 1, 86400, true}, trackerReportSeconds = {"number", 1, 3600, true}, keepHours = {"number", 1, 720, true},
   ["tiers.immobilizerYear"] = {"number", 1900, 2100, true}, ["tiers.keylessYear"] = {"number", 1900, 2100, true},
   ["tiers.newestYear"] = {"number", 1900, 2100, true}, ["tiers.luxuryValue"] = {"number", 0, 100000000, true},
+  ["inspect.enabled"] = {"bool"}, ["inspect.range"] = {"number", 3, 100}, ["inspect.seconds"] = {"number", 1, 30, true},
+  ["inspect.cooldown"] = {"number", 0, 60},
 })
 rules("fence.", {
   enabled = {"bool"}, maxValue = {"number", 0, 100000000, true}, minValue = {"number", 0, 1000000, true},
@@ -122,6 +124,9 @@ rules("market.", {
   minDelaySeconds = {"number", 0, 3600, true}, maxDelaySeconds = {"number", 0, 3600, true}, maxOpenOrders = {"number", 1, 10, true},
   pickupRadius = {"number", 5, 200}, rotateMinutes = {"number", 1, 1440, true}, baseInvites = {"number", 0, 20, true},
   repPerInvite = {"number", 1, 100, true}, maxInvites = {"number", 0, 50, true}, fenceCarRate = {"number", 0, 1}, fencePartRate = {"number", 0, 1},
+  ["scout.enabled"] = {"bool"}, ["scout.price"] = {"number", 0, 10000000, true}, ["scout.minRep"] = {"number", 0, 100, true},
+  ["scout.radius"] = {"number", 50, 2000}, ["scout.seconds"] = {"number", 30, 3600, true}, ["scout.cooldownSeconds"] = {"number", 0, 3600, true},
+  ["scout.freeUsesPerHour"] = {"number", 0, 100, true}, ["scout.repCost"] = {"number", 0, 25, true},
 })
 
 -- Rules for maps with names chosen by the player (car Types and models): first segments -> rule, last segment is the name.

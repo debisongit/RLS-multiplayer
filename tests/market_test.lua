@@ -401,4 +401,46 @@ say(3, "/market list")
 check(last(3):find("closed"), "disabled")
 cfg.market.enabled = true
 
+-- Scout tip -----------------------------------------------------------------------------------------------
+local theft = require("rlsmp.server.theft")
+now = (math.floor(now / 3600) + 1) * 3600 + 100
+local period = theft.periodAt(now)
+local yes, boring, far = {}, nil, nil
+for i = 1, 1000 do
+  local p = {x = i * 8 + 0.5, y = 3.5, z = 20}
+  if theft.stealableAt(period, p) then
+    if i <= 80 then yes[#yes + 1] = p elseif i > 400 and not far then far = p end
+  elseif not boring then boring = p end
+end
+check(#yes >= 4 and far and boring, "scout: found test cars")
+local function sentCount(name, pid) local n = 0 for _, m in ipairs(sent) do if m.name == name and m.pid == pid then n = n + 1 end end return n end
+local function scoutAct(pid, cars) standAt(pid, 0, 0) app(pid, "rlsmpMarketAct", {a = "scout", cars = cars}) return lastSent(pid, "rlsmpMarketResult").text end
+local mix = {boring, far, yes[1], yes[2], yes[3], yes[4]}
+join(7, "gil")
+check(scoutAct(7, mix):find("Members only"), "scout: a non-member is refused")
+cfg.theft.enabled = false
+check(scoutAct(5, mix):find("No scout"), "scout: needs car theft on")
+cfg.theft.enabled = true
+local m0, scouts = profile(5).ledger.money, sentCount("rlsmpMarketScout", 5)
+check(scoutAct(5, {boring, far}):find("no easy marks") and sentCount("rlsmpMarketScout", 5) == scouts and profile(5).ledger.money == m0, "scout: nothing stealable in range, nothing charged")
+check(scoutAct(5, "junk"):find("phone app") and scoutAct(5, {{x = "a"}, 5, {x = 1, y = 2}}):find("no easy marks"), "scout: bad cars are ignored")
+check(scoutAct(5, mix):find("marked"), "scout: tip bought")
+local got = lastSent(5, "rlsmpMarketScout")
+check(#got.marks >= 2 and #got.marks <= 3 and got.seconds == 600 and profile(5).ledger.money == m0 - 3000, "scout: 2 to 3 marks, 10 minutes, price paid")
+for _, mk in ipairs(got.marks) do
+  check(theft.stealableAt(period, mk) and mk.x < 700, "scout: every mark is a stealable car in range")
+end
+check(scoutAct(5, mix):find("before the next tip"), "scout: cooldown")
+app(5, "rlsmpMarketGet")
+check(lastSent(5, "rlsmpMarketState").scout.price == 3000 and lastSent(5, "rlsmpMarketState").scout.wait > 0, "scout: the app state carries price and wait")
+-- too many tips in an hour cost reputation
+cfg.market.scout.cooldownSeconds, cfg.market.scout.freeUsesPerHour = 0, 1
+local rep0 = market.rep(5)
+sessions.get(5).scoutNext = 0
+scoutAct(5, mix)
+check(market.rep(5) == rep0 - 1, "scout: a tip past the free ones costs reputation")
+-- near the end of a theft pick the tip is refused (the marks would not be stealable any more)
+now = (theft.periodAt(now) + 1) * 3600 - 30
+check(scoutAct(5, mix):find("about to change"), "scout: not just before the pick changes")
+
 print("market_test: " .. passed .. " checks passed")
