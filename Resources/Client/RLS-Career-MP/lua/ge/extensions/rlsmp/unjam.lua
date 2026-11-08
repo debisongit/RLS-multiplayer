@@ -49,6 +49,7 @@ function M.check()
       if stuck >= U.STUCK_SECONDS then
         local bubbleOff = b and b.isEnabled and not b.isEnabled()   -- without the bubble we do not know where the other players are
         local hidden = veh.camVisible ~= true and not bubbleOff and not (b and b.stayFor and b.stayFor(veh))
+        if hidden and b and b.viewReason and b.viewReason(veh) then hidden = false end   -- strict: near a player or in front of the camera
         candidates[#candidates + 1] = {id = id, stuck = stuck, hidden = hidden}
       end
     end

@@ -200,6 +200,7 @@ function M.check()
     local hidden = false
     if veh.pos and P.skipReason(id, veh, pctx) == nil then
       hidden = b ~= nil and veh.camVisible ~= true and not (b.isEnabled and not b.isEnabled()) and not (b.stayFor and b.stayFor(veh))
+      if hidden and b.viewReason and b.viewReason(veh) then hidden = false end   -- strict: near a player or in front of the camera
     end
     local secs = S.seeHidden(tracker, id, hidden, clock)
     if hidden and secs >= cfg.swap.hiddenSeconds and secs > bestSecs and not S.recentlyDecided(tracker, id, clock) then

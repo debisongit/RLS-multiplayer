@@ -71,6 +71,9 @@ function M.check()
     local veh = data[id]
     if veh and veh.pos and R.skipReason(P, id, veh, pctx) == nil
         and b ~= nil and veh.camVisible ~= true and not (b.isEnabled and not b.isEnabled()) and not (b.stayFor and b.stayFor(veh)) then
+      local seen, dist = nil, nil
+      if b.viewReason then seen, dist = b.viewReason(veh) end   -- strict: near any player or in front of the camera = leave it
+      if seen then p3.count("reroll skipped (" .. seen .. ")") goto continue end
       tracker.due[id] = nil                                     -- looked at: once per respawn, swapped or not
       if not S.allowed(tracker, clock, cfg.respawn) then p3.count("reroll skipped (rate)") return nil end
       local model, name = ts.modelOf(id, veh), ts.configOf(id)
@@ -93,10 +96,11 @@ function M.check()
       end
       S.record(tracker, clock)
       p3.count("reroll started")
-      p3.log("I", string.format("reroll: respawned car %s %s/%s -> %s/%s (pool stage %s)", tostring(id), tostring(model), tostring(name),
-        tostring(entry.model), tostring(entry.config), tostring(stage)))
+      p3.log("I", string.format("reroll: respawned car %s %s/%s -> %s/%s (pool stage %s) dist=%s camVisible=%s", tostring(id), tostring(model), tostring(name),
+        tostring(entry.model), tostring(entry.config), tostring(stage), dist and string.format("%.0f", dist) or "?", tostring(veh.camVisible)))
       return {id = id, from = current, to = entry}
     end
+    ::continue::
   end
   return nil
 end

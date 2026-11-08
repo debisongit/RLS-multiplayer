@@ -67,3 +67,6 @@ Helpers work in git worktrees under `.claude/worktrees/agent-*` (git-ignored) an
 - Known money gaps: server checks wallet money only, not bank, loans, mortgages.
 - Marketplace ETK -> other car swap, "flicking" desync when looking around: never reproduced or explained.
 - Quality notes: all new events must be in `docs/PROTOCOL.md`; one BeamMP event name = one handler; wrap RLS functions once per module table and re-check identity every frame; use `os.time()` not `os.clock()` for real time.
+
+## Respawn distance on foot (Claude A, untested)
+Owner: cars pop in near the walker and vanish in front of them. Read `docs/RESEARCH_RESPAWN_DISTANCE.md`. New: `lib/viewGate.lua` (strict near/in-view gate via `bubble.viewReason`, used by trafficReroll, trafficSwap, unjam), `lib/respawnWatch.lua` + `distance:` log in bubble.lua. The root cause is NOT proven (the log has no distances); search the next log for `distance:` and `despawn near player`.

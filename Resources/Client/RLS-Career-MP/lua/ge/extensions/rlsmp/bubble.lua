@@ -18,6 +18,8 @@ local M = {}
 
 local mp = require("rlsmp/lib/mp")
 local p3 = require("rlsmp/lib/p3")
+local G = require("rlsmp/lib/viewGate")
+local W = require("rlsmp/lib/respawnWatch")
 
 local BUBBLE = 450
 local SIGHT = 1000
@@ -75,6 +77,32 @@ function M.stayFor(car)
   return M.mustStay(car.pos, players, car.checkRayCast and function(a, b) return car:checkRayCast(a, b) end or nil)
 end
 
+local function xyz(v) return v and v.x and {x = v.x, y = v.y, z = v.z} or nil end
+
+-- Where the local player is (the walking avatar or the car), for the strict gate and the distance log.
+local function focusPos(veh)
+  local pv = be and be.getPlayerVehicle and be:getPlayerVehicle(0)
+  local p = pv and pv.getPosition and pv:getPosition()
+  return xyz(p) or (veh and veh.focus and xyz(veh.focus.pos))
+end
+
+-- For our own recyclers (re-roll, swap, unjam): nil = the car is far from every player and out of the camera's view; else why not.
+-- Also writes one line to the log with the distance when it says no for a reason other than "near".
+function M.viewReason(veh)
+  if not veh or not veh.pos then return "noPos" end
+  local cam, fwd
+  if core_camera and core_camera.getPosition and core_camera.getForward then
+    local ok1, c = pcall(core_camera.getPosition)
+    local ok2, f = pcall(core_camera.getForward)
+    cam, fwd = ok1 and xyz(c) or nil, ok2 and xyz(f) or nil
+  end
+  local others = {}
+  for _, p in ipairs(playerPositions()) do others[#others + 1] = xyz(p) end
+  local why, d = G.reason(xyz(veh.pos), focusPos(veh), cam, fwd, others)
+  if why then p3.count("view gate: " .. why) end
+  return why, d
+end
+
 local wrappers = setmetatable({}, {__mode = "k"})   -- class -> the wrapper we installed
 
 local function anyTrafficClass()
@@ -114,7 +142,49 @@ function M.install()
   return true
 end
 
-function M.onUpdate() M.install() end
+-- Respawn / fade-out census for the "distance:" log (every 30 s). Read only.
+local watch = W.new()
+local clock, logTimer = 0, 0
+function M.onUpdate(dtReal)
+  M.install()
+  dtReal = dtReal or 0
+  clock, logTimer = clock + dtReal, logTimer + dtReal
+  if not (gameplay_traffic and gameplay_traffic.getTrafficData and mp.isMPSession()) then return end
+  local data = gameplay_traffic.getTrafficData()
+  local fp = focusPos(nil)
+  local cam, fwd
+  if core_camera and core_camera.getPosition and core_camera.getForward then
+    local ok1, c = pcall(core_camera.getPosition)
+    local ok2, f = pcall(core_camera.getForward)
+    cam, fwd = ok1 and xyz(c) or nil, ok2 and xyz(f) or nil
+  end
+  local alive, amount, radius = {}, 0, nil
+  for id, veh in pairs(data) do
+    alive[id] = true
+    if veh.isAi and veh.state ~= "queued" then amount = amount + 1 end
+    local vp = xyz(veh.pos)
+    local dist = vp and fp and math.sqrt((vp.x - fp.x) ^ 2 + (vp.y - fp.y) ^ 2 + (vp.z - fp.z) ^ 2) or nil
+    local fr = type(veh.respawn) == "table" and tonumber(veh.respawn.finalRadius) or nil
+    if fr and fr < 1e5 and (not radius or fr > radius) then radius = fr end
+    local ev = W.observe(watch, id, veh.respawnCount, veh.state, dist, clock)
+    if ev then
+      local why = vp and fp and G.reason(vp, fp, cam, fwd, nil)
+      local line = string.format("%s car %s dist=%s camVisible=%s view=%s radius=%s walking=%s", ev, tostring(id), dist and string.format("%.0f", dist) or "?",
+        tostring(veh.camVisible), tostring(why or "out"), fr and string.format("%.0f", fr) or "?", tostring(gameplay_walk ~= nil and gameplay_walk.isWalking and gameplay_walk.isWalking() or false))
+      p3.count("respawn watch: " .. ev)
+      if ev == "fadeout" and dist and dist < G.NEAR then p3.log("W", "despawn near player: " .. line) else p3.log("D", line) end
+    end
+  end
+  W.forget(watch, alive)
+  if logTimer >= 30 then
+    logTimer = 0
+    local vars = gameplay_traffic.getTrafficVars and gameplay_traffic.getTrafficVars() or {}
+    local n, nearest = W.summary(watch, clock)
+    p3.log("I", string.format("distance: walking=%s radius=%s activeAmount=%s cars=%d respawns/min=%d nearestRespawn=%s spawnValue=%s bubble=%s",
+      tostring(gameplay_walk ~= nil and gameplay_walk.isWalking and gameplay_walk.isWalking() or false), radius and string.format("%.0f", radius) or "?",
+      tostring(vars.activeAmount), amount, n, nearest and string.format("%.0f", nearest) or "none", tostring(vars.spawnValue), mode))
+  end
+end
 
 M.onInit = function() setExtensionUnloadMode(M, "manual") end
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased (respawn distance, build number not bumped)
+- Traffic on foot: our re-roll, live swap and stuck-car recycling now never touch a car closer than 120 m to any player or in front of the camera (a wide cone, up to 500 m). The old test was only a line from the car to the avatar. (Claude A)
+- New log line `distance:` every 30 s (radius, active amount, respawns in the last minute, nearest respawn distance), plus a line per respawn and a warning when a car fades out near you. (Claude A)
+- See `docs/RESEARCH_RESPAWN_DISTANCE.md`. Switch for the original behaviour: `trafficVariety.respawn.enabled = false`. (Claude A)
+
 ## 0.4.36 (all untested in-game)
 - Traffic: premade pool that rotates brands and models (no repeat within 6 picks, max 3 of a brand), respawned cars get a new model and config out of sight (3 a minute), parked car amount raised to 10 (`trafficVariety.parked.amount`). (Claude A)
 - Police chase: cops near you are held before a chase starts, fading-out cops are cancelled, cops re-placed should come from behind. Spawn range is back to the original game behavior by default (`police.bubbleMode`: original, protect, off). (Claude A)
