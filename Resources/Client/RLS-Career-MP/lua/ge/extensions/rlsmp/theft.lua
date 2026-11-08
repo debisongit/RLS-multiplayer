@@ -365,6 +365,26 @@ function M.nearestStolen(pos, reach)
   return best
 end
 
+-- For the garage computer (rlsmp/garage.lua): the stolen car nearest to the player within `reach` metres (nil if none), and removal by plate.
+function M.nearestStolenToPlayer(reach)
+  local id = be and be.getPlayerVehicleID and be:getPlayerVehicleID(0)
+  local p = posOf(objOf(id))
+  return p and M.nearestStolen(p, reach) or nil
+end
+
+function M.removeStolenByPlate(plate)
+  for id, rec in pairs(stolen) do
+    if rec.plate == plate then
+      local o = objOf(id)
+      stolen[id] = nil
+      T.forget(id)
+      if o then o:delete() end
+      return true
+    end
+  end
+  return false
+end
+
 local function onFenceAsk(d)
   if not active() then return end
   local _, pos = walker()

@@ -18,7 +18,7 @@ local mapGate = require("rlsmp/lib/mapGate")
 local downloadWatch = require("rlsmp/lib/downloadWatch")
 
 -- Extensions that only run while the career is active on the server.
-local MODULES = {"saveBridge", "wallet", "fleet", "vehicleGuard", "unstuck", "trafficLabels", "claims", "world", "duel", "clock", "bubble", "positions", "personalities", "unjam", "dedupe", "plates", "market", "theft", "meetup"}
+local MODULES = {"saveBridge", "wallet", "fleet", "vehicleGuard", "unstuck", "trafficLabels", "claims", "world", "duel", "clock", "bubble", "positions", "personalities", "unjam", "dedupe", "plates", "market", "theft", "meetup", "garage"}
 local function setModules(on)
   for _, name in ipairs(MODULES) do
     local ext = _G["rlsmp_" .. name]

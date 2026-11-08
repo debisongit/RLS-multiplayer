@@ -6,6 +6,12 @@
 - Black market: `/meetup black` sells a stolen car you drive by meetup; the server pays. `/meetup` is the fallback for a garage car. Settings in config `meetup`. (untested) (Claude A)
 ## Unreleased (police variety, build number not bumped)
 - Police cars: RLS's west coast police list is 5 Bastions (4 of 5 unmarked or undercover), and its police do not even go through the group builder we wrapped. We now also wrap `fitGroup` and re-pick police groups from every police config the game has: Bastion weight 0.3, about 10 percent undercover, at most 40 percent of one model. New server block `trafficVariety.police` (also in the `[` menu on the amount page). Research: `docs/RESEARCH_POLICE_MIX.md`. Untested in game. (Claude A)
+## Unreleased (garage strip)
+- New: a **"Strip / illegal parts"** button inside RLS's own garage computer, on every car you own (greyed out for loaned, rented or auctioned cars). It opens a small dialog: strip the car for cash (30% of its value; the car and its parts leave your RLS garage) or fit a fake plate, VIN plate or part number kit you bought. Untested in game. (Claude A)
+- Stolen cars are not in the RLS garage, so they get an extra button "Stolen car: PLATE" in the same computer when one stands within 60 m. Stripping a stolen car works anywhere (no drop spot) but needs the black market. Untested. (Claude A)
+- Fitted parts are remembered on the stolen car; `/fence resell` and `gamble` count them, so you do not have to carry the items to the drop spot. The fake plate does not change the plate text yet. Untested. (Claude A)
+- A new "Black market items" button in the garage lists what you own. Items are NOT put into RLS's "My parts" list: a made-up part could break that screen (see `docs/RESEARCH_GARAGE_STRIP.md`). (Claude A)
+- The chat commands `/fence ...` still work as before. New settings `fence.garage` and `fence.garageCooldown`. Stripping an ordinary car trusts the car value from your game (capped, 20 s between strips); this is a known weak spot. (Claude A)
 
 ## 0.4.34
 - Car theft now logs `parked cars known: N, within 60 m: M, nearest ...` every 30 s while you walk, to find out why so few cars can be stolen. Your last log showed RLS only spawned 2 parked cars in total. (Claude A)

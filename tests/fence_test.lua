@@ -181,4 +181,95 @@ profiles.persist = realPersist
 r = sell(1, "GGG 777", "strip")
 check(r.ok, "works again after the save problem")
 
+-- Garage flow (the RLS garage computer button): no drop spot needed ------------------------------------------------------------
+local function gquote(pid, body) fire("rlsmpGarageQuote", pid, json.encode(body)) return lastSent(pid, "rlsmpGarageMenu") end
+local function gdo(pid, body) fire("rlsmpGarageDo", pid, json.encode(body)) return lastSent(pid, "rlsmpGarageResult") end
+standAt(1, spot.x + 900, spot.y + 900)      -- far from any spot and not chased
+profile(1).ledger.money = 1000
+for k in pairs(profile(1).items or {}) do profile(1).items[k] = nil end
+rec("GAR 001", accountOf(1), 10000)
+rec("GAR 002", accountOf(2), 10000)
+now = now + 5
+local m = gquote(1, {plate = "GAR 001", model = "etk800", value = 1})
+check(m.ok and m.kind == "stolen" and m.strip == 3000, "menu: stolen car priced from the server record, not the client value")
+check(#m.fit == 0, "menu: nothing to fit without items")
+now = now + 5
+m = gquote(1, {plate = "GAR 002"})
+check(not m.ok and m.err:find("somebody else"), "menu: somebody else's stolen plate refused")
+now = now + 5
+m = gquote(1, {})
+check(m.ok and m.items ~= nil and m.kind == nil, "menu without a car is just the item list")
+now = now + 5
+m = gquote(3, {plate = "GAR 001"})
+check(m.ok == false or m.kind ~= "stolen", "a non-member never gets a stolen menu")
+
+-- fitting
+items.give(1, "fake_plate", 1)
+items.give(1, "vin_plate", 1)
+now = now + 5
+m = gquote(1, {plate = "GAR 001"})
+check(#m.fit == 2 and m.fit[1].name == "fake_plate", "menu offers the two papers the player owns")
+local r2 = gdo(1, {action = "fit:fake_plate", plate = "GAR 001"})
+check(r2.ok and items.count(1, "fake_plate") == 0 and theft.records()["GAR 001"].papers.fake_plate, "fit: item used up, record marked")
+check(not gdo(1, {action = "fit:fake_plate", plate = "GAR 001"}).ok, "cannot fit the same paper twice")
+check(not gdo(1, {action = "fit:part_number", plate = "GAR 001"}).ok and not gdo(1, {action = "fit:bogus", plate = "GAR 001"}).ok, "no item / unknown part refused")
+check(not gdo(1, {action = "fit:vin_plate", plate = "GAR 002"}).ok and items.count(1, "vin_plate") == 1, "cannot fit onto somebody else's car")
+check(not gdo(1, {action = "fit:vin_plate", plate = "NOPE 9"}).ok and items.count(1, "vin_plate") == 1, "cannot fit onto an ordinary car")
+check(disk(1).items == nil or disk(1).items.fake_plate == nil, "fitted item gone on disk")
+-- fitted papers count at the fence
+q = fence.quotes(1, 10000, theft.records()["GAR 001"])
+check(q.gamble == 4500 + 750 and q.gamblePapers == 2 and q.resell == nil, "quote counts fitted + owned papers")
+items.give(1, "part_number", 1)
+q = fence.quotes(1, 10000, theft.records()["GAR 001"])
+check(q.resell == 6000, "fitted + owned papers together allow a resell")
+standAt(1, spot.x, spot.y)
+r = sell(1, "GAR 001", "resell")
+check(r.ok and r.pay == 6000 and items.count(1, "vin_plate") == 0 and items.count(1, "part_number") == 0 and items.count(1, "fake_plate") == 0,
+  "resell uses the fitted paper (already used up) plus the two items")
+standAt(1, spot.x + 900, spot.y + 900)
+
+-- strip a stolen car from the garage
+rec("GAR 003", accountOf(1), 10000)
+local before = profile(1).ledger.money
+local sd = gdo(1, {action = "strip", plate = "GAR 003"})
+check(sd.ok and sd.pay == 3000 and sd.takeCar and profile(1).ledger.money == before + 3000 and theft.records()["GAR 003"] == nil, "garage strip of a stolen car pays 30%, no drop spot needed")
+check(lastSent(1, "rlsmpWalletSet").money == before + 3000, "wallet pushed")
+-- chased players cannot strip a stolen car
+rec("GAR 004", accountOf(1), 10000)
+standAt(1, spot.x + 900, spot.y + 900, true)
+check(not gdo(1, {action = "strip", plate = "GAR 004"}).ok and theft.records()["GAR 004"], "chased: stolen strip refused")
+standAt(1, spot.x + 900, spot.y + 900)
+-- non-member stolen
+rec("GAR 005", accountOf(3), 10000)
+check(not gdo(3, {action = "strip", plate = "GAR 005"}).ok and theft.records()["GAR 005"], "non-member cannot strip a stolen car")
+
+-- strip an ordinary garage car: value from the client, capped, rate limited
+before = profile(1).ledger.money
+now = now + 30
+sd = gdo(1, {action = "strip", plate = "MYCAR 1", model = "covet", value = 5000, inventoryId = 7})
+check(sd.ok and sd.pay == 1500 and sd.takeCar and sd.inventoryId == 7 and profile(1).ledger.money == before + 1500, "owned car strip pays 30% of the client value")
+check(disk(1).ledger.money == before + 1500, "owned strip saved to disk")
+check(not gdo(1, {action = "strip", plate = "MYCAR 2", value = 5000}).ok, "second strip right away is refused (cooldown)")
+now = now + 30
+sd = gdo(1, {action = "strip", plate = "MYCAR 2", value = 10 ^ 12})
+check(sd.ok and sd.pay == 90000, "absurd value is capped")
+now = now + 30
+sd = gdo(1, {action = "strip", value = 0})
+check(sd.ok and sd.pay == 600, "no price: the floor value is used")
+now = now + 30
+check(not gdo(1, {action = "fit:fake_plate", plate = "MYCAR 3"}).ok, "no fitting on ordinary cars")
+check(not gdo(1, {action = "weird"}).ok and not gdo(1, {}).ok and gdo(1, {action = 5}).ok == false, "garbage actions refused")
+-- failing save
+local realP = profiles.persist
+profiles.persist = function() return false end
+m0 = profile(1).ledger.money
+now = now + 30
+check(not gdo(1, {action = "strip", value = 1000}).ok and profile(1).ledger.money == m0, "failed save: owned strip pays nothing")
+profiles.persist = realP
+-- switched off
+cfg.fence.garage = false
+now = now + 30
+check(not gdo(1, {action = "strip", value = 1000}).ok, "garage switched off in config")
+cfg.fence.garage = true
+
 print(string.format("fence_test: %d checks passed", passed))

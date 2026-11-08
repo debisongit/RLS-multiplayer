@@ -392,6 +392,18 @@ A Marketplace sale (and a black market car sale) is finished at a spot the SERVE
 | C→S | `rlsmpMeetupCancel` | `{}` |
 | S→C | `rlsmpMeetupClear` | `{id}` |
 | S→C | `rlsmpWalletSet` | `{money, why = "meetup"}` after a black market sale |
+### Garage flow (the "Strip / illegal parts" button in RLS's garage computer; server `fence.lua`, client `rlsmp/garage.lua`)
+
+Config `fence.garage` (true) and `fence.garageCooldown` (20 s). No drop spot needed. Stolen cars need black market membership and `theft.enabled`; ordinary garage cars do not.
+
+| Direction | Event | Body |
+|---|---|---|
+| C→S | `rlsmpGarageQuote` | `{plate?, model?, value?, year?}`; without a car it only asks for the item list. At most one per second |
+| S→C | `rlsmpGarageMenu` | `{ok, err?, items = [{name, label, count}], kind = "stolen" or "owned", plate, model, strip, fit = [{name, label}], fitted = [label]}`; `strip` is what stripping pays; `fit` lists papers the player owns and has not fitted |
+| C→S | `rlsmpGarageDo` | `{action = "strip", "fit:fake_plate", "fit:vin_plate" or "fit:part_number", plate, model, value, year, inventoryId?}` |
+| S→C | `rlsmpGarageResult` | `{ok, action, err?, pay?, takeCar?, inventoryId?, fitted?}`; on a paid strip the client removes the car (RLS `removeVehicle` for an owned car, `rlsmp_theft.removeStolenByPlate` for a stolen one). Followed by `rlsmpWalletSet` |
+
+A plate that is in somebody else's theft record is refused. A stolen car's value comes from the server's record; an ordinary car's value is the client's, capped by `fence.maxValue`. Fitting uses the item up at once and sets `papers[name]` on the stolen record; `/fence resell` and `gamble` count fitted papers first.
 
 ## Reserved prefixes for later phases
 
