@@ -55,6 +55,10 @@ local function trafficData()
   return gameplay_traffic and gameplay_traffic.getTrafficData and gameplay_traffic.getTrafficData() or {}
 end
 
+local function isWalkingNow()
+  return gameplay_walk ~= nil and type(gameplay_walk.isWalking) == "function" and gameplay_walk.isWalking() == true
+end
+
 local function playerIsCop()
   local pd = overhaul_career_police_playerDriving
   if not pd or type(pd.getPlayerIsCop) ~= "function" then return false end
@@ -293,9 +297,12 @@ function M.onPursuitAction(vehId, action, data)
   if (action ~= "evade" and action ~= "arrest") or not active() or not be then return end
   local arrested = action == "arrest"
   local playerId = be:getPlayerVehicleID(0)
-  local svc = overhaul_integration_services_police
-  local handoff = svc and type(svc.getWalkHandoffVehId) == "function" and svc.getWalkHandoffVehId() or nil
-  if vehId ~= playerId and vehId ~= handoff then return end
+  -- Getting OUT of the car during a chase never flags the car (owner's wish): the chase of the empty car (RLS keeps it on the car the player left)
+  -- and anything that ends while the player walks says nothing about the plate.
+  if vehId ~= playerId or isWalkingNow() then
+    p3.log("I", "plates: " .. action .. " of a car the player left (or while walking): the car is not flagged")
+    return
+  end
   if playerIsCop() then return end
   if not arrested and R.isStalemate(data) then
     p3.log("I", "plates: pursuit ended as a stalemate (not an escape), nothing reported")
@@ -314,9 +321,50 @@ function M.onPursuitAction(vehId, action, data)
   p3.log("I", string.format("plates: %s in %s %s (%s), reported", arrested and "arrested" or "escaped", info.model, info.plate, tostring(info.color)))
 end
 
+-- The player got out of the car in a chase: RLS keeps the chase on the empty car ("walkHandoffVehId"), so the cops chase a parked car and the player walks
+-- away. We move the chase to the walking character the way RLS does for a car change (mode 0 on the old one, then the same mode on the new one).
+-- UNVERIFIED IN GAME: every step is logged with "police on-foot:".
+local footHandedFrom, footPending
+local function walkChase(dt)
+  if footPending then
+    footPending.t = footPending.t - dt
+    if footPending.t <= 0 then
+      local fp = footPending
+      footPending = nil
+      local svc = overhaul_integration_services_police
+      local pid = be and be:getPlayerVehicleID(0)
+      if svc and svc.setPursuitMode and pid == fp.walker and isWalkingNow() then
+        local ok, err = pcall(svc.setPursuitMode, fp.mode, pid)
+        p3.log(ok and "I" or "W", "police on-foot: chase moved to the walking player (mode " .. tostring(fp.mode) .. ")" .. (ok and "" or " FAILED: " .. tostring(err)))
+      end
+    end
+    return
+  end
+  if not (isMP() and careerActive() and be and isWalkingNow()) then footHandedFrom = nil return end
+  local svc = overhaul_integration_services_police
+  local handoff = svc and type(svc.getWalkHandoffVehId) == "function" and svc.getWalkHandoffVehId() or nil
+  if not handoff or handoff == footHandedFrom or not (gameplay_traffic and gameplay_traffic.getTrafficData) then return end
+  local traffic = gameplay_traffic.getTrafficData()
+  local hv = traffic[handoff]
+  local mode = hv and hv.pursuit and tonumber(hv.pursuit.mode) or 0
+  if mode <= 0 then return end
+  local pid = be:getPlayerVehicleID(0)
+  if not traffic[pid] and gameplay_traffic.insertTraffic then pcall(gameplay_traffic.insertTraffic, pid, true) end
+  if not (gameplay_traffic.getTrafficData()[pid] and svc.setPursuitMode) then
+    p3.log("W", "police on-foot: the walking player is not in RLS traffic, the chase stays on the empty car")
+    footHandedFrom = handoff
+    return
+  end
+  footHandedFrom = handoff
+  local ok, err = pcall(svc.setPursuitMode, 0, handoff)
+  p3.log(ok and "I" or "W", "police on-foot: player left the car in a chase (mode " .. mode .. "), ending the chase of the empty car" .. (ok and "" or " FAILED: " .. tostring(err)))
+  if ok then footPending = {t = 0.3, mode = mode, walker = pid} end
+end
+
 function M.onUpdate(dtReal, dtSim)
   local dt = tonumber(dtSim) or tonumber(dtReal) or 0
   now = now + dt
+  walkChase(dt)
   timer = timer + dt
   if timer < STEP then return end
   timer = 0
@@ -345,6 +393,7 @@ function M.onServerLeave()
   config, enabled, pending, fallback = nil, false, nil, nil
   now, timer, escapedUntil = 0, 0, 0
   reader, cooldowns, seen = R.newReader(), {}, {}
+  footHandedFrom, footPending = nil, nil
 end
 
 function M.getConfig() return config end

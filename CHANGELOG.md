@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.55 (untested in-game)
+- Fewer freezes when the police re-places: the owner's log showed a full car build (about 1 s freeze) for EVERY cop RLS re-placed, many times a minute. Now a re-placed cop is only rebuilt as another model at most once per `police.respawnRebuildSeconds` (default 90); in between a cop RLS put in FRONT of you is moved to the road behind you along the way you drove (no build), a cop put behind you is left alone. (Claude B)
+- The unseen car in front of you: the log shows RLS put the re-placed cop 170 to 400 m ahead, out of sight, while the replacement was being built. A car's auto brake reacts to such a car. The cop in front is now removed the moment it is found, before the new one is built. (Claude B)
+- Cops are re-placed less often and farther away: police units get a least respawn radius `police.copRespawnDistance` (default 450 m, 0 = the game's own radius; it was only the game's 120 to 330 m for police, traffic already had 4000 m). (Claude B)
+- Getting out of the car in a chase never flags the car: an escape or arrest that is reported while you walk, or for the empty car RLS keeps the chase on, is no longer sent to the server as a plate flag. (Claude B)
+- Police chase the player on foot: RLS keeps the chase on the car you left; when it did so, the chase of the empty car is ended and the same level is started on the walking player (log lines `police on-foot:`). UNVERIFIED in game. (Claude B)
+- Menu (police page) and admin rules for `respawnRebuildSeconds` and `copRespawnDistance`. (Claude B)
+
 ## 0.4.54 (untested in-game)
 - More police cars on the map (owner: "at most 2 to 3"): the game only puts ONE police car on the map ("requested 1, allocated 1" in the owner's logs). New setting `police.copCount` (default 3, 0 = leave the game's number, also a slider on the Police page of the `[` menu): when fewer AI police cars are out, the client builds one more behind you with a random police model (the police pool and its settings), at most one every `police.copTopUpSeconds` (30 s), until the number is reached. They are police like the game's own and join a chase like the others. They also get replaced by a cop of another model behind you when RLS re-places them. If building does not work (the new car comes out in front, no answer, an error) it is deleted again and after 3 failures the top-up switches itself off for the session (the cop respawn has its own count). Each cop is one more BeamMP car for everybody: check `MaxCars`. Log lines `police top-up:`. Not verified in game: what the game's multi spawn does with `roadBehind` for one car. Also fixed: a cop we had built was never replaced again when RLS re-placed it later; now it is (after 10 s of grace). (Claude B)
 

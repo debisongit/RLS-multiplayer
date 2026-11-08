@@ -561,6 +561,14 @@ Known gaps: never played. What `roadBehind` does with one car and a gap is a gue
 Known gaps: never played; the phone can sell a car that is far away (a stolen car is paid for without being delivered), see `fence.phone`.
 
 
+## Fewer freezes, no unseen cop in front, chase on foot (build 0.4.55)
+
+1. Drive for 10 minutes on a road with traffic. Count the freezes. Log lines to send: `police respawn:` (re-placed / was in front, moved N m behind / building / done) and `police top-up:`.
+2. The auto brake of the car mod should no longer fire for nothing. If it still does, note the time and send the log around it: the car in front may be ordinary RLS traffic (not ours).
+3. Start a chase, get out of the car and run. Look for `police on-foot:` lines and see whether the police come for you, not for the car. Then check the car was not flagged (`/plate` records or the next plate read: no instant chase for it).
+4. Settings (Police page): `rebuilt as another model at most every (s)` and `A cop is re-placed only beyond (m)`.
+Known gaps: moving cops onto the trail is never played (does the AI keep driving after the move?); the on-foot hand-over copies what RLS does for a car change and is a guess; the unseen car may also be ordinary traffic respawning.
+
 ## More cops on the map (build 0.4.54)
 
 1. Drive around (a few minutes). The log should show `police top-up: only 1 of 3 cops on the map; building <model>/<config> behind the player`, then `new cop N came out X m behind the player` and `done`, about every 30 s until there are 3 cops (the game's one plus two).

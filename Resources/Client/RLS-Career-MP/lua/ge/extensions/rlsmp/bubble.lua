@@ -152,6 +152,13 @@ local function installRadius(class)
   if radiusWrappers[class] and class.updateActiveRadius == radiusWrappers[class] then return end
   local wrapper = function(self, ...)
     local res = original(self, ...)
+    -- a police unit: only the police floor (rlsmp_policeRespawn.respawnDistance), never the traffic scaling
+    if enabled and type(self.role) == "table" and self.role.name == "police" and type(self.respawn) == "table" and not self.rlsmpHold then
+      local pr = rawget(_G, "rlsmp_policeRespawn") or package.loaded["rlsmp/policeRespawn"]
+      local floor = pr and pr.respawnDistance and pr.respawnDistance() or 0
+      local fr = tonumber(self.respawn.finalRadius)
+      if floor > 0 and fr and fr < floor then self.respawn.finalRadius = floor end
+    end
     if enabled and (range.respawnRange ~= 1 or range.respawnDistance > 0) and type(self.respawn) == "table" and not self.rlsmpHold and not (type(self.role) == "table" and self.role.name == "police") then
       local fr = tonumber(self.respawn.finalRadius)
       -- not recomputed by the game (still our value): start again from the game's own radius, so a changed setting applies and nothing is scaled twice

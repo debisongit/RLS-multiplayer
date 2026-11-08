@@ -30,7 +30,7 @@ local CHECK_EVERY = 0.5
 local BUILD_TIMEOUT = 25          -- seconds to wait for onVehicleGroupSpawned
 local NAME = "rlsmpCop"
 
-local settings = {respawnBehind = true, perMinute = 4, gap = 150, minDistance = 80, maxFailures = 3, copCount = 3, topUpSeconds = 30}
+local settings = {respawnBehind = true, perMinute = 4, gap = 150, minDistance = 80, maxFailures = 3, copCount = 3, topUpSeconds = 30, rebuildSeconds = 90, respawnDistance = 450}
 local seen = {}                   -- police unit id -> respawnCount last time we looked
 local mine = {}                   -- ids of the cops we built (for the log and the tests)
 local grace = {}                  -- cop id we just built -> clock before which a respawn counter change is not acted on
@@ -40,6 +40,10 @@ local failures = {respawn = 0, top = 0}
 local off = {respawn = false, top = false}
 local lastTop = -math.huge        -- clock of the last top-up build
 local clock, timer = 0, 0
+local lastBuild = -math.huge      -- clock of the last replacement build (the freeze); between builds a cop in front is only moved behind the player
+local trail = {}                  -- where the player has been: crumbs {x, y, z}, one every CRUMB metres, newest last
+local moveFailures, moveOff = 0, false
+local CRUMB, MAX_CRUMBS = 8, 400
 
 local function isMP() return MPCoreNetwork ~= nil and MPCoreNetwork.isMPSession ~= nil and MPCoreNetwork.isMPSession() end
 local function careerActive() return overhaul_career_career ~= nil and overhaul_career_career.isActive() end
@@ -78,6 +82,32 @@ function M.relative(playerPos, playerDir, pos)
   return (dx * playerDir.x + dy * playerDir.y) / len > 0, dist
 end
 
+-- The point `back` metres back along the player's own trail, and the direction of travel there (toward the player). Pure. nil when the trail is shorter.
+function M.trailPoint(t, back)
+  local acc = 0
+  for i = #t, 2, -1 do
+    local a, b = t[i - 1], t[i]
+    local seg = math.sqrt((b.x - a.x) ^ 2 + (b.y - a.y) ^ 2)
+    acc = acc + seg
+    if acc >= back and seg > 1e-6 then
+      return {x = a.x, y = a.y, z = a.z}, {x = (b.x - a.x) / seg, y = (b.y - a.y) / seg}
+    end
+  end
+  return nil
+end
+
+-- Add the player's position to the trail (a jump over 150 m = a teleport: start again).
+function M.recordTrail(t, pos)
+  local last = t[#t]
+  if last then
+    local d = math.sqrt((pos.x - last.x) ^ 2 + (pos.y - last.y) ^ 2)
+    if d > 150 then for k in pairs(t) do t[k] = nil end last = nil
+    elseif d < CRUMB then return end
+  end
+  t[#t + 1] = {x = pos.x, y = pos.y, z = pos.z}
+  if #t > MAX_CRUMBS then table.remove(t, 1) end
+end
+
 local function isPoliceUnit(id, veh, playerId)
   return id ~= playerId and type(veh) == "table" and veh.isAi == true and type(veh.role) == "table" and veh.role.name == "police"
 end
@@ -111,7 +141,7 @@ end
 
 -- Build one police car through the game's group spawn. kind = "respawn" (replaces `oldId`, a model other than its) or "top" (one more cop).
 -- Returns true when a build was started.
-local function build(kind, oldId, oldModel, have)
+local function build(kind, oldId, oldModel, have, removeFirst)
   if job or not underRate() then return false end
   local v = ext("trafficVariety")
   if not (v and v.policePick) then return false end
@@ -126,6 +156,12 @@ local function build(kind, oldId, oldModel, have)
   if not ok then fail("spawnGroup raised: " .. tostring(err), kind) return false end
   recent[#recent + 1] = os.time()
   job = {kind = kind, oldId = oldId, entry = entry, startedAt = clock}
+  if removeFirst and oldId then
+    -- the cop RLS put in FRONT of the player is an unseen car right ahead (a car's auto brake reacts to it): it goes now, not when the new one is ready
+    removeCar(oldId)
+    seen[oldId] = nil
+    job.oldId = nil
+  end
   p3.count("police " .. kind .. " started")
   if kind == "respawn" then
     p3.log("I", string.format("police respawn: cop %s (%s) was re-placed; building %s/%s behind the player", tostring(oldId), tostring(oldModel), entry.model, entry.config))
@@ -170,13 +206,41 @@ function M.onVehicleGroupSpawned(vehList, groupId, groupName)
   failures[kind] = 0                -- a good one: the failure count starts again
   seen[id] = tonumber(veh.respawnCount) or 0
   grace[id] = clock + 10            -- its own start is not a re-placement
-  if kind == "respawn" then
+  if kind == "respawn" and j.oldId then
     removeCar(j.oldId)
     seen[j.oldId] = nil
   end
   p3.count("police " .. kind .. " done")
   p3.log("I", string.format("police %s: done, new cop %s (%s)%s", LABEL[kind], tostring(id), j.entry.model,
-    kind == "respawn" and (", old cop " .. tostring(j.oldId) .. " removed") or ""))
+    kind == "respawn" and (", old cop " .. tostring(j.oldId or "(removed earlier)") .. " removed") or ""))
+end
+
+-- A cop in front of the player: put the same car on the road behind (a point of the player's own trail), facing the way the player drives. No build.
+local function moveBehind(id)
+  local p, d = M.trailPoint(trail, settings.gap)
+  local o = objectOf(id)
+  if not (p and d and o and rawget(_G, "vec3") and rawget(_G, "quatFromDir")) then return false end
+  local okRot, rot = pcall(quatFromDir, vec3(d.x, d.y, 0), vec3(0, 0, 1))
+  if not okRot or not rot then return false end
+  local pos = vec3(p.x, p.y, p.z + 0.3)
+  local sp = rawget(_G, "spawn") or package.loaded["spawn"]
+  local ok, res
+  if sp and type(sp.safeTeleport) == "function" then
+    ok, res = pcall(sp.safeTeleport, o, pos, rot, nil, nil, nil, true)
+  elseif o.setPositionRotation then
+    ok, res = pcall(o.setPositionRotation, o, pos.x, pos.y, pos.z, rot.x, rot.y, rot.z, rot.w)
+  end
+  if not ok or res == false then
+    moveFailures = moveFailures + 1
+    p3.log("W", "police respawn: moving cop " .. tostring(id) .. " behind the player failed (" .. tostring(res) .. ")")
+    if moveFailures >= settings.maxFailures then moveOff = true p3.log("W", "police respawn: moving cops is switched off for this session") end
+    return false
+  end
+  moveFailures = 0
+  grace[id] = clock + 10
+  p3.count("police respawn moved")
+  p3.log("I", string.format("police respawn: cop %s was in front, moved %.0f m behind the player along the road you drove (no build)", tostring(id), settings.gap))
+  return true
 end
 
 local function step()
@@ -189,6 +253,7 @@ local function step()
     fail("no group-spawned message within " .. BUILD_TIMEOUT .. " s", kind)
   end
   local ppos, pdir = playerFrame()
+  if ppos then M.recordTrail(trail, ppos) end
   for id in pairs(seen) do if traffic[id] == nil then seen[id] = nil end end
   for id in pairs(mine) do if traffic[id] == nil then mine[id] = nil end end
   for id in pairs(grace) do if traffic[id] == nil then grace[id] = nil end end
@@ -205,7 +270,12 @@ local function step()
           local ahead, dist = M.relative(ppos, pdir, veh.pos)
           if dist >= settings.minDistance then
             p3.log("I", string.format("police respawn: cop %s re-placed %.0f m %s the player", tostring(id), dist, ahead and "in front of" or "behind"))
-            build("respawn", id, veh.jbeam or (objectOf(id) and objectOf(id).jbeam))
+            local model = veh.jbeam or (objectOf(id) and objectOf(id).jbeam)
+            if clock - lastBuild >= settings.rebuildSeconds and build("respawn", id, model, nil, ahead) then
+              lastBuild = clock
+            elseif ahead and not moveOff then
+              moveBehind(id)
+            end
           end
         end
       end
@@ -235,6 +305,10 @@ local function onConfig(data)
   if gap and gap >= 20 and gap <= 500 then settings.gap = gap end
   local cops = tonumber(data.copCount)
   if cops and cops >= 0 and cops <= 6 then settings.copCount = math.floor(cops) end
+  local rebuild = tonumber(data.respawnRebuildSeconds)
+  if rebuild and rebuild >= 10 and rebuild <= 1800 then settings.rebuildSeconds = rebuild end
+  local rd = tonumber(data.copRespawnDistance)
+  if rd and rd >= 0 and rd <= 4000 then settings.respawnDistance = rd end
   local topUp = tonumber(data.copTopUpSeconds)
   if topUp and topUp >= 5 and topUp <= 600 then settings.topUpSeconds = topUp end
 end
@@ -242,8 +316,12 @@ M._onConfig = onConfig
 
 function M.onServerLeave()
   seen, mine, grace, job, recent = {}, {}, {}, nil, {}
+  trail, lastBuild, moveFailures, moveOff = {}, -math.huge, 0, false
   failures, off, lastTop = {respawn = 0, top = 0}, {respawn = false, top = false}, -math.huge
 end
+
+-- The least radius (m) a police unit gets before RLS re-places it (rlsmp/bubble.lua reads this); 0 = the game's own.
+function M.respawnDistance() return (live() and settings.respawnDistance) or 0 end
 
 function M.getState() return {job = job, failures = failures, off = off, settings = settings, seen = seen, mine = mine} end
 

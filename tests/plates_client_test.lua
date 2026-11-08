@@ -220,4 +220,37 @@ tick(8)
 check(#sentNamed("rlsmpPlateLookup") == nLook + 1, "the unit reads again")
 server("rlsmpPlateResult", {plate = "NEW 1", model = "etk800", flagged = false})
 
+
+-- 0.4.55: getting out of the car in a chase never flags the car, and the chase follows the walking player
+local walking = false
+gameplay_walk = {isWalking = function() return walking end}
+local flagsBefore = #sentNamed("rlsmpPlateEscaped")
+walking = true
+plates.onPursuitAction(1, "evade", {timers = {evade = 40}})
+plates.onPursuitAction(1, "arrest", {})
+check(#sentNamed("rlsmpPlateEscaped") == flagsBefore and saw("the car is not flagged"), "outcomes while walking are not reported against the car")
+local handoffId = 70
+overhaul_integration_services_police.getWalkHandoffVehId = function() return handoffId end
+plates.onPursuitAction(handoffId, "evade", {timers = {evade = 40}})
+plates.onPursuitAction(handoffId, "arrest", {})
+check(#sentNamed("rlsmpPlateEscaped") == flagsBefore, "the empty car RLS keeps the chase on is never flagged")
+walking = false
+plates.onPursuitAction(1, "evade", {timers = {evade = 40}})
+check(#sentNamed("rlsmpPlateEscaped") == flagsBefore + 1, "driving: an escape still flags the plate")
+-- the chase is on the empty car: it moves to the walking player
+local setCalls = {}
+overhaul_integration_services_police.setPursuitMode = function(level, target) setCalls[#setCalls + 1] = {level, target} end
+traffic[70] = {isAi = false, pursuit = {mode = 2}}
+walking = true
+tick(3)
+check(#setCalls >= 1 and setCalls[1][1] == 0 and setCalls[1][2] == 70, "walking with the chase on the empty car: the chase of the car is ended")
+check(saw("police on-foot: player left the car"), "...and logged")
+tick(3)
+check(setCalls[2] and setCalls[2][1] == 2 and setCalls[2][2] == 1 and #setCalls == 2, "...then the same mode starts on the walking player, once")
+tick(10)
+check(#setCalls == 2, "and it is not repeated every second")
+walking = false
+traffic[70] = nil
+handoffId = nil
+
 print("plates_client_test: " .. passed .. " checks passed")
