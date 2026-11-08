@@ -119,7 +119,7 @@ local function rules(prefix, list)
 end
 rules("theft.", {
   enabled = {"bool"}, perMille = {"number", 0, 1000, true}, periodSeconds = {"number", 60, 86400, true}, radius = {"number", 1, 10},
-  retrySeconds = {"number", 0, 300, true}, jammerNoiseFactor = {"number", 0, 1},
+  retrySeconds = {"number", 0, 300, true}, repriceMinutes = {"number", 1, 1440, true}, maxRepriceStep = {"number", 1, 500, true}, jammerNoiseFactor = {"number", 0, 1},
   baseWitnessChance = {"number", 0, 1}, perWitness = {"number", 0, 1}, noiseWitness = {"number", 0, 1}, maxWitnessChance = {"number", 0, 1},
   witnessCap = {"number", 0, 20, true}, seenReportMin = {"number", 1, 3600, true}, seenReportMax = {"number", 1, 3600, true},
   unseenReportSeconds = {"number", 1, 86400, true}, trackerReportSeconds = {"number", 1, 3600, true}, keepHours = {"number", 1, 720, true},

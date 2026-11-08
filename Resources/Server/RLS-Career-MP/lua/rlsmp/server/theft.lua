@@ -94,6 +94,7 @@ function M.capValue(model, value)
   if mc and mc > 0 then cap = math.min(cap, mc) end
   return math.min(M.cleanValue(value), math.floor(cap))
 end
+function M.cleanSource(v) return type(v) == "string" and v ~= "" and v:sub(1, 100):gsub("[^%w%._ /%-%(%)]", "") or nil end
 function M.cleanYear(y)
   y = math.floor(n(y, 0))
   if y < 1900 or y > 2100 then return nil end
@@ -312,6 +313,64 @@ local function accountOf(pid)
   return s and s.accountId or nil
 end
 
+-- Repricing: RLS's used-car market moves over time, so the owner's game works the value out again every theft.repriceMinutes and sends it
+-- (rlsmpTheftValue). Records from before the value fix have no valueSource: their first answer may jump, up to the fence caps.
+function M.repriceSeconds() return math.max(60, math.floor(n(cfg and cfg.repriceMinutes, 30) * 60)) end
+function M.maxStep() return clamp(n(cfg and cfg.maxRepriceStep, 25), 1, 1000) / 100 end
+local function fallback(rec)
+  return rec.valueSource == nil or n(rec.value, 0) <= n(fenceCfg and fenceCfg.minValue, 2000)
+end
+function M.isStale(rec) return util.now() - n(rec.vt, 0) >= M.repriceSeconds() or rec.valueSource == nil end
+local asked, capable = {}, {}      -- plate -> time of the last ask; pid -> true once that player's game answered (an old game never does)
+
+-- Ask the owner's game for fresh values of stale records. Returns true when something was asked. `soon` = also ask if asked 15+ s ago.
+function M.repriceAsk(pid, soon)
+  local acc = accountOf(pid)
+  if not acc or not enabled() then return false end
+  local now, cars = util.now(), {}
+  for plate, rec in pairs(stolen) do
+    if rec.by == acc and M.isStale(rec) and now - n(asked[plate], -1e9) >= (soon and 15 or 60) then
+      asked[plate] = now
+      cars[#cars + 1] = {plate = plate, model = rec.model, config = rec.config}
+    end
+  end
+  if #cars == 0 then return false end
+  net.send(pid, "rlsmpTheftReprice", {cars = cars})
+  return true
+end
+
+-- Before a quote or a payment: true when the value is fresh enough (or the player's game cannot answer). Otherwise it asks and returns false once.
+function M.fresh(pid, rec)
+  if not M.isStale(rec) or not capable[pid] then return true end
+  local t = asked[rec.plate]
+  if t and util.now() - t >= 15 and util.now() - t < 60 then return true end   -- asked and no answer: go on with the stored value
+  M.repriceAsk(pid, true)
+  return false
+end
+
+local function onValue(pid, d)
+  if type(d) ~= "table" or not enabled() then return end
+  local plate = M.cleanPlate(d.plate)
+  local rec = plate and stolen[plate]
+  if not rec or rec.by ~= accountOf(pid) then return end
+  capable[pid] = true
+  local now = util.now()
+  if rec.valueSource ~= nil and now - n(rec.vt, 0) < M.repriceSeconds() / 2 then return end     -- too early: abuse guard
+  local v = M.capValue(rec.model, d.value)
+  if v <= 0 then return end
+  local old = n(rec.value, 0)
+  if not fallback(rec) and old > 0 then
+    local step = M.maxStep()
+    v = clamp(v, math.floor(old * (1 - step)), math.ceil(old * (1 + step)))
+    v = M.capValue(rec.model, v)
+  end
+  rec.prevValue, rec.value, rec.vt = old, v, now
+  rec.valueSource = M.cleanSource(d.source) or "client"
+  asked[plate] = nil
+  save()
+  util.info(string.format("[theft] value of %s %s: %d -> %d (%s)", tostring(rec.model), plate, old, v, rec.valueSource))
+end
+
 local function chat(pid, msg) if MP and MP.SendChatMessage then MP.SendChatMessage(pid, "[Theft] " .. msg) end end
 
 -- Handlers -----------------------------------------------------------------------------------------
@@ -466,6 +525,7 @@ local function onDone(pid, d)
   local s = sessions.get(pid)
   stolen[plate] = {
     plate = plate, model = model, color = cleanColor(d.color), value = value, year = p.year,
+    valueSource = M.cleanSource(d.valueSource) or "client", vt = now, config = M.cleanSource(d.config),
     pos = {x = n(d.x, 0), y = n(d.y, 0), z = n(d.z, 0)}, method = p.method, tier = p.tier,
     by = p.accountId, name = s and s.name or nil, t = now, seen = seen, tracker = tracker == true,
     reportAt = now + delay, reported = false,
@@ -535,6 +595,9 @@ function M.tick()
   offTold = false
   M.pushConfig()
   M.reportDue()
+  for pid in pairs(sessions.all()) do
+    if sessions.isLoaded(pid) then M.repriceAsk(pid) end
+  end
 end
 
 local function onSteal(pid, rest)
@@ -554,6 +617,7 @@ function M.init(config, pluginRoot)
   fenceCfg = config.fence
   serverTag = tostring(config.serverTag or "")
   stolen, pending, cooldown, told, lastCheck = {}, {}, {}, {}, {}
+  asked, capable = {}, {}
   inspecting, inspectNext, lastHint = {}, {}, {}
   file = pluginRoot and (pluginRoot .. "stolen.json") or nil
   offTold = false
@@ -568,6 +632,7 @@ function M.init(config, pluginRoot)
   net.onClient("rlsmpTheftStart", onStart)
   net.onClient("rlsmpTheftFinish", onFinish)
   net.onClient("rlsmpTheftDone", onDone)
+  net.onClient("rlsmpTheftValue", onValue)
   net.onClient("rlsmpTheftCancel", onCancel)
   net.onClient("rlsmpTheftHint", onHint)
   net.onClient("rlsmpTheftInspect", onInspect)

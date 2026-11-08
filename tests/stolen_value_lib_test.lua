@@ -45,6 +45,15 @@ check(r.value == SV.MAX_VALUE, "client sanity cap")
 r = SV.resolve("bastion", {"sedan_pre_s"}, list, {valuation = function() return {bookValue = 0 / 0} end})
 check(r.value == 30000 or r.value > 0, "nan valuation ignored")
 
+-- RLS market index: asked of the valuation itself, applied by us on the other paths
+local mo
+r = SV.resolve("bastion", {"sedan_pre_s"}, list, {year = 2026, market = 1.2, valuation = function(o) mo = o return {bookValue = 20000} end})
+check(mo.applyVehicleBuyMarket == true and r.value == 20000 and r.market == 1.2, "valuation gets the market flag and applies it itself")
+r = SV.resolve("bastion", {"sedan_pre_s"}, list, {year = 2026, market = 0.8, valuation = function() return nil end, quick = function(b) return b * 0.5 end})
+check(r.value == 12000, "quick value is multiplied by the market index")
+r = SV.resolve("bastion", {"sedan_pre_s"}, list, {year = 2026, valuation = function(o) mo = o return {bookValue = 20000} end})
+check(mo.applyVehicleBuyMarket == false, "no market index: not applied")
+
 -- spec for the estimator
 local spec = SV.specOf({Power = 300, Weight = 1500, ["Top Speed"] = 60, Drivetrain = "RWD", Years = {min = 2010, max = 2014}, Name = "x", aggregates = {Type = {Car = true}}})
 check(spec.hp == 300 and spec.weight == 1500 and spec.year == 2010 and spec.drivetrain == "RWD" and spec.words:find("Car"), "specOf")

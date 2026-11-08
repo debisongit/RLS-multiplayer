@@ -85,7 +85,8 @@
           <h2>Invite someone</h2>
           <p class="hint">Type the exact name of a player who is online. You have {{ state.invitesLeft }} invite{{ state.invitesLeft === 1 ? '' : 's' }} left; more come with reputation.</p>
           <div class="invite">
-            <input v-model="who" type="text" maxlength="40" placeholder="Player name" @keydown.enter="invite" />
+            <input v-model="who" type="text" maxlength="40" placeholder="Player name" autocomplete="off"
+              @pointerdown="typingOn" @focus="typingOn" @blur="typingOff" @keydown.stop="typingKey" />
             <button type="button" class="primary" bng-nav-item :disabled="busy || !who.trim() || state.invitesLeft < 1" @click="invite">Invite</button>
           </div>
         </section>
@@ -106,6 +107,7 @@
               <div>
                 <strong>{{ c.model }} {{ c.plate }}</strong>
                 <small>Strip {{ money(c.strip) }} · Sell {{ money(c.sell) }} · Resell {{ c.resell ? money(c.resell) : 'needs 3 papers' }} · Gamble {{ c.gamble ? money(c.gamble) : 'needs a paper' }}</small>
+                <small v-if="c.age != null" class="hint">Price {{ c.trend > 0 ? 'up ▲' : (c.trend < 0 ? 'down ▼' : 'steady') }}, updated {{ Math.floor(c.age / 60) < 1 ? 'just now' : Math.floor(c.age / 60) + ' min ago' }}</small>
               </div>
             </article>
             <p class="hint">Drive to {{ state.spot || 'the drop spot' }}, get out and stand next to the car, then pick how to sell it. The garage computer offers the same without the drive. Gambling can end in a police trap.</p>
@@ -288,6 +290,21 @@ async function act(action, a, b) {
   }
 }
 
+// Typing. Without this the game keeps the keyboard for its key bindings. RLS's own useCefTyping (composables/useCefTyping.js) just calls the
+// game function setCEFTyping(true) on focus and setCEFTyping(false) on blur; we send the same call by raw engineLua (no import from RLS).
+let typing = false
+function setTyping(on) {
+  typing = on
+  try { bridge.api.engineLua('setCEFTyping(' + (on ? 'true' : 'false') + ')', () => {}) } catch (e) { console.warn('[RLSMP] setCEFTyping failed:', e) }
+}
+function typingOn() { setTyping(true) }
+function typingOff() { if (typing) setTyping(false) }
+function typingKey(e) {
+  if (!typing) setTyping(true)
+  if (e.key === 'Enter') invite()
+  else if (e.key === 'Escape') { e.target.blur(); typingOff() }
+}
+
 function invite() {
   const name = who.value.trim()
   if (!name || busy.value) return
@@ -301,6 +318,7 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   alive = false
+  typingOff()
   clearInterval(pollTimer)
   clearTimeout(messageTimer)
 })

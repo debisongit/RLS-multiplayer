@@ -299,4 +299,36 @@ cfg.fence.modelCaps = {bastion = 40000}
 check(theft.capValue("bastion", 90000) == 40000 and theft.capValue("covet", 90000) == 90000, "theft cap: per model")
 cfg.fence.modelCaps = {}
 
+-- a stale price is refreshed before it is paid (only when the player's game has shown it can answer) ----------------------------
+do
+  join(3, "cid", 1000)
+  fire("onConsoleInput", "rlsmp market grant cid")
+  rec("CCC 333", accountOf(3), 10000)
+  local cr = theft.records()["CCC 333"]
+  cr.valueSource, cr.vt = "rls valuation", now - 3600
+  items.give(3, "fake_plate", 1)
+  standAt(3, spot.x, spot.y)
+  local s3 = fence.summary(3)
+  check(lastSent(3, "rlsmpTheftReprice") ~= nil, "the app list asks the game for a new price")
+  local mineRow
+  for _, row in ipairs(s3) do if row.plate == "CCC 333" then mineRow = row end end
+  check(mineRow and mineRow.age >= 3600, "the app list says how old the price is")
+  cr.vt = now - 3600
+  local before = cr.value
+  local r3 = sell(3, "CCC 333", "gamble")
+  check(r3.ok ~= nil, "an old game that never answered still sells")
+  rec("DDD 444", accountOf(3), 10000)
+  local dr = theft.records()["DDD 444"]
+  dr.valueSource, dr.vt = "rls valuation", now - 3600
+  fire("rlsmpTheftValue", 3, json.encode({plate = "DDD 444", value = 10000, source = "x"}))   -- the game can answer now
+  dr.vt = now - 3600
+  local nowAsked = #sent
+  r3 = sell(3, "DDD 444", "strip")
+  check(r3.ok == false and r3.err:find("market"), "stale price: the sale waits for a fresh one")
+  check(#sent > nowAsked, "and the game is asked")
+  fire("rlsmpTheftValue", 3, json.encode({plate = "DDD 444", value = 12000, source = "rls valuation"}))
+  r3 = sell(3, "DDD 444", "strip")
+  check(r3.ok == true and r3.pay == 5400, "after the answer it pays by the new value")
+end
+
 print(string.format("fence_test: %d checks passed", passed))

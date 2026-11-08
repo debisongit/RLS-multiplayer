@@ -8,7 +8,9 @@
 --   3. RLS getQuickVehicleValue on the catalog value
 --   4. our spec estimator (lib/modPrice.lua) when the game gave no price at all
 --   5. the plain catalog value, else 0 (the server then uses fence.minValue)
--- ctx = {valuation = fn(opts) -> record|nil, quick = fn(base, year, mileage) -> n|nil, estimate = fn(info) -> n|nil, year = this year}
+-- ctx = {valuation = fn(opts) -> record|nil, quick = fn(base, year, mileage) -> n|nil, estimate = fn(info) -> n|nil, year = this year,
+--        market = RLS's current used-car market index (globalEconomy.getVehicleMarketIndex, about 0.8 to 1.2; nil = not applied)}
+-- The market index is what makes a price rise and fall over time: RLS's valuation multiplies by it (applyVehicleBuyMarket), the other paths here do it themselves.
 
 local M = {}
 
@@ -102,16 +104,20 @@ function M.resolve(model, names, list, ctx)
   out.age = midYear and math.max(0, now - midYear) or M.DEFAULT_AGE
   out.mileage = M.mileageMeters(out.age)
   local base = entry and num(entry.Value)
-  local function done(v, src)
+  local mk = num(ctx.market)
+  if mk and (mk <= 0 or mk > 10) then mk = nil end
+  out.market = mk
+  local function done(v, src, applied)
+    if mk and not applied then v = v * mk end
     v = math.floor(v + 0.5)
     if v > 0 then out.value, out.source = math.min(v, M.MAX_VALUE), src end
     return out
   end
   if entry and ctx.valuation then
     local ok, rec = pcall(ctx.valuation, {modelName = model, configKey = entry.key, configInfo = entry, catalogBaseValue = base,
-      age = out.age, mileageMeters = out.mileage, logContext = "rlsmpStolen", applyVehicleBuyMarket = false})
+      age = out.age, mileageMeters = out.mileage, logContext = "rlsmpStolen", applyVehicleBuyMarket = mk ~= nil})
     local v = ok and type(rec) == "table" and num(rec.bookValue)
-    if v and v > 0 then return done(v, how == "typical" and "rls valuation (typical config)" or "rls valuation") end
+    if v and v > 0 then return done(v, how == "typical" and "rls valuation (typical config)" or "rls valuation", true) end
   end
   if base and base > 0 and ctx.quick then
     local ok, v = pcall(ctx.quick, base, midYear or (now - M.DEFAULT_AGE), out.mileage)
