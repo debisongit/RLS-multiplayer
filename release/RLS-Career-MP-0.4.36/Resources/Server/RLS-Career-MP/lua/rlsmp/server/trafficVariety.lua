@@ -65,6 +65,24 @@ function M.police()
   }
 end
 
+-- Premade pool, respawn re-roll and parked amount settings; the client sanitizes them again.
+function M.pool()
+  local p = type(cfg.pool) == "table" and cfg.pool or {}
+  return {enabled = p.enabled ~= false, avoidLast = tonumber(p.avoidLast), brandWindow = tonumber(p.brandWindow), brandMax = tonumber(p.brandMax),
+    streetMax = tonumber(p.streetMax), configsPerModel = tonumber(p.configsPerModel), popPower = tonumber(p.popPower), ageMax = tonumber(p.ageMax)}
+end
+
+function M.respawn()
+  local r = type(cfg.respawn) == "table" and cfg.respawn or {}
+  return {enabled = r.enabled ~= false, perMinute = tonumber(r.perMinute), chance = tonumber(r.chance), repaintChance = tonumber(r.repaintChance),
+    waitSeconds = tonumber(r.waitSeconds), checkSeconds = tonumber(r.checkSeconds)}
+end
+
+function M.parked()
+  local k = type(cfg.parked) == "table" and cfg.parked or {}
+  return {amount = tonumber(k.amount)}
+end
+
 function M.payload()
   local zones = {}
   if type(cfg.zones) == "table" then
@@ -89,6 +107,9 @@ function M.payload()
     zoneSpeedLimits = {city = tonumber(limits.city), main = tonumber(limits.main)},
     swap = M.swap(),
     police = M.police(),
+    pool = M.pool(),
+    respawn = M.respawn(),
+    parked = M.parked(),
   }
 end
 

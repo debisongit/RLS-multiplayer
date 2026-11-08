@@ -54,10 +54,24 @@ local STATIC = {
   ["trafficVariety.swap.hiddenSeconds"] = {"number", 1, 120},
   ["trafficVariety.swap.minRatio"] = {"number", 1, 100},
   ["trafficVariety.swap.maxFailures"] = {"number", 1, 20, true},
+  ["trafficVariety.pool.enabled"] = {"bool"},
+  ["trafficVariety.pool.avoidLast"] = {"number", 0, 40, true},
+  ["trafficVariety.pool.brandWindow"] = {"number", 1, 40, true},
+  ["trafficVariety.pool.brandMax"] = {"number", 1, 40, true},
+  ["trafficVariety.pool.streetMax"] = {"number", 1, 40, true},
+  ["trafficVariety.pool.configsPerModel"] = {"number", 1, 12, true},
+  ["trafficVariety.pool.popPower"] = {"number", 0, 1},
+  ["trafficVariety.respawn.enabled"] = {"bool"},
+  ["trafficVariety.respawn.perMinute"] = {"number", 0, 12, true},
+  ["trafficVariety.respawn.chance"] = {"number", 0, 1},
+  ["trafficVariety.respawn.repaintChance"] = {"number", 0, 1},
+  ["trafficVariety.respawn.waitSeconds"] = {"number", 0.5, 30},
+  ["trafficVariety.parked.amount"] = {"number", 0, 30, true},
   ["weather.enabled"] = {"bool"},
   ["weather.force"] = {"enum", values = {[""] = true, clear = true, partlyCloudy = true, overcast = true, drizzle = true, rain = true, storm = true}},
   ["police.antiTeleport"] = {"bool"},
   ["police.blockRoadblocks"] = {"bool"},
+  ["police.bubbleMode"] = {"enum", values = {original = true, protect = true, off = true}},
   ["police.enabled"] = {"bool"},
   ["police.plateFlagSeconds"] = {"number", 60, 86400, true},
   ["police.descriptionSeconds"] = {"number", 60, 86400, true},
@@ -272,6 +286,9 @@ function M.snapshot()
   local swap = type(v.swap) == "table" and v.swap or {}
   local limits = type(v.zoneSpeedLimits) == "table" and v.zoneSpeedLimits or {}
   local vp = type(v.police) == "table" and v.police or {}
+  local pool = type(v.pool) == "table" and v.pool or {}
+  local rs = type(v.respawn) == "table" and v.respawn or {}
+  local pk = type(v.parked) == "table" and v.parked or {}
   local extra = copyRuled({theft = true, fence = true, market = true})
   -- A method without an "enabled" key is ON (theft.lua: enabled ~= false); show it that way, or the menu would list every method as off.
   for name, m in pairs(type(extra.theft) == "table" and type(extra.theft.methods) == "table" and extra.theft.methods or {}) do
@@ -290,9 +307,13 @@ function M.snapshot()
       zoneSpeedLimits = {city = limits.city, main = limits.main},
       police = {enabled = vp.enabled, undercoverShare = vp.undercoverShare, maxShare = vp.maxShare, models = copyMap(vp.models)},
       swap = {enabled = swap.enabled, live = swap.live, perMinute = swap.perMinute, hiddenSeconds = swap.hiddenSeconds,
-        minRatio = swap.minRatio, maxFailures = swap.maxFailures}},
+        minRatio = swap.minRatio, maxFailures = swap.maxFailures},
+      pool = {enabled = pool.enabled, avoidLast = pool.avoidLast, brandWindow = pool.brandWindow, brandMax = pool.brandMax, streetMax = pool.streetMax,
+        configsPerModel = pool.configsPerModel, popPower = pool.popPower},
+      respawn = {enabled = rs.enabled, perMinute = rs.perMinute, chance = rs.chance, repaintChance = rs.repaintChance, waitSeconds = rs.waitSeconds},
+      parked = {amount = pk.amount}},
     weather = {enabled = w.enabled, force = w.force, mix = copyMap(w.mix), periodMinutes = w.periodMinutes},
-    police = {enabled = p.enabled, antiTeleport = p.antiTeleport, blockRoadblocks = p.blockRoadblocks,
+    police = {enabled = p.enabled, antiTeleport = p.antiTeleport, blockRoadblocks = p.blockRoadblocks, bubbleMode = p.bubbleMode,
       plateFlagSeconds = p.plateFlagSeconds, descriptionSeconds = p.descriptionSeconds,
       plateReading = {enabled = pr.enabled, rangeMeters = pr.rangeMeters, maxSpeedKmh = pr.maxSpeedKmh, readChance = pr.readChance,
         afterEscapeChance = pr.afterEscapeChance, skipChance = pr.skipChance}},

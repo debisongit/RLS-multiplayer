@@ -87,6 +87,11 @@ M.defaults = {
     antiTeleport = true,
     -- Refuse RLS roadblocks (they put police cars on the road ahead of you).
     blockRoadblocks = true,
+    -- Which traffic cars another player's game may not recycle (client rlsmp/bubble.lua):
+    -- "original" = RLS's own spawn and respawn distances, a car is only kept while another player is within its
+    --   own active radius AND has a clear line to it; "protect" = the old strict rule (450 m, or a clear line up to 1 km);
+    -- "off" = no protection at all.
+    bubbleMode = "original",
     -- Police records (server plateRecords.lua), shared by all cops on the server:
     -- a flagged plate (plate text + car model) lasts this many real seconds; a new plate text clears it at once.
     plateFlagSeconds = 7200,
@@ -150,6 +155,18 @@ M.defaults = {
     -- Police cars (RLS's west coast list is only Bastions, 4 of 5 unmarked/undercover). Weight per police model (missing = 1, 0 = never; default Bastion low),
     -- undercoverShare = about this share of police cars may be unmarked/undercover (name contains a word of undercoverWords), maxShare = most of one model in a group.
     police = {enabled = true, models = {bastion = 0.3}, undercoverShare = 0.1, maxShare = 0.4, undercoverWords = {"undercover", "unmarked"}},
+    -- Premade pool: traffic groups and re-rolled cars are picked from a few configs of EVERY model the game could use (RLS's own traffic filter applies),
+    -- round robin: a model is not used again within the last avoidLast picks, at most brandMax of one brand in the last brandWindow picks,
+    -- at most streetMax cars of one brand on the street. popPower 0 = every config equally likely, 1 = follow the game's Population value.
+    pool = {enabled = true, avoidLast = 6, brandWindow = 12, brandMax = 3, streetMax = 3, configsPerModel = 5, popPower = 0.5},
+    -- Respawn re-roll: when RLS respawns a traffic car out of everybody's sight, it comes back as another model with another config
+    -- (needs pool.enabled). perMinute = most re-rolls per minute in one game (BeamMP sends every one to every player: keep it low). chance = share of respawns re-rolled.
+    -- repaintChance = share of re-rolled cars that also get random paint. Never police, taxis, chased, crashed, job or player cars.
+    respawn = {enabled = true, perMinute = 3, chance = 1, repaintChance = 0.5, waitSeconds = 3},
+    -- Parked cars: RLS keeps as many as its game setting trafficParkingAmount says (a real log: 2). Each game raises that setting to this amount after the
+    -- career starts (never lowers a higher one, gives the old value back on leaving). 0 = leave it alone. Every parked car is a car BeamMP syncs to the others
+    -- and counts for the server's per-player car limit (MaxCars in ServerConfig.toml), so raise that too. Car theft needs parked cars to steal.
+    parked = {amount = 10},
   },
 
   smartTraffic = {

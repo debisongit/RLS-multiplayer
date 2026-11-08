@@ -1,10 +1,26 @@
 # Changelog
 
+## 0.4.36 (all untested in-game)
+- Traffic: premade pool that rotates brands and models (no repeat within 6 picks, max 3 of a brand), respawned cars get a new model and config out of sight (3 a minute), parked car amount raised to 10 (`trafficVariety.parked.amount`). (Claude A)
+- Police chase: cops near you are held before a chase starts, fading-out cops are cancelled, cops re-placed should come from behind. Spawn range is back to the original game behavior by default (`police.bubbleMode`: original, protect, off). (Claude A)
+
+## Unreleased (chase and traffic range, build number not bumped)
+- Police: cops near you are now held BEFORE a chase starts (not only after the game noticed it), so a cop that sees you is not recycled in the half second before the chase flips on. A cop that is already fading out when it gets held fades back in. Untested. (Claude A)
+- Police: every police car gets "respawn away from you" (`spawnDirBias = -1`), so a cop that RLS re-places anyway should arrive from behind, not ahead. This is a guess about vanilla placement, see `docs/RESEARCH_CHASE_RANGE.md`. Roadblocks and police teleports are also refused before the chase is noticed. Untested. (Claude A)
+- Traffic range: new setting `police.bubbleMode` (menu: Police page). Default `original` = RLS's own spawn and respawn distances; a car is only kept while another player is inside its own radius and sees it. `protect` = the old strict rule (450 m, or line of sight up to 1 km), `off` = no protection. The old rule is what made respawns far and repetitive. Untested. (Claude A)
+- The LEAK log line now says how far the cop was and whether it was ahead of you, and a new log line says when a fade-out was cancelled. (Claude A)
+
 ## 0.4.35 (all untested in-game)
 - Meetup selling: Marketplace sales send you to a meetup spot to drop the car off. Only stolen or fake-paper cars can be a police setup (1 to 2 cops); a fully legal car never is. (Claude A)
 - Garage: Strip and illegal parts buttons in your RLS garage, plus a Black market items button. (Claude A)
 - Police variety: more police models, fewer undercovers, fewer Bastions. (Claude A)
 
+## Unreleased (traffic pool, build number not bumped)
+- Respawned traffic cars now change: when RLS respawns a traffic car out of everybody's sight, it is replaced by a different model with a different config (and half of them get new paint). Rate-limited (3 a minute), never police, taxis, chases, job, crashed or player cars, and it stops itself after 3 failures. Settings `trafficVariety.respawn`. Untested in game. (Claude A)
+- Premade car pool: traffic groups and re-rolled cars are picked from a few configs of every model the game could use (RLS's own traffic filter applies), round robin: not the same model within the last 6 picks, at most 3 of one brand in the last 12, at most 3 of one brand on the street. Settings `trafficVariety.pool`. Untested in game. (Claude A)
+- More parked cars: after the career starts, the game setting `trafficParkingAmount` is raised to `trafficVariety.parked.amount` (default 10; your log had 2) and RLS tops the cars up; the old value comes back when you leave. 0 = leave alone. More parked cars are more BeamMP cars per player, so check `MaxCars`. Untested in game. (Claude A)
+- The `[` menu "amount" page got the pool, re-roll and parked settings. Research and unverified bits: `docs/RESEARCH_TRAFFIC_POOL.md`. (Claude A)
+- Note: with default weights live swapping never swaps (everything weighs the same); only the new re-roll changes cars on a default server. (Claude A)
 ## Unreleased (not built, not played)
 - New meetup selling. A Marketplace sale no longer finishes at once: you get a GPS route to a meetup spot the server picks, stop there for a moment, and the sale completes. Spots change each time and there is a cooldown. Untested in game, and the hook into the Marketplace is unverified (see `docs/RESEARCH_MEETUP_SALE.md`). (untested) (Claude A)
 - A fully legal car is never set up. A stolen car or a car with a police-flagged plate has a chance that the buyer is a police setup: 1 or 2 cops chase you, no roadblocks, no sale. The chance is never 0 or 100 percent for those cars, so you cannot be sure. (untested) (Claude A)
