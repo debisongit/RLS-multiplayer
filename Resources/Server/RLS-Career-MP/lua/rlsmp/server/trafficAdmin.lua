@@ -105,6 +105,7 @@ local STATIC = {
   ["police.plateReading.skipChance"] = {"number", 0, 1},
 }
 STATIC["modPrice.enabled"] = {"bool"}
+STATIC["modPrice.sell"] = {"bool"}
 STATIC["modPrice.max"] = {"number", 1000, 100000000, true}
 STATIC["modPrice.min"] = {"number", 100, 100000, true}
 STATIC["modPrice.tolerance"] = {"number", 0, 2}
@@ -332,7 +333,7 @@ function M.snapshot()
   end
   return {
     theft = extra.theft, fence = extra.fence, market = extra.market,
-    modPrice = {enabled = mpr.enabled, max = mpr.max, min = mpr.min, tolerance = mpr.tolerance},
+    modPrice = {enabled = mpr.enabled, sell = mpr.sell, max = mpr.max, min = mpr.min, tolerance = mpr.tolerance},
     traffic = {enabled = t.enabled, totalBudget = t.totalBudget, baseBudget = t.baseBudget, perPlayerBudget = t.perPlayerBudget,
       minPerPlayer = t.minPerPlayer, maxPerPlayer = t.maxPerPlayer,
       respawnRange = t.respawnRange, respawnDelay = t.respawnDelay, unjam = copyMap(t.unjam)},

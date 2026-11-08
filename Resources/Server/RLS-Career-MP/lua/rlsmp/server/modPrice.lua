@@ -31,7 +31,7 @@ function M.payload()
     if type(name) == "string" and name ~= "" and #name <= 64 and #models < MAX_ENTRIES then models[#models + 1] = name end
   end
   table.sort(models)
-  return {enabled = p.enabled ~= false, max = finite(p.max), min = finite(p.min), tolerance = finite(p.tolerance), overrides = overrides, models = models}
+  return {enabled = p.enabled ~= false, sell = p.sell ~= false, max = finite(p.max), min = finite(p.min), tolerance = finite(p.tolerance), overrides = overrides, models = models}
 end
 
 function M.push()

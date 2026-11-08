@@ -30,7 +30,7 @@ local function take() local t = sent sent = {} return t end
 
 -- defaults
 local d = cfg.modPrice
-check(d.enabled == true and d.max == 2000000 and d.min == 800 and d.tolerance == 0.35 and next(d.overrides) == nil, "defaults")
+check(d.sell == true and d.enabled == true and d.max == 2000000 and d.min == 800 and d.tolerance == 0.35 and next(d.overrides) == nil, "defaults")
 
 -- sent once, after load, with the mod model list
 stages[0] = "await_hello"
@@ -68,10 +68,11 @@ local applied, rejected = admin.applyPatch({set = {
   {p = {"modPrice", "max"}, v = 500000},
   {p = {"modPrice", "tolerance"}, v = 0.5},
   {p = {"modPrice", "min"}, v = 50},
+  {p = {"modPrice", "sell"}, v = false},
   {p = {"modPrice", "overrides", "acar"}, v = 1},
   {p = {"modPrice", "max"}, v = "lots"},
 }})
-check(applied == 3 and #rejected == 3, "three valid, three rejected")
+check(applied == 4 and #rejected == 3, "three valid, three rejected")
 check(cfg.modPrice.enabled == false and cfg.modPrice.max == 500000 and cfg.modPrice.tolerance == 0.5 and cfg.modPrice.min == 800, "values set, bad ones not")
 check(cfg.modPrice.overrides.acar == 5000, "overrides cannot be edited from the menu")
 local snap = admin.snapshot()

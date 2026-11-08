@@ -53,7 +53,7 @@ check(ov.overrides.bad == nil and ov.overrides.huge == nil, "bad overrides are d
 local s = P.sanitize({enabled = false, max = "abc", min = -5, tolerance = 99, models = {"a", 5, string.rep("x", 100)}})
 check(s.enabled == false and s.max == 2000000 and s.min == 100 and s.tolerance == 5, "sanitize clamps")
 check(s.models.a and not s.models[5], "model list sanitized")
-check(P.sanitize("junk").enabled == true, "junk settings = defaults")
+check(P.sanitize("junk").enabled == true and P.sanitize({}).sell == true and P.sanitize({sell = false}).sell == false, "junk settings = defaults; sell on by default")
 
 -- who is a mod
 check(P.isModded({listed = true}), "listed model")

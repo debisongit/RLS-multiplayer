@@ -5,7 +5,7 @@
 -- opts.logContext == "updateVehicleList" only by vehicleShopping/stock.lua). Its catalog value is the sum of the car's part values,
 -- or the jbeam "Value" when the car has fewer than 3 valued parts: mod authors often get both wrong.
 -- We wrap that function, let RLS compute as usual, and for a modded model scale the result to the estimate of lib/modPrice.lua.
--- Selling a car later does not go through this wrapper (see docs/RESEARCH_MOD_PRICES.md). Anything unexpected = the game's own price.
+-- Selling goes through getInventoryVehicleValue / getInventoryVehicleSellValue (same ratio, config modPrice.sell). Anything unexpected = the game's own price.
 -- The wrapper is registered with RLS's wrapperLifetime like the other wrappers and re-checked every frame.
 
 local M = {}
@@ -15,7 +15,7 @@ local p3 = require("rlsmp/lib/p3")
 local MP = require("rlsmp/lib/modPrice")
 
 local cfg                 -- sanitized settings from the server; nil until it speaks (then the game's prices stay)
-local slot = {}           -- ours (wrapper), on (the table), layer (state of the newest wrapper)
+local slots = {}          -- per wrapped function: ours (wrapper), on (the table), layer (state of the newest wrapper)
 local wl, tries = nil, 0
 local modded = {}         -- model -> true | false
 local logged, loggedCount = {}, 0
@@ -95,6 +95,50 @@ local function make(mine, original)
   end
 end
 
+-- Selling, trade-in, insurance value and the garage value: RLS's getInventoryVehicleValue / getInventoryVehicleSellValue run on the same catalog
+-- value from the parts sum. We multiply the result by (our price / that catalog value) for a modded car, so buying and selling agree.
+local function configKeyOf(veh)
+  local c = type(veh.config) == "table" and veh.config or {}
+  if type(c.partConfigFilename) == "string" then return c.partConfigFilename:match("([^/\\]+)%.[^./\\]*$") or c.partConfigFilename:match("([^/\\]+)$") end
+  return c.key
+end
+
+local function inventoryRatio(invId)
+  local inv = rawget(_G, "overhaul_career_garage_inventory")
+  local vc = rawget(_G, "overhaul_career_market_valueCalculator")
+  local veh = inv and inv.getVehicles and inv.getVehicles()[invId]
+  if type(veh) ~= "table" or type(veh.model) ~= "string" then return nil end
+  local model, config = veh.model, configKeyOf(veh)
+  if type(config) ~= "string" then return nil end
+  if not (cfg.overrides[model .. "/" .. config] or cfg.overrides[model]) and not isModded(model) then return nil end
+  local profile = vc.getVehicleCatalogProfile and vc.getVehicleCatalogProfile(model, config)
+  local game = profile and tonumber(profile.catalogValue)
+  if not game or game <= 0 then return nil end
+  local okc, info = pcall(core_vehicles.getConfig, model, config)
+  local year = tonumber(os.date("%Y"))
+  local age = year and tonumber(veh.year) and math.max(0, year - tonumber(veh.year)) or nil
+  local used, est, why = MP.decide(cfg, {model = model, config = config}, specOf(okc and type(info) == "table" and info or {}, age), game)
+  if not used then return nil end
+  local key = "sell:" .. model .. "/" .. config
+  if not logged[key] and loggedCount < MAX_LOG then
+    logged[key] = true
+    loggedCount = loggedCount + 1
+    p3.log("I", string.format("modprice: selling %s/%s game=%.0f estimate=%s used=%.0f (%s)", model, config, game, est and string.format("%.0f", est) or "-", used, why))
+  end
+  return used / game
+end
+
+local function makeSell(mine, original)
+  return function(invId, ...)
+    local v = original(invId, ...)
+    if not (mine.active and cfg and cfg.enabled and cfg.sell and type(v) == "number") then return v end
+    local ok, r = pcall(inventoryRatio, invId)
+    if ok and type(r) == "number" and r > 0 and r == r and r < math.huge then return v * r end
+    if not ok then p3.logOnChange("modprice-err2", tostring(r), "W", "modprice: sell value failed, the game's value is used: " .. tostring(r)) end
+    return v
+  end
+end
+
 -- RLS's wrapperLifetime, loaded once (a failed require is retried about once a second).
 local function lifetime()
   if wl then return wl end
@@ -105,24 +149,34 @@ local function lifetime()
   return nil
 end
 
-function M.install()
-  local target = rawget(_G, "overhaul_career_market_valueCalculator")
-  if type(target) ~= "table" or type(target.getVehicleValuation) ~= "function" then return false end
-  local lib = lifetime()
-  if not lib then return false end
-  if slot.ours and slot.on == target and lib.intact({target = target, key = "getVehicleValuation", replacement = slot.ours}) then return true end
-  local original = target.getVehicleValuation
+local HOOKS = {getVehicleValuation = make, getInventoryVehicleValue = makeSell, getInventoryVehicleSellValue = makeSell}
+
+local function hook(key, maker, target, lib)
+  local slot = slots[key] or {}
+  slots[key] = slot
+  if slot.ours and slot.on == target and lib.intact({target = target, key = key, replacement = slot.ours}) then return end
+  local original = target[key]
   if slot.layer then
     slot.layer.active = false
-    p3.log("W", "modprice: rewrapped getVehicleValuation (RLS or the game replaced it); the older layer is now a passthrough")
+    p3.log("W", "modprice: rewrapped " .. key .. " (RLS or the game replaced it); the older layer is now a passthrough")
   end
   local mine = {active = true}
   slot.layer = mine
-  local wrapper = make(mine, original)
+  local wrapper = maker(mine, original)
   lib.registerForwarder(wrapper, original)
   slot.ours, slot.on = wrapper, target
-  target.getVehicleValuation = wrapper
-  p3.log("I", "modprice: wrapped valueCalculator.getVehicleValuation")
+  target[key] = wrapper
+  p3.log("I", "modprice: wrapped valueCalculator." .. key)
+end
+
+function M.install()
+  local target = rawget(_G, "overhaul_career_market_valueCalculator")
+  if type(target) ~= "table" then return false end
+  local lib = lifetime()
+  if not lib then return false end
+  for key, maker in pairs(HOOKS) do
+    if type(target[key]) == "function" then hook(key, maker, target, lib) end
+  end
   return true
 end
 

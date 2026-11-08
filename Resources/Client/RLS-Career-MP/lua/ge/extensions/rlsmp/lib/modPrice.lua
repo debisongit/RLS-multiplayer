@@ -7,7 +7,7 @@
 
 local M = {}
 
-M.DEFAULTS = {enabled = true, max = 2000000, min = 800, tolerance = 0.35, overrides = {}, models = {}}
+M.DEFAULTS = {enabled = true, max = 2000000, min = 800, tolerance = 0.35, sell = true, overrides = {}, models = {}}
 
 local ANCHORS = {{60, 2800}, {100, 5000}, {150, 10500}, {200, 19000}, {300, 38000}, {450, 85000},
   {600, 160000}, {800, 380000}, {1000, 1000000}, {1400, 3000000}}
@@ -20,6 +20,7 @@ local function clamp(v, lo, hi) return math.max(lo, math.min(hi, v)) end
 function M.sanitize(data)
   local d, out = type(data) == "table" and data or {}, {overrides = {}, models = {}}
   out.enabled = d.enabled ~= false
+  out.sell = d.sell ~= false
   out.min = clamp(num(d.min) or M.DEFAULTS.min, 100, 1000000)
   out.max = clamp(num(d.max) or M.DEFAULTS.max, out.min, 1000000000)
   out.tolerance = clamp(num(d.tolerance) or M.DEFAULTS.tolerance, 0, 5)

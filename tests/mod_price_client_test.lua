@@ -33,7 +33,23 @@ local function original(opts)
   local book = math.max(500, cat * 0.5)
   return {catalogValue = cat, bookValue = book, preDamageValue = book, partsValueFloor = cat * 0.3, catalogSource = "parts"}
 end
-overhaul_career_market_valueCalculator = {getVehicleValuation = original}
+-- selling: value = catalog x 0.4 (x 0.9 for the sell value), like RLS's chain from the parts sum
+local invCars = {}
+overhaul_career_garage_inventory = {getVehicles = function() return invCars end}
+core_vehicles = {getConfig = function() return {Power = 300, Weight = 1500, ["Top Speed"] = 70, Drivetrain = "RWD", Type = "Car"} end}
+local function catalogOf(m, c) return profileValue[m .. "/" .. c] end
+local function invValue(id)
+  local v = invCars[id]
+  local c = v and v.config
+  local key = c and (c.key or (c.partConfigFilename and c.partConfigFilename:match("([^/]+)%.pc$")))
+  return key and catalogOf(v.model, key) * 0.4 or nil
+end
+overhaul_career_market_valueCalculator = {
+  getVehicleValuation = original,
+  getInventoryVehicleValue = invValue,
+  getInventoryVehicleSellValue = function(id) local v = invValue(id) return v and v * 0.9 end,
+  getVehicleCatalogProfile = function(m, c) return {catalogValue = catalogOf(m, c)} end,
+}
 local realPaths = {}
 FS = {getFileRealPath = function(_, p) return realPaths[p] end}
 
@@ -109,8 +125,33 @@ local bad = list("modcar", "i", 9e6)
 bad.configInfo = setmetatable({}, {__index = function() error("boom") end})
 check(overhaul_career_market_valueCalculator.getVehicleValuation(bad).catalogValue == 9e6, "error: the game's price")
 
+-- 9b. selling: the same fair price, only for modded models
+profileValue["modcar/s1"], profileValue["etk800/s2"], profileValue["modcar/s3"] = 9e6, 9e6, 38000
+invCars[1] = {model = "modcar", year = 2020, config = {key = "s1"}}
+invCars[2] = {model = "etk800", year = 2020, config = {key = "s2"}}
+invCars[3] = {model = "modcar", year = 2020, config = {partConfigFilename = "vehicles/modcar/s3.pc"}}
+invCars[4] = {model = "modcar", year = 2020}
+local V = overhaul_career_market_valueCalculator
+local shopPrice = V.getVehicleValuation(list("modcar", "s1", 9e6)).catalogValue
+check(math.abs(V.getInventoryVehicleValue(1) - shopPrice * 0.4) < 1, "sold at the same fair price as bought")
+check(math.abs(V.getInventoryVehicleSellValue(1) - shopPrice * 0.36) < 1, "sell value too")
+check(V.getInventoryVehicleValue(2) == 9e6 * 0.4, "vanilla car: the game's value")
+check(V.getInventoryVehicleValue(3) == 38000 * 0.4, "fair author value: untouched (file name config key)")
+check(V.getInventoryVehicleValue(4) == nil, "no config key: the game's value (nil here)")
+check(V.getInventoryVehicleValue(99) == nil, "unknown car: nil passes through")
+check(saw("modprice: selling modcar/s1"), "sell price logged")
+server({enabled = true, sell = false, models = {"modcar"}})
+check(V.getInventoryVehicleValue(1) == 9e6 * 0.4, "sell = false: the game's value")
+server({enabled = true, models = {"modcar"}})
+local oldCore = core_vehicles
+core_vehicles = {getConfig = function() error("boom") end}
+check(V.getInventoryVehicleValue(1) == 9e6 * 0.4, "no config data: the game's value")
+core_vehicles = oldCore
+check(overhaul_career_market_valueCalculator.getInventoryVehicleValue ~= invValue, "sell function wrapped")
+
 -- 10. leaving the server
 T.onServerLeave()
 check(overhaul_career_market_valueCalculator.getVehicleValuation(list("modcar", "a", 9e6)).catalogValue == 9e6, "left the server: the game's price")
+check(overhaul_career_market_valueCalculator.getInventoryVehicleValue(1) == 9e6 * 0.4, "left the server: the game's sell value")
 
 print("mod_price_client_test: " .. passed .. " checks passed")
