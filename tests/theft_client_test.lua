@@ -48,8 +48,15 @@ gameplay_walk = {
   getInVehicle = function(v) order[#order + 1] = "enter " .. v.id end,
   setWalkingMode = function() end,
 }
-local mpVehicles = {}
-MPVehicleGE = {getVehicles = function() return mpVehicles end}
+local mpVehicles, remoteIds, unregistered = {}, {}, {}   -- every game object is one of OUR cars (BeamMP: isLocal) unless a test says otherwise
+MPVehicleGE = {getVehicles = function()
+  local t = {}
+  for id in pairs(objects) do
+    if id ~= 1 and not unregistered[id] then t["0-" .. id] = {gameVehicleID = id, isLocal = not remoteIds[id]} end
+  end
+  for k, v in pairs(mpVehicles) do t[k] = v end
+  return t
+end}
 local configs = {
   ["covet|base"] = {Value = 6000, Years = {min = 1988, max = 1994}},
   ["etk800|854t"] = {Value = 40000, Years = {min = 2014, max = 2020}},
@@ -116,6 +123,7 @@ objects[10].dyn.isParked = "true"
 mkObj(11, "etk800", spotB.x, spotB.y, {partConfig = "vehicles/etk800/854t.pc"})
 parked = {10, 11}
 blacklist[10], blacklist[11] = true, true
+
 
 -- 2. Prompt only near a stealable car, only with items
 theft.enable(true)
@@ -377,4 +385,46 @@ check(valuationOpts.applyVehicleBuyMarket == true, "reprice: market flag on the 
 overhaul_career_economy_globalEconomy = {getVehicleMarketIndex = function() return 0.9 end}
 server("rlsmpTheftReprice", {cars = {{plate = "OLD 1", model = "bastion", config = "vehicles/bastion/sedan_pre_s.pc"}}})
 check(last("rlsmpTheftValue").value == 18900, "reprice: a changed market gives a new value (cache keyed by market)")
+-- 3. Another player's parked cars (BeamMP syncs them to us as remote vehicles) can never be stolen, inspected, scouted or converted
+logs = {}
+local function logged(fragment) for _, l in ipairs(logs) do if l:find(fragment, 1, true) then return true end end return false end
+theft.onServerLeave()
+server("rlsmpTheftConfig", {enabled = true, seed = seed, period = 3, perMille = 1000, periodSeconds = 3600, radius = 3,
+  inspect = {enabled = true, range = 15}})
+check(T.stealable(seed, 3, 1000, spotA), "perMille 1000 in this test: every spot is stealable")
+mkObj(20, "covet", 20.5, 20.5, {partConfig = "vehicles/covet/base.pc"})     -- a parked car of the other game, synced to us
+mkObj(21, "covet", 30.5, 20.5, {partConfig = "vehicles/covet/base.pc"})     -- a parked car BeamMP has not registered yet
+remoteIds[20], unregistered[21] = true, true
+parked = {20, 21, 10}
+walkerObj.pos = {x = 20.5, y = 21.5, z = 0}          -- standing right beside the remote car
+local before = count("rlsmpTheftCheck")
+step(6)
+check(count("rlsmpTheftCheck") == before, "remote parked car beside us: no theft check is sent")
+check(theft.isStealable(20) == false and theft.isStealable(21) == false and theft.isStealable(10) == true, "only our own parked car is stealable")
+check(theft.nearestStealable({x = 20.5, y = 21.5, z = 0}) == nil, "nearestStealable ignores the remote and the unregistered car")
+check(#theft.stealableNear(800, 8) == 1, "scout tip lists only our own car")
+check(logged("refused: not our car id=20 (remote)") and logged("refused: not our car id=21 (unregistered)"), "refusals are logged with the car id")
+local nd = #dialogs
+theft.interact()
+check(#dialogs == nd, "interact: no popup for a remote parked car")
+local nt2 = #toasts
+check(theft.convertParked(20) == nil and objects[20] ~= nil, "convertParked refuses a remote car and leaves it alone")
+check(theft.convertParked(21) == nil and objects[21] ~= nil, "convertParked refuses an unregistered car")
+local insp = count("rlsmpTheftInspect")
+theft.choose("inspect")
+check(count("rlsmpTheftInspect") == insp, "inspect: nothing is sent for a remote parked car")
+-- the server ids ride along for our own cars
+walkerObj.pos = {x = 1.5, y = 1.5, z = 0}
+step(4)
+local c10 = last("rlsmpTheftCheck")
+check(c10 and c10.id == 10 and c10.sid == "0-10", "our own car: the check carries its BeamMP id")
+-- a BeamMP player number that is not ours
+MPConfig = {getPlayerServerID = function() return 5 end}
+check(select(1, require("rlsmp/lib/mp").isOwn(10)) == false, "isOwn also compares the player number in the BeamMP id with ours")
+MPConfig = nil
+-- single player: no BeamMP, every game car is ours
+local saveMP = MPVehicleGE
+MPVehicleGE = nil
+check(require("rlsmp/lib/mp").isOwn(20) == true, "no BeamMP: nothing is remote")
+MPVehicleGE = saveMP
 print("theft_client_test: " .. passed .. " checks passed")

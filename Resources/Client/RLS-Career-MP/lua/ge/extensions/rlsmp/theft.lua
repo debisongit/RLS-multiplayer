@@ -95,14 +95,32 @@ local function walker()
   return o, posOf(o)
 end
 
+-- Only cars THIS game spawned may be stolen, inspected, scouted or converted. BeamMP syncs every player's parked and AI cars to the others
+-- as remote vehicles; those (and a car BeamMP has not registered yet) are refused here, once per car in the log.
+local refusedLogged = {}
+local function ownCar(id)
+  local ok, why = mp.isOwn(id)
+  if ok then return true end
+  if not refusedLogged[id] then
+    refusedLogged[id] = true
+    say("I", string.format("refused: not our car id=%s (%s)", tostring(id), tostring(why)))
+  end
+  return false
+end
+M.ownCar = ownCar
+
 local function parkedIds()
   if not (gameplay_parking and gameplay_parking.getParkedCarsList) then return {} end
-  return gameplay_parking.getParkedCarsList(true) or {}
+  local out = {}
+  for _, id in ipairs(gameplay_parking.getParkedCarsList(true) or {}) do
+    if ownCar(id) then out[#out + 1] = id end
+  end
+  return out
 end
 
 -- Is this parked car one of the stealable ones? Cached per spot (RLS moves pool cars to other spots).
 function M.isStealable(id)
-  if not active() then return false end
+  if not active() or not ownCar(id) then return false end
   local pos = posOf(objOf(id))
   local key = pos and T.spotKey(cfg.period, pos)
   if not key then return false end
@@ -282,6 +300,7 @@ local function rotTable(q) return q and {x = q.x, y = q.y, z = q.z, w = q.w} or 
 function M.convertParked(id)
   local o = objOf(id)
   if not o then return nil, "car gone" end
+  if not ownCar(id) then return nil, "not our car" end
   local info = M.carInfo(o)
   if not info then return nil, "unknown model" end
   local metallic = o.getMetallicPaintData and o:getMetallicPaintData() or {}
@@ -388,7 +407,7 @@ function M.liveByPlate(plate)
   end
   for i = 0, (be and be.getObjectCount and be:getObjectCount() or 0) - 1 do
     local o = be:getObject(i)
-    if o and T.cleanPlate(tostring(plateOf(o) or "")) == plate then return o:getID() end
+    if o and not mp.isRemote(o:getID()) and T.cleanPlate(tostring(plateOf(o) or "")) == plate then return o:getID() end
   end
   return nil
 end
@@ -457,7 +476,7 @@ local function scanHints(pos)
     if M.isStealable(c.id) and hinted[c.id] ~= spots[c.id].key and clock - (hintAsked[c.id] or -999) > 15 then
       hintAsked[c.id] = clock
       if rlsmp_positions and rlsmp_positions.reportNow then rlsmp_positions.reportNow() end
-      net.send("rlsmpTheftHint", {id = c.id, x = c.pos.x, y = c.pos.y})
+      net.send("rlsmpTheftHint", {id = c.id, sid = mp.sidOf(c.id), x = c.pos.x, y = c.pos.y})
     end
   end
 end
@@ -517,7 +536,7 @@ function M.onUpdate(dtReal)
     -- the server answers at most once a second: ask again when no answer came
     if target.can == nil and clock - target.asked > 3 then
       target.asked = clock
-      net.send("rlsmpTheftCheck", {id = id, value = target.info.value, year = target.info.year})
+      net.send("rlsmpTheftCheck", {id = id, sid = mp.sidOf(id), value = target.info.value, year = target.info.year})
     end
     return
   end
@@ -526,7 +545,7 @@ function M.onUpdate(dtReal)
   target = {id = id, info = info, asked = clock}
   say("I", string.format("stealable car %s nearby: model %s config %s value %s year %s plate %s", tostring(id), tostring(info.model),
     tostring(info.configKey), tostring(info.value), tostring(info.year), tostring(plateOf(objOf(id)))))
-  net.send("rlsmpTheftCheck", {id = id, value = info.value, year = info.year})
+  net.send("rlsmpTheftCheck", {id = id, sid = mp.sidOf(id), value = info.value, year = info.year})
 end
 
 -- Messages from the server ---------------------------------------------------------------------------
@@ -576,11 +595,11 @@ local function startInspect(carId)
   for _, k in ipairs(parkedNear(pos, I.range)) do
     if carId == nil or k.id == carId then c = k break end
   end
-  if not c then return toast("info", "No parked car close enough to look at.", 3000) end
+  if not c or not ownCar(c.id) then return toast("info", "No parked car close enough to look at.", 3000) end
   local info = M.carInfo(objOf(c.id)) or {}
   if rlsmp_positions and rlsmp_positions.reportNow then rlsmp_positions.reportNow() end
   inspectAct = {id = c.id, seconds = 0, elapsed = 0, startPos = pos, lastShown = -1, finishing = false, waiting = true}
-  net.send("rlsmpTheftInspect", {id = c.id, x = c.pos.x, y = c.pos.y, z = c.pos.z, value = info.value or 0, year = info.year})
+  net.send("rlsmpTheftInspect", {id = c.id, sid = mp.sidOf(c.id), x = c.pos.x, y = c.pos.y, z = c.pos.z, value = info.value or 0, year = info.year})
 end
 
 local function onInspectAsk() startInspect(nil) end   -- the server's developer chat fallback
@@ -602,11 +621,11 @@ local function startSteal(method)
   if inspectAct then return toast("warning", "You are already busy.", 2500) end
   local _, pos = walker()
   if not pos then return toast("warning", "Get out of your car first.") end
-  if not (target and target.can and objOf(target.id) and T.dist(pos, posOf(objOf(target.id))) <= radius() + 0.5) then
+  if not (target and target.can and objOf(target.id) and ownCar(target.id) and T.dist(pos, posOf(objOf(target.id))) <= radius() + 0.5) then
     return toast("warning", "There is no car you can steal right here.")
   end
   target.startPos = pos
-  net.send("rlsmpTheftStart", {method = method or target.method, value = target.info.value, year = target.info.year})
+  net.send("rlsmpTheftStart", {sid = mp.sidOf(target.id), method = method or target.method, value = target.info.value, year = target.info.year})
 end
 
 local function onSteal(d)   -- the server's developer chat fallback
@@ -643,6 +662,7 @@ function M.interact()
   end
   if #buttons == 0 then return toast("info", "Nothing to do with this car.", 3000) end
   buttons[#buttons + 1] = {label = "Cancel", luaCallback = "", enabled = true}
+  if not ownCar(c.id) then return toast("info", "No parked car close enough.", 3000) end
   popupCar = c.id
   local info = M.carInfo(objOf(c.id))
   if guihooks then
@@ -673,6 +693,7 @@ local function onResult(d)
   if not a then return end
   if not d.ok then return toast("warning", tostring(d.err or "It did not work.")) end
   target = nil
+  if not ownCar(a.id) then return toast("warning", "That car is not yours to take.") end
   local veh, snap = M.convertParked(a.id)
   if not veh then return toast("error", "The car could not be taken (" .. tostring(snap) .. ").") end
   net.send("rlsmpTheftDone", {plate = snap.licenseText, model = snap.model, color = snap.color, value = snap.value, year = snap.year,
@@ -760,6 +781,7 @@ local function onFenceResult(d)
 end
 
 function M.onVehicleDestroyed(id)
+  refusedLogged[id] = nil
   T.forget(id)
   stolen[id] = nil
   spots[id] = nil

@@ -112,6 +112,7 @@ local STATIC = {
   ["police.respawnRebuildSeconds"] = {"number", 10, 1800, true},
   ["police.copRespawnDistance"] = {"number", 0, 4000, true},
   ["police.copCount"] = {"number", 0, 4, true},
+  ["vehicles.allowPassengers"] = {"bool"},
   ["police.copTopUpSeconds"] = {"number", 5, 600, true},
   ["police.bubbleMode"] = {"enum", values = {original = true, protect = true, off = true}},
   ["police.enabled"] = {"bool"},
@@ -380,6 +381,7 @@ function M.snapshot()
         slowFrameMs = pl.slowFrameMs, settleSeconds = pl.settleSeconds, warmShare = pl.warmShare},
       simplified = {enabled = sm.enabled, parked = sm.parked, traffic = sm.traffic, nearRadius = sm.nearRadius, perMinute = sm.perMinute}},
     weather = {enabled = w.enabled, force = w.force, mix = copyMap(w.mix), periodMinutes = w.periodMinutes},
+    vehicles = {allowPassengers = type(config.vehicles) == "table" and config.vehicles.allowPassengers == true},
     police = {enabled = p.enabled, antiTeleport = p.antiTeleport, blockRoadblocks = p.blockRoadblocks, noFineInStolenCar = p.noFineInStolenCar ~= false, noRadarFineIllegal = p.noRadarFineIllegal ~= false, respawnBehind = p.respawnBehind ~= false, respawnPerMinute = p.respawnPerMinute, spawnMinDistance = p.spawnMinDistance, chaseSpawnMinDistance = p.chaseSpawnMinDistance, spawnPreferRight = p.spawnPreferRight ~= false, respawnRebuildSeconds = p.respawnRebuildSeconds, copRespawnDistance = p.copRespawnDistance, copCount = p.copCount, copTopUpSeconds = p.copTopUpSeconds, bubbleMode = p.bubbleMode,
       plateFlagSeconds = p.plateFlagSeconds, descriptionSeconds = p.descriptionSeconds,
       plateReading = {enabled = pr.enabled, rangeMeters = pr.rangeMeters, maxSpeedKmh = pr.maxSpeedKmh, readChance = pr.readChance,
@@ -407,7 +409,7 @@ local function tooFast(pid)
 end
 
 local function modulesResend()
-  for _, name in ipairs({"smartTraffic", "trafficVariety", "trafficPolice", "theft", "plateRecords", "modPrice"}) do
+  for _, name in ipairs({"smartTraffic", "trafficVariety", "trafficPolice", "theft", "plateRecords", "modPrice", "vehicles"}) do
     local ok, mod = pcall(require, "rlsmp.server." .. name)
     if ok and type(mod) == "table" and mod.resend then mod.resend() end
   end

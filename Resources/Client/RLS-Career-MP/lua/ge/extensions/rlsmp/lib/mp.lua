@@ -35,6 +35,26 @@ function M.serverIdOf(gameVehicleId)
   return nil
 end
 
+-- Is this game vehicle one that THIS game spawned and owns? Single player (no MPVehicleGE): yes. In a session only a car BeamMP lists as
+-- local counts (isLocal, and the player number in its server id "pid-vid" is ours when BeamMP tells us ours). A car BeamMP does not know
+-- yet counts as NOT ours. Second value: why not ("remote" | "unregistered" | "not ours").
+function M.isOwn(gameVehicleId)
+  if not (MPVehicleGE and MPVehicleGE.getVehicles) then return true end
+  local serverId, v = M.serverIdOf(gameVehicleId)
+  if not serverId then return false, "unregistered" end
+  if v.isLocal ~= true then return false, "remote" end
+  local mine = MPConfig and MPConfig.getPlayerServerID and MPConfig.getPlayerServerID()
+  local pid = tonumber(tostring(serverId):match("^(%d+)%-"))
+  if mine and pid and tonumber(mine) ~= pid then return false, "not ours" end
+  return true
+end
+
+-- The server id "pid-vid" of a game vehicle (nil when BeamMP does not list it).
+function M.sidOf(gameVehicleId)
+  local serverId = M.serverIdOf(gameVehicleId)
+  return serverId and tostring(serverId) or nil
+end
+
 function M.isMPSession()
   return MPCoreNetwork ~= nil and ((MPCoreNetwork.isMPSession and MPCoreNetwork.isMPSession())
     or (MPCoreNetwork.isGoingMPSession and MPCoreNetwork.isGoingMPSession())) or false

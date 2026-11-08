@@ -373,10 +373,32 @@ end
 
 local function chat(pid, msg) if MP and MP.SendChatMessage then MP.SendChatMessage(pid, "[Theft] " .. msg) end end
 
+-- Ownership ----------------------------------------------------------------------------------------
+-- A player may only steal, inspect or scout parked cars of their OWN game. BeamMP shows everybody's parked cars to everybody (as remote vehicles),
+-- so the client sends the BeamMP server id ("pid-vid") of the car; it must carry the sender's own player number and, when the server can list
+-- the sender's vehicles, be one of them. The client checks the same (rlsmp/theft.lua); this is the server's look at it. Logged as RLSMP-THEFT.
+function M.ownsSid(pid, sid)
+  local p, v = tostring(sid or ""):match("^(%d+)%-(%d+)$")
+  if not p or tonumber(p) ~= tonumber(pid) then return false end
+  if MP and MP.GetPlayerVehicles then
+    local ok, list = pcall(MP.GetPlayerVehicles, pid)
+    if ok and type(list) == "table" and next(list) ~= nil and list[tonumber(v)] == nil and list[v] == nil then return false end
+  end
+  return true
+end
+
+local function ownOr(pid, d)
+  if M.ownsSid(pid, type(d) == "table" and d.sid or nil) then return true end
+  util.info(string.format("RLSMP-THEFT refused: not our car id=%s sid=%s from pid=%s", tostring(type(d) == "table" and d.id or nil),
+    tostring(type(d) == "table" and d.sid or nil), tostring(pid)))
+  return false
+end
+
 -- Handlers -----------------------------------------------------------------------------------------
 
 local function onCheck(pid, d)
   if not enabled() or not sessions.isLoaded(pid) then return end
+  if not ownOr(pid, d) then return end
   local now = util.now()
   if lastCheck[pid] == now then return end   -- at most one answer per second
   lastCheck[pid] = now
@@ -406,6 +428,7 @@ end
 local function onHint(pid, d)
   local ic = M.inspectCfg()
   if not ic.enabled or type(d) ~= "table" or not sessions.isLoaded(pid) or not market.isMember(pid) then return end
+  if not ownOr(pid, d) then return end
   local now = util.now()
   if lastHint[pid] == now then return end
   lastHint[pid] = now
@@ -438,6 +461,7 @@ end
 local function onInspect(pid, d)
   local ic = M.inspectCfg()
   if not ic.enabled or type(d) ~= "table" or not sessions.isLoaded(pid) then return end
+  if not ownOr(pid, d) then return end
   local now = util.now()
   if inspectNext[pid] and now < inspectNext[pid] then return end
   inspectNext[pid] = now + ic.cooldown
@@ -466,6 +490,7 @@ local function goFail(pid, err) net.send(pid, "rlsmpTheftGo", {ok = false, err =
 local function onStart(pid, d)
   if not enabled() then return goFail(pid, "Car theft is off on this server.") end
   if not sessions.isLoaded(pid) then return goFail(pid, "Not in career.") end
+  if type(d) ~= "table" or not ownOr(pid, d) then return goFail(pid, "That car is not yours to take.") end
   local now = util.now()
   local p = pending[pid]
   if p and p.accountId == accountOf(pid) and now - p.started < p.seconds + 60 then return goFail(pid, "You are already busy.") end

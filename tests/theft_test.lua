@@ -35,7 +35,13 @@ theft.init(cfg, tmp .. "/")
 local sessions = require("rlsmp.server.sessions")
 local items = require("rlsmp.server.items")
 local function fire(ev, ...) return _G["rlsmp_handler_" .. ev](...) end
-local function client(pid, ev, t) return fire(ev, pid, json.encode(t or {})) end
+local function client(pid, ev, t)
+  t = t or {}
+  -- the car's BeamMP server id: the sender's own player number unless a test says otherwise
+  if t.sid == nil and (ev == "rlsmpTheftCheck" or ev == "rlsmpTheftStart" or ev == "rlsmpTheftHint" or ev == "rlsmpTheftInspect") then t.sid = pid .. "-1" end
+  if t.sid == false then t.sid = nil end
+  return fire(ev, pid, json.encode(t))
+end
 local function last(pid, name)
   for i = #(sent[pid] or {}), 1, -1 do if sent[pid][i].name == name then return sent[pid][i].data end end
 end
@@ -393,5 +399,25 @@ do
   check(theft.fresh(1, r["OLD 1"]) == true, "no answer: goes on with the stored value")
   client(1, "rlsmpTheftDone", {plate = "NEW 1", model = "covet", value = 5000, year = 1990, valueSource = "rls valuation", config = "vehicles/covet/base.pc"})
   r["OLD 1"], r["OTH 1"] = nil, nil
+end
+-- Only parked cars of the sender's OWN game: the car's BeamMP id must carry the sender's player number
+do
+  cfg.theft.enabled = true
+  theft.resend() theft.tick()
+  check(theft.ownsSid(1, "1-3") and not theft.ownsSid(1, "2-3") and not theft.ownsSid(1, nil) and not theft.ownsSid(1, "x") and not theft.ownsSid(1, 3),
+    "ownsSid: own player number only")
+  now = now + 5
+  local before = last(1, "rlsmpTheftCan")
+  client(1, "rlsmpTheftCheck", {id = 5, sid = "2-5", value = 4000, year = 1988})
+  check(last(1, "rlsmpTheftCan") == before, "another player's parked car: no prompt answer")
+  client(1, "rlsmpTheftCheck", {id = 5, sid = false, value = 4000, year = 1988})
+  check(last(1, "rlsmpTheftCan") == before, "no BeamMP id: no prompt answer")
+  now = now + 5
+  client(1, "rlsmpTheftStart", {sid = "2-5", value = 4000, year = 1988})
+  check(last(1, "rlsmpTheftGo").ok == false and last(1, "rlsmpTheftGo").err:find("not yours"), "another player's parked car: a steal is refused")
+  client(1, "rlsmpTheftInspect", {id = 9, sid = "2-9", x = 1, y = 1, value = 4000, year = 1988})
+  local go = last(1, "rlsmpTheftInspectGo")
+  client(1, "rlsmpTheftInspect", {id = 9, sid = "2-9", x = 1, y = 1, value = 4000, year = 1988})
+  check(last(1, "rlsmpTheftInspectGo") == go, "another player's parked car: no inspect")
 end
 print("theft_test: " .. passed .. " checks passed")

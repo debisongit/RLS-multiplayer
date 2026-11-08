@@ -35,6 +35,8 @@ function M.push()
   end
 end
 
+function M.resend() told = {} end
+
 function M.init(config)
   cfg = config.vehicles
   told = {}

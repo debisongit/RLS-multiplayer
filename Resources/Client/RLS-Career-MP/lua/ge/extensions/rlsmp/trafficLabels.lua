@@ -49,8 +49,12 @@ local function applyHidden()
   end
 end
 
+-- true once this player's list reached us (before that we cannot tell their AI and parked cars from their own car).
+function M.heardFrom(pid) return hidden[tonumber(pid)] ~= nil end
+
 local function onRx(msg)
   if not enabled or type(msg.ids) ~= "table" then return end
+  msg.from = tonumber(msg.from) or msg.from
   local vehicles = MPVehicleGE and MPVehicleGE.getVehicles and MPVehicleGE.getVehicles() or {}
   local new = {}
   for _, id in ipairs(msg.ids) do new[id] = true end

@@ -139,7 +139,11 @@ end
 -- Parked cars ----------------------------------------------------------------------------------------------------------------------------------
 local function parkedIds()
   if not (gameplay_parking and gameplay_parking.getParkedCarsList) then return {} end
-  return gameplay_parking.getParkedCarsList(true) or {}
+  local out = {}
+  for _, id in ipairs(gameplay_parking.getParkedCarsList(true) or {}) do
+    if mp.isOwn(id) then out[#out + 1] = id end   -- never change another player's parked car (BeamMP shows it to us as a remote vehicle)
+  end
+  return out
 end
 
 -- Paint and plate of a car, to give the replacement the same look (the same snapshot the theft code takes).

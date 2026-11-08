@@ -423,7 +423,11 @@ for i = 1, 1000 do
 end
 check(#yes >= 4 and far and boring, "scout: found test cars")
 local function sentCount(name, pid) local n = 0 for _, m in ipairs(sent) do if m.name == name and m.pid == pid then n = n + 1 end end return n end
-local function scoutAct(pid, cars) standAt(pid, 0, 0) app(pid, "rlsmpMarketAct", {a = "scout", cars = cars}) return lastSent(pid, "rlsmpMarketResult").text end
+local function scoutAct(pid, cars)
+  if type(cars) == "table" then
+    for i, c in ipairs(cars) do if type(c) == "table" and not c.keepSid then c.sid = pid .. "-" .. i end end
+  end
+  standAt(pid, 0, 0) app(pid, "rlsmpMarketAct", {a = "scout", cars = cars}) return lastSent(pid, "rlsmpMarketResult").text end
 local mix = {boring, far, yes[1], yes[2], yes[3], yes[4]}
 join(7, "gil")
 check(scoutAct(7, mix):find("Members only"), "scout: a non-member is refused")
@@ -433,6 +437,14 @@ cfg.theft.enabled = true
 local m0, scouts = profile(5).ledger.money, sentCount("rlsmpMarketScout", 5)
 check(scoutAct(5, {boring, far}):find("no easy marks") and sentCount("rlsmpMarketScout", 5) == scouts and profile(5).ledger.money == m0, "scout: nothing stealable in range, nothing charged")
 check(scoutAct(5, "junk"):find("phone app") and scoutAct(5, {{x = "a"}, 5, {x = 1, y = 2}}):find("no easy marks"), "scout: bad cars are ignored")
+do   -- parked cars of ANOTHER player's game (sid of player 9) are never scouted, even where the pick says stealable
+  local foreign = {}
+  for i = 1, 4 do foreign[i] = {x = yes[i].x, y = yes[i].y, z = yes[i].z, sid = "9-" .. i, keepSid = true} end
+  check(scoutAct(5, foreign):find("no easy marks") and sentCount("rlsmpMarketScout", 5) == scouts and profile(5).ledger.money == m0, "scout: another player's parked cars are refused, nothing charged")
+  local nosid = {}
+  for i = 1, 4 do nosid[i] = {x = yes[i].x, y = yes[i].y, z = yes[i].z, keepSid = true} end
+  check(scoutAct(5, nosid):find("no easy marks"), "scout: cars without a BeamMP id are refused")
+end
 check(scoutAct(5, mix):find("marked"), "scout: tip bought")
 local got = lastSent(5, "rlsmpMarketScout")
 check(#got.marks >= 2 and #got.marks <= 3 and got.seconds == 600 and profile(5).ledger.money == m0 - 3000, "scout: 2 to 3 marks, 10 minutes, price paid")

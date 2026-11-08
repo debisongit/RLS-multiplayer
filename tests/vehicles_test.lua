@@ -24,21 +24,30 @@ local function check(cond, msg) if not cond then error("FAIL: " .. msg, 2) end p
 local function tick() _G[handlers["rlsmpVehicleTick"]]() end
 local function take() local t = sent sent = {} return t end
 
-check(cfg.vehicles.allowPassengers == false, "passengers are off by default")
+check(cfg.vehicles.allowPassengers == true, "passengers are on by default")
 stages[0] = "await_hello"
 tick()
 check(#take() == 0, "not loaded -> nothing")
 stages[0] = "loaded"
 tick()
 local m = take()
-check(#m == 1 and m[1].name == "rlsmpVehicleConfig" and m[1].data.allowPassengers == false, "settings sent on load")
+check(#m == 1 and m[1].name == "rlsmpVehicleConfig" and m[1].data.allowPassengers == true, "settings sent on load")
 tick()
 check(#take() == 0, "sent only once")
-cfg.vehicles.allowPassengers = true
 stages[1] = "loaded"
 tick()
 m = take()
 check(#m == 1 and m[1].pid == 1 and m[1].data.allowPassengers == true, "a switched-on server tells new players")
+-- the menu switches it off: resend() tells everybody again
+cfg.vehicles.allowPassengers = false
+require("rlsmp.server.vehicles").resend()
+tick()
+m = take()
+check(#m == 2 and m[1].data.allowPassengers == false, "a changed setting reaches everybody again (menu)")
+cfg.vehicles.allowPassengers = true
+require("rlsmp.server.vehicles").resend()
+tick()
+take()
 stages[0] = nil
 tick()
 stages[0] = "loaded"

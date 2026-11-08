@@ -353,9 +353,9 @@ M.defaults = {
 
   vehicles = {
     enabled = true,
-    -- A player on foot may get into another player's car and ride along as a passenger (they cannot drive it).
-    -- Off by default until it has been tested in the game: turn it on to try it.
-    allowPassengers = false,
+    -- A player on foot may get into another PLAYER's car (never their AI traffic or parked cars) and ride along as a passenger (they cannot drive it).
+    -- A passenger is put back on foot when the driver gets out, leaves, or the car is gone. See docs/RESEARCH_PASSENGERS.md.
+    allowPassengers = true,
   },
 
   claims = {
@@ -502,6 +502,9 @@ M.defaults = {
 
   -- How often the server asks clients to save, in minutes (0 = rely on RLS autosave only).
   forceSaveMinutes = 5,
+
+  -- One-time changes already applied to this file (the server writes it; do not edit).
+  migrations = {},
 }
 
 local function randomTag()
@@ -524,6 +527,12 @@ function M.load(path)
   if oldCops then
     cfg.police.copCount = 0
     util.info("RLSMP-P3 police.copCount was the old default 3 in config.json: set to 0 (the game's own number of cops); raise it in the [ menu if you want more")
+  end
+  -- Passengers are on by default now, but older files stored the old default (false): switch it on once. Turn it off again afterwards if you want.
+  if type(cfg.migrations) ~= "table" then cfg.migrations = {} end
+  if not cfg.migrations.passengersOn then
+    cfg.migrations.passengersOn = true
+    if type(raw) == "table" and type(raw.vehicles) == "table" and raw.vehicles.allowPassengers == false then cfg.vehicles.allowPassengers = true end
   end
   if type(cfg.serverTag) ~= "string" or not cfg.serverTag:match("^[a-z0-9]+$") then
     cfg.serverTag = randomTag()
