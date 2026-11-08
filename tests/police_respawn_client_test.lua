@@ -50,6 +50,7 @@ end}
 local R = require("rlsmp/policeRespawn")
 R.onExtensionLoaded()
 R._onConfig({copCount = 0})        -- the respawn scenarios below run without the top-up (it has its own at the end)
+R.getState().settings.rebuildSeconds = 0     -- ...and without the rebuild interval (it has its own scenario at the end)
 local passed = 0
 local function check(c, m) if not c then error("FAIL: " .. m, 2) end passed = passed + 1 end
 local function tick(n) for _ = 1, n or 1 do R.onUpdate(0.5) end end
@@ -79,7 +80,9 @@ check(#groups == 1 and groups[1].amount == 1 and groups[1].params.name == "rlsmp
 check(groups[1].group[1].model == "vivace" and pickCalls[#pickCalls] == "bastion", "...of a model other than the old one")
 check(saw("cop 10 re-placed 300 m in front of the player"), "the log says it was in front")
 tick()
+check(table.concat(removed, ",") == "traffic:10,obj:10", "a cop that came out IN FRONT is removed at once, before the new one is built: " .. table.concat(removed, ","))
 check(#groups == 1, "only one build at a time")
+removed = {}
 
 -- 3. the game reports the new car, behind the player: it becomes police, the old cop is removed
 newObject(50, -200, "vivace")
@@ -87,7 +90,7 @@ R.onVehicleGroupSpawned({50}, 7, "rlsmpCop")
 check(inserted[1] and inserted[1].id == 50 and inserted[1].isPlayer == false and inserted[1].noPool == true, "the new car is given to traffic (not the player, no pooling)")
 check(roles[1] and roles[1].id == 50 and roles[1].role == "police", "...with the police role")
 check(saw("new cop 50 came out 200 m behind the player"), "its place is logged")
-check(table.concat(removed, ",") == "traffic:10,obj:10", "only now the old cop is removed: " .. table.concat(removed, ","))
+check(#removed == 0 and saw("old cop (removed earlier) removed"), "nothing more to remove when the new cop is ready: " .. table.concat(removed, ","))
 check(R.getState().job == nil and R.getState().mine[50] == true, "build finished, the new cop is ours")
 reset()
 
@@ -299,5 +302,77 @@ mp = true
 rlsmp_trafficVariety.policePick = function() return nil end
 tick(80)
 check(#groups == 0, "no police pick available: no top-up")
+
+
+-- 0.4.55: freeze and phantom fixes ------------------------------------------------------------------------------------------------------
+-- trail helpers (pure)
+local t = {}
+for y = 0, 400, 10 do R.recordTrail(t, {x = 0, y = y, z = 1}) end
+check(#t == 41, "the trail keeps one crumb every few metres")
+local tp, td = R.trailPoint(t, 150)
+check(tp and math.abs(tp.y - 250) < 1e-9 and td.y == 1 and td.x == 0, "150 m back along the trail, heading toward the player")
+check(R.trailPoint(t, 900) == nil, "a trail shorter than asked: no point")
+R.recordTrail(t, {x = 5000, y = 0, z = 0})
+check(#t == 1, "a jump over 150 m (teleport) starts the trail again")
+
+rlsmp_trafficVariety.policePick = function(avoid)
+  for _, e in ipairs(picks) do if e.model ~= avoid then return {model = e.model, config = e.config} end end
+  return nil
+end
+-- a fresh session, one cop; the player drives north (+y) along x = 0, so the trail is behind
+R.onServerLeave(); reset()
+for id in pairs(traffic) do traffic[id] = nil end
+R._onConfig({copCount = 0, respawnRebuildSeconds = 90, copRespawnDistance = 450})
+check(R.getState().settings.rebuildSeconds == 90 and R.getState().settings.respawnDistance == 450, "rebuild seconds and cop respawn distance are taken from the server")
+R._onConfig({respawnRebuildSeconds = 1, copRespawnDistance = 99999})
+check(R.getState().settings.rebuildSeconds == 90 and R.getState().settings.respawnDistance == 450, "...and out-of-range values are ignored")
+check(R.respawnDistance() == 450, "bubble.lua gets the police floor")
+mp = false
+check(R.respawnDistance() == 0, "outside multiplayer the game's own radius is used")
+mp = true
+local ppos = {x = 0, y = 0, z = 0}
+getPlayerVehicle = function() return {getPosition = function() return ppos end, getDirectionVector = function() return {x = 0, y = 1, z = 0} end} end
+local teleports = {}
+vec3 = function(x, y, z) return {x = x, y = y, z = z} end
+quatFromDir = function(d) return {x = 0, y = 0, z = d.y, w = 1} end
+spawn = {safeTeleport = function(o, pos, rot, a, b, c, keep) teleports[#teleports + 1] = {obj = o, pos = pos, keep = keep} return true end}
+-- the player has driven from y = -400 to 0
+for y = -400, 0, 10 do ppos = {x = 0, y = y, z = 0} tick() end
+cop(200, -500, "bastion", 0)
+cop(201, -500, "bastion", 0)
+tick()
+R.getState().settings.rebuildSeconds = 90
+-- first re-placement: builds (the interval has passed since the start of the session)
+traffic[200].respawnCount, traffic[200].pos = 1, {x = 0, y = 300, z = 0}
+objects[200].pos = traffic[200].pos
+tick()
+check(#groups == 1, "first re-placement after the interval: a build (another model)")
+newObject(210, -150, "vivace")
+R.onVehicleGroupSpawned({210}, 50, "rlsmpCop")
+reset(); teleports = {}
+-- a second one 10 s later is inside the rebuild interval: a cop in FRONT is moved, nothing is built
+traffic[201].respawnCount, traffic[201].pos = 1, {x = 0, y = 300, z = 0}
+objects[201].pos = traffic[201].pos
+tick()
+check(#groups == 0, "inside the rebuild interval: no build (no freeze)")
+check(#teleports == 1 and teleports[1].pos.y < 0 and math.abs(teleports[1].pos.y - (-150)) < 11 and teleports[1].keep == true, "...the cop in front is put on the trail about 150 m behind the player")
+check(saw("cop 201 was in front, moved"), "...and the log says so")
+-- one that RLS put BEHIND stays where it is
+reset(); teleports = {}
+traffic[201].respawnCount, traffic[201].pos = 2, {x = 0, y = -300, z = 0}
+objects[201].pos = traffic[201].pos
+tick(25)
+traffic[201].respawnCount = 3
+tick()
+check(#groups == 0 and #teleports == 0, "a cop re-placed behind the player is left alone inside the interval")
+-- a failing teleport three times switches moving off
+spawn.safeTeleport = function() return false end
+for i = 1, 4 do
+  traffic[201].respawnCount, traffic[201].pos = 3 + i, {x = 0, y = 300, z = 0}
+  objects[201].pos = traffic[201].pos
+  tick(25)
+  tick()
+end
+check(saw("moving cops is switched off"), "three failed moves switch moving off for the session")
 
 print(string.format("police_respawn_client_test: %d checks passed", passed))

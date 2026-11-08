@@ -282,6 +282,11 @@ r = lastResult()
 check(r and r.applied == 2 and #r.rejected == 2 and cfg.police.copCount == 2 and cfg.police.copTopUpSeconds == 45, "police car count and top-up time: in range accepted, out of range refused")
 check(admin.snapshot().police.copCount == 2 and admin.snapshot().police.copTopUpSeconds == 45, "the snapshot carries them")
 cfg.police.copCount, cfg.police.copTopUpSeconds = 3, 30
+set(0, {{p = {"police", "respawnRebuildSeconds"}, v = 5}, {p = {"police", "respawnRebuildSeconds"}, v = 120}, {p = {"police", "copRespawnDistance"}, v = 9000}, {p = {"police", "copRespawnDistance"}, v = 600}})
+r = lastResult()
+check(cfg.police.respawnRebuildSeconds == 120 and cfg.police.copRespawnDistance == 600, "rebuild interval and cop respawn distance: in range accepted")
+check(admin.snapshot().police.respawnRebuildSeconds == 120 and admin.snapshot().police.copRespawnDistance == 600, "...and in the snapshot")
+cfg.police.respawnRebuildSeconds, cfg.police.copRespawnDistance = 90, 450
 set(0, {{p = {"fence", "phone"}, v = false}, {p = {"fence", "gambleBust"}, v = 0.1}, {p = {"fence", "gambleBase"}, v = 0.5}})
 r = lastResult()
 check(r and r.applied == 1 and #r.rejected == 2 and cfg.fence.phone == false and admin.snapshot().fence.phone == false, "fence.phone can be switched; the gamble settings are gone from the menu's allowlist")

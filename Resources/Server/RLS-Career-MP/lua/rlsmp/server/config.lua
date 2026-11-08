@@ -107,6 +107,12 @@ M.defaults = {
     respawnBehind = true,
     respawnPerMinute = 4,
     respawnGap = 150,
+    -- Building a car freezes the game for a moment (owner: "drops crazy fps"). A re-placed cop is only rebuilt as another model at most once per
+    -- `respawnRebuildSeconds`; in between a cop that RLS put in FRONT of you is moved to the road behind you (no build, no freeze).
+    respawnRebuildSeconds = 90,
+    -- RLS re-places a police car once it is farther than its own radius. Police get at least this many metres (0 = the game's own radius), so a cop
+    -- is not recycled (and put back close, often in front, unseen) every few seconds.
+    copRespawnDistance = 450,
     -- How many AI police cars should be on the map. The game puts only ONE ("requested 1, allocated 1"); the client builds more behind you, one every
     -- `copTopUpSeconds`, up to this number (client rlsmp_policeRespawn). 0 = leave the game's number. Each cop is one more BeamMP car for everybody (MaxCars).
     copCount = 3,
