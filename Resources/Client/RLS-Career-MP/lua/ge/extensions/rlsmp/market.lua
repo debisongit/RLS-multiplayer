@@ -72,8 +72,6 @@ local function draw(d)
   if not (debugDrawer and vec3) then return end
   pcall(function()
     debugDrawer:drawSphere(vec3(d.x, d.y, d.z + 1), 1.5, ColorF(1, 0.3, 0.1, 0.6))
-    debugDrawer:drawTextAdvanced(vec3(d.x, d.y, d.z + 3.5), String("Drop: " .. d.label), ColorF(1, 1, 1, 1), true, false,
-      ColorI(0, 0, 0, 192))
   end)
 end
 

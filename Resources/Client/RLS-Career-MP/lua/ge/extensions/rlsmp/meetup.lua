@@ -246,7 +246,6 @@ local function draw(m)
   if not (debugDrawer and vec3) then return end
   pcall(function()
     debugDrawer:drawSphere(vec3(m.x, m.y, m.z + 1), m.radius, ColorF(0.2, 0.6, 1, 0.35))
-    debugDrawer:drawTextAdvanced(vec3(m.x, m.y, m.z + 4), String("Meetup: " .. m.spot), ColorF(1, 1, 1, 1), true, false, ColorI(0, 0, 0, 192))
   end)
 end
 
