@@ -58,8 +58,8 @@ local function itemLabel(name) return items.CATALOG[name] and items.CATALOG[name
 -- The value the fence works from: the record's value (the floor when the game had no price for the car), capped.
 local function valueOf(rec)
   local v = math.floor(num(rec.value, 0))
-  if v <= 0 then v = math.floor(num(c().minValue, 2000)) end
-  return clamp(v, 0, math.floor(num(c().maxValue, 300000)))
+  local lo, hi = math.floor(num(c().minValue, 2000)), math.floor(num(c().maxValue, 300000))
+  return clamp(v, math.min(lo, hi), hi)      -- never below minValue (also when the game had no price: 0), never above maxValue
 end
 
 -- How many papers (of the three) a player has.
@@ -74,14 +74,14 @@ end
 function M.quotes(pid, value, rec)
   value = clamp(math.floor(num(value, 0)), 0, math.floor(num(c().maxValue, 300000)))
   local out = {
-    strip = math.floor(value * num(c().stripRate, 0.30)),
+    strip = math.floor(value * num(c().stripRate, 0.45)),
     sell = market.fenceQuote(value),
   }
   local have = pid and papersOwned(pid, rec) or {}
-  if #have == 3 then out.resell = math.floor(value * num(c().resellRate, 0.60)) end
+  if #have == 3 then out.resell = math.floor(value * num(c().resellRate, 0.70)) end
   if #have >= 1 then
     local used = math.min(#have, math.floor(num(c().gambleMaxPapers, 2)))
-    out.gamble = math.floor(value * (num(c().gambleBase, 0.45) + num(c().gamblePerPaper, 0.075) * (used - 1)))
+    out.gamble = math.floor(value * (num(c().gambleBase, 0.55) + num(c().gamblePerPaper, 0.05) * (used - 1)))
     out.gamblePapers = used
   end
   return out
@@ -163,7 +163,7 @@ function M.sell(pid, plate, mode, opts)
     local have = papersOwned(pid, rec)
     for i = 1, q.gamblePapers do if not fitted(rec, have[i]) then use[#use + 1] = have[i] end end
   end
-  if mode == "gamble" and random() < clamp(num(c().gambleBust, 0.30), 0, 1) then busted, pay = true, 0 end
+  if mode == "gamble" and random() < clamp(num(c().gambleBust, 0.20), 0, 1) then busted, pay = true, 0 end
 
   busy[pid] = true
   local saved = {}
@@ -241,12 +241,12 @@ local function onGarageQuote(pid, d)
       menu.ok, menu.err = false, "The fence only deals with black market members."
     else
       menu.kind, menu.plate, menu.model = t.kind, t.plate, t.model
-      menu.strip = math.floor(t.value * num(c().stripRate, 0.30))
+      menu.strip = math.floor(t.value * num(c().stripRate, 0.45))
       menu.fit, menu.fitted = {}, {}
       if t.kind == "stolen" then
         local q = M.quotes(pid, t.value, t.rec)
         menu.sell, menu.resell, menu.gamble = math.floor(q.sell), q.resell, q.gamble
-        menu.trap = math.floor(num(c().gambleBust, 0.30) * 100 + 0.5)
+        menu.trap = math.floor(num(c().gambleBust, 0.20) * 100 + 0.5)
         for _, name in ipairs(PAPERS) do
           if fitted(t.rec, name) then menu.fitted[#menu.fitted + 1] = itemLabel(name)
           elseif items.has(pid, name) then menu.fit[#menu.fit + 1] = {name = name, label = itemLabel(name)} end
@@ -268,7 +268,7 @@ local function stripOwned(pid, t, d)
   if lastStrip[pid] and now - lastStrip[pid] < num(c().garageCooldown, 20) then return fail("Slow down a moment.") end
   if busy[pid] then return fail("One at a time.") end
   local value = t.value > 0 and t.value or math.floor(num(c().minValue, 2000))
-  local pay = math.floor(value * num(c().stripRate, 0.30))
+  local pay = math.floor(value * num(c().stripRate, 0.45))
   if pay <= 0 then return fail("Nothing to pay for that car.") end
   local before = ledger.money
   busy[pid] = true
@@ -341,7 +341,7 @@ local function list(pid)
     local q = M.quotes(pid, valueOf(rec))
     local parts = {string.format("strip %s", dollars(q.strip)), string.format("sell %s", dollars(q.sell))}
     parts[#parts + 1] = q.resell and string.format("resell %s", dollars(q.resell)) or "resell (needs fake plate + VIN plate + part number)"
-    parts[#parts + 1] = q.gamble and string.format("gamble %s (%d%% trap)", dollars(q.gamble), math.floor(num(c().gambleBust, 0.30) * 100 + 0.5))
+    parts[#parts + 1] = q.gamble and string.format("gamble %s (%d%% trap)", dollars(q.gamble), math.floor(num(c().gambleBust, 0.20) * 100 + 0.5))
       or "gamble (needs a paper)"
     say(pid, string.format("%s %s: %s", tostring(rec.model), rec.plate, table.concat(parts, ", ")))
   end

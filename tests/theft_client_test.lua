@@ -54,7 +54,7 @@ local configs = {
   ["covet|base"] = {Value = 6000, Years = {min = 1988, max = 1994}},
   ["etk800|854t"] = {Value = 40000, Years = {min = 2014, max = 2020}},
 }
-local spawned
+local spawned, valuationOpts
 core_vehicles = {
   getConfig = function(model, key) return configs[model .. "|" .. tostring(key)] end,
   spawnNewVehicle = function(model, opts)
@@ -345,4 +345,20 @@ server("rlsmpTheftConfig", {enabled = true, seed = seed, period = 3, perMille = 
 local fq = count("rlsmpFenceSell")
 theft.fence("rm -rf")
 check(count("rlsmpFenceSell") == fq, "fence: unknown mode ignored")
+-- Stand-in parked cars (simple_traffic, config `sedan_pre_s_parked`): the value comes from the real config, not 0
+local bastionList = {
+  {model_key = "bastion", key = "sedan_pre_s", Value = 30000, Years = {min = 2005, max = 2010}},
+  {model_key = "bastion", key = "sedan_pre_h", Value = 50000, Years = {min = 2005, max = 2010}},
+  {model_key = "bastion", key = "police", Value = 90000, ["Config Type"] = "Police", Years = {min = 2005, max = 2010}},
+}
+core_vehicles.getConfigList = function() return {configs = bastionList} end
+overhaul_career_market_valueCalculator = {getVehicleValuation = function(o) valuationOpts = o return {bookValue = o.catalogBaseValue * 0.7} end}
+local stand = mkObj(300, "simple_traffic", 1, 1, {partConfig = "vehicles/simple_traffic/bastion_sedan_pre_s_parked.pc"})
+local ci = theft.carInfo(stand)
+check(ci.model == "bastion" and ci.configKey == "sedan_pre_s" and ci.config == "vehicles/bastion/sedan_pre_s.pc", "stand-in: real config found")
+check(ci.value == 21000 and ci.year == 2005, "stand-in: used value from RLS valuation, not 0")
+check(valuationOpts.logContext == "rlsmpStolen" and valuationOpts.age > 0 and valuationOpts.mileageMeters > 0, "valuation asked with age and mileage")
+local unknown = mkObj(301, "simple_traffic", 2, 2, {partConfig = "vehicles/simple_traffic/bastion_weird_parked.pc"})
+ci = theft.carInfo(unknown)
+check(ci.value == 21000 and ci.config == nil, "unknown config: typical one of the model, spawn left to the game")
 print("theft_client_test: " .. passed .. " checks passed")

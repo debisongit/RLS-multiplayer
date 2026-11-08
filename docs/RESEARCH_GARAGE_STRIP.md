@@ -36,7 +36,7 @@ Fitting a fake plate / VIN plate / part number kit onto a **stolen** car is a se
 
 ## Money authority and its limit
 - Stolen car: the value comes from the server's own theft record. Fully server side.
-- Ordinary garage car: the server has **no copy of the RLS inventory**, so the value is the client's word (`getInventoryVehicleValue`). It is capped by `fence.maxValue`, paid at `stripRate` (30%, below what RLS's Sell pays), rate limited (`fence.garageCooldown`, 20 s) and logged. A modified client can still invent cars; the real fix needs a server copy of the inventory (not built).
+- Ordinary garage car: the server has **no copy of the RLS inventory**, so the value is the client's word (`getInventoryVehicleValue`). It is capped by `fence.maxValue`, paid at `stripRate` (45% since the rebalance, below what RLS's Sell pays), rate limited (`fence.garageCooldown`, 20 s) and logged. A modified client can still invent cars; the real fix needs a server copy of the inventory (not built).
 - If the server pays and RLS then refuses to remove the car, the player is told to contact the server owner (and it is logged). The pre-checks above are there to make that rare.
 
 ## What I could not verify

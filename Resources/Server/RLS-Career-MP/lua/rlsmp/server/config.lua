@@ -363,14 +363,17 @@ M.defaults = {
     enabled = true,
     garage = true,            -- the "Strip / illegal parts" button in the RLS garage computer (client rlsmp/garage.lua)
     garageCooldown = 20,      -- seconds between two strips of ordinary (not stolen) garage cars per player
-    minValue = 2000,         -- used when the game had no price for the car (value 0)
-    maxValue = 300000,        -- the car value the fence works from is capped here (the value comes from the game)
-    stripRate = 0.30,         -- parts for cash, no papers
-    resellRate = 0.60,        -- fake plate + VIN plate + part number, all used up
-    gambleBase = 0.45,        -- swap one or two papers: base share with one paper...
-    gamblePerPaper = 0.075,   -- ...plus this for each extra paper
+    -- The car value is the USED price of the car (the client asks RLS's own valuation, see docs/RESEARCH_STOLEN_VALUE.md).
+    -- Payouts, as a share of that value: sell without papers market.fenceCarRate 0.40 < gamble about 0.55 (risk) < resell 0.70, strip 0.45.
+    minValue = 2000,         -- the value is never below this (also used when the game had no price for the car)
+    maxValue = 300000,        -- the car value the fence works from is capped here (the value comes from the client)
+    modelCaps = {},           -- optional: model name -> highest value accepted for that model, e.g. {bastion = 40000}
+    stripRate = 0.45,         -- parts for cash, no papers
+    resellRate = 0.70,        -- fake plate + VIN plate + part number, all used up
+    gambleBase = 0.55,        -- swap one or two papers: base share with one paper...
+    gamblePerPaper = 0.05,    -- ...plus this for each extra paper
     gambleMaxPapers = 2,
-    gambleBust = 0.30,        -- chance the buyer is a trap: no money, car gone, market.bust
+    gambleBust = 0.20,        -- chance the buyer is a trap: no money, car gone, market.bust
     rep = {strip = 1, sell = 1, resell = 3, gamble = 2},   -- reputation for a good sale
   },
   market = {
@@ -401,7 +404,7 @@ M.defaults = {
       {name = "Jefferson parking", x = -393.4, y = 178.1, z = 100.7},
     },
     -- The fence pays this share of a stolen car's or part's value (legit sales pay more).
-    fenceCarRate = 0.35,
+    fenceCarRate = 0.40,
     fencePartRate = 0.3,
     -- Scout tip (phone app, members, needs theft.enabled): marks minCount..maxCount stealable parked cars within `radius` m for `seconds`
     -- (never longer than the current theft pick lasts). More than freeUsesPerHour tips an hour cost repCost reputation each.

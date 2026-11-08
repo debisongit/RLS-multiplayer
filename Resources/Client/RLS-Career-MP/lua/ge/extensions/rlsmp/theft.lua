@@ -28,6 +28,8 @@ local M = {}
 local net = require("rlsmp/lib/net")
 local mp = require("rlsmp/lib/mp")
 local T = require("rlsmp/lib/theft")
+local SV = require("rlsmp/lib/stolenValue")
+local MPrice = require("rlsmp/lib/modPrice")
 
 local TAG = "RLSMP-THEFT"
 local SCAN_EVERY = 0.5
@@ -149,22 +151,55 @@ function M.stealableNear(radius, max)
   return out
 end
 
--- Model, config, value and year of a parked car (value = RLS's base price of the config, year = first year of the config).
+-- Config infos of one model (cached). Falls back to the one config getConfig knows when the list is not there.
+local listCache = {}
+local function configsOf(model, key)
+  if listCache[model] then return listCache[model] end
+  local out = {}
+  local ok, all = pcall(function() return core_vehicles and core_vehicles.getConfigList and core_vehicles.getConfigList() end)
+  local configs = ok and type(all) == "table" and (all.configs or all) or {}
+  for _, info in pairs(configs) do
+    if type(info) == "table" and info.model_key == model and info.key then out[#out + 1] = info end
+  end
+  if #out > 0 then listCache[model] = out end
+  if #out == 0 and core_vehicles and core_vehicles.getConfig and key then
+    local ok2, info = pcall(core_vehicles.getConfig, model, key)
+    if ok2 and type(info) == "table" then out[1] = setmetatable({key = key}, {__index = info}) end
+  end
+  return out
+end
+
+local function valueCtx()
+  local vc = overhaul_career_market_valueCalculator
+  return {
+    year = tonumber(os.date("%Y")),
+    valuation = vc and vc.getVehicleValuation,
+    quick = vc and vc.getQuickVehicleValue,
+    estimate = function(info) return MPrice.estimate(SV.specOf(info)) end,
+  }
+end
+
+local valueCache = {}
+
+-- Model, config, value and year of a parked car. value = what a used car of this kind sells for (lib/stolenValue.lua: RLS's own
+-- valuation of the real or typical config, else quick value, else our estimate). year = first year of the config.
 function M.carInfo(o)
   local model, config, key = T.realModel(jbeamOf(o), o.partConfig)
   if not model then return nil end
-  local value, year
-  if core_vehicles and core_vehicles.getConfig and key then
-    local ok, info = pcall(core_vehicles.getConfig, model, key)
-    if ok and type(info) == "table" then
-      value = tonumber(info.Value)
-      local years = info.Years or (info.aggregates and info.aggregates.Years)
-      year = type(years) == "table" and tonumber(years.min) or nil
-      -- a simplified car whose name matched a real config: spawn that config
-      if not config then config = "vehicles/" .. model .. "/" .. key .. ".pc" end
-    end
+  local full = T.configKey(o.partConfig)
+  local ck = model .. "|" .. tostring(full)
+  local r = valueCache[ck]
+  if not r then
+    local ctx = valueCtx()
+    local ok, res = pcall(SV.resolve, model, {key, full}, configsOf(model, key), ctx)
+    r = ok and res or {value = 0, source = "error " .. tostring(res)}
+    if ctx.valuation then valueCache[ck] = r end   -- RLS's calculator not loaded yet: ask again next time
+    say("I", string.format("theft value: model %s config %s -> %s (%s), source %s, age %s, value %s", model, tostring(full),
+      tostring(r.configKey), tostring(r.matched), tostring(r.source), tostring(r.age), tostring(r.value)))
   end
-  return {model = model, config = config, configKey = key, value = value or 0, year = year}
+  -- a simplified car whose name matched a real config: spawn that config
+  if not config and r.configKey and r.matched ~= "typical" then config = "vehicles/" .. model .. "/" .. r.configKey .. ".pc" end
+  return {model = model, config = config, configKey = r.configKey or key, value = r.value or 0, year = r.year}
 end
 
 local function plateOf(o)

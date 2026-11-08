@@ -129,9 +129,9 @@ check(set and set.kind == "black", "black meetup set")
 local before = sessions.get(1).profile.ledger.money
 standAt(1, spotOf[set.spot].x, spotOf[set.spot].y)
 r = arrive(1, set.id)
-check(r.ok and r.takeCar and r.pay == 7000, "black sale paid by the server (35% of 20000)")
-check(sessions.get(1).profile.ledger.money == before + 7000 and theft.records()["STO 222"] == nil, "money in, record gone")
-check(lastSent(1, "rlsmpWalletSet").money == before + 7000, "wallet told")
+check(r.ok and r.takeCar and r.pay == 8000, "black sale paid by the server (40% of 20000)")
+check(sessions.get(1).profile.ledger.money == before + 8000 and theft.records()["STO 222"] == nil, "money in, record gone")
+check(lastSent(1, "rlsmpWalletSet").money == before + 8000, "wallet told")
 
 -- expiry and wrong id
 now = now + 301

@@ -315,12 +315,12 @@ check(last(3):find("No drop spots") and profile(3).ledger.money == 100000, "no s
 cfg.market.dropSpots = saved
 
 -- Fence ----------------------------------------------------------------------------------------------
-check(market.fenceQuote(10000) == 3500, "fence car")
+check(market.fenceQuote(10000) == 4000, "fence car")
 check(market.fenceQuote({value = 1000, kind = "part"}) == 300, "fence part")
-check(market.fenceQuote({value = 1000}) == 350, "fence table defaults to car")
+check(market.fenceQuote({value = 1000}) == 400, "fence table defaults to car")
 check(market.fenceQuote(-5) == 0 and market.fenceQuote("x") == 0 and market.fenceQuote(0 / 0) == 0 and market.fenceQuote(nil) == 0, "fence bad input")
 say(3, "/market fence")
-check(last(3):find("35%%") and last(3):find("car theft"), "fence stub explains")
+check(last(3):find("40%%") and last(3):find("car theft"), "fence stub explains")
 
 -- Phone app channel ------------------------------------------------------------------------------------------
 join(5, "eve") join(6, "fay")

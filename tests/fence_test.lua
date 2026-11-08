@@ -76,16 +76,16 @@ rec("BBB 222", accountOf(2), 10000)
 say(1, "/fence")
 check(last(1):find("drop spot") or last(1):find(spot.name, 1, true), "list ends with where to go")
 local q = fence.quotes(1, 10000)
-check(q.strip == 3000 and q.sell == 3500 and q.resell == nil and q.gamble == nil, "no papers: strip and sell only")
+check(q.strip == 4500 and q.sell == 4000 and q.resell == nil and q.gamble == nil, "no papers: strip and sell only")
 items.give(1, "fake_plate", 1)
 q = fence.quotes(1, 10000)
-check(q.gamble == 4500 and q.gamblePapers == 1 and q.resell == nil, "one paper: gamble 45%")
+check(q.gamble == 5500 and q.gamblePapers == 1 and q.resell == nil, "one paper: gamble 55%")
 items.give(1, "vin_plate", 1)
-check(fence.quotes(1, 10000).gamble == 5250, "two papers: gamble 52.5%")
+check(fence.quotes(1, 10000).gamble == 6000, "two papers: gamble 60%")
 items.give(1, "part_number", 1)
 q = fence.quotes(1, 10000)
-check(q.resell == 6000 and q.gamble == 5250 and q.gamblePapers == 2, "three papers: resell 60%, gamble still uses two")
-check(fence.quotes(1, 10 ^ 12).strip == 90000, "value cap")
+check(q.resell == 7000 and q.gamble == 6000 and q.gamblePapers == 2, "three papers: resell 70%, gamble still uses two")
+check(fence.quotes(1, 10 ^ 12).strip == 135000, "value cap")
 check(fence.quotes(1, "x").strip == 0 and fence.quotes(1, 0 / 0).sell == 0, "garbage value")
 
 -- the ask: the server tells the client to look for the car -----------------------------------------------------
@@ -114,18 +114,18 @@ check(profile(1).ledger.money == 1000, "still nothing paid")
 
 -- strip -------------------------------------------------------------------------------------------------------------
 r = sell(1, "AAA 111", "strip")
-check(r.ok and r.pay == 3000 and r.takeCar and profile(1).ledger.money == 4000, "strip pays 30%")
+check(r.ok and r.pay == 4500 and r.takeCar and profile(1).ledger.money == 5500, "strip pays 45%")
 check(theft.records()["AAA 111"] == nil and items.count(1, "fake_plate") == 1, "record gone, papers kept")
-check(lastSent(1, "rlsmpWalletSet").money == 4000, "wallet pushed")
-check(disk(1).ledger.money == 4000, "saved to disk")
+check(lastSent(1, "rlsmpWalletSet").money == 5500, "wallet pushed")
+check(disk(1).ledger.money == 5500, "saved to disk")
 check(market.rep(1) == 11, "strip gives 1 rep (founder 10)")
 check(not sell(1, "AAA 111", "strip").ok, "the same car cannot be sold twice")
-check(profile(1).ledger.money == 4000, "no second payment")
+check(profile(1).ledger.money == 5500, "no second payment")
 
 -- sell outright -----------------------------------------------------------------------------------------------------
 rec("CCC 333", accountOf(1), 20000)
 r = sell(1, "CCC 333", "sell")
-check(r.ok and r.pay == 7000 and profile(1).ledger.money == 11000, "sell pays the fence rate")
+check(r.ok and r.pay == 8000 and profile(1).ledger.money == 13500, "sell pays the fence rate")
 
 -- resell needs all three papers, uses them up --------------------------------------------------------------------------
 rec("DDD 444", accountOf(1), 10000)
@@ -135,7 +135,7 @@ check(not r.ok and r.err:find("Part number kit"), "resell without all papers nam
 check(theft.records()["DDD 444"] and items.count(1, "fake_plate") == 1, "refused: nothing used")
 items.give(1, "part_number", 1)
 r = sell(1, "DDD 444", "resell")
-check(r.ok and r.pay == 6000 and profile(1).ledger.money == 17000, "resell pays 60%")
+check(r.ok and r.pay == 7000 and profile(1).ledger.money == 20500, "resell pays 70%")
 check(items.count(1, "fake_plate") == 0 and items.count(1, "vin_plate") == 0 and items.count(1, "part_number") == 0, "all three papers used up")
 check(disk(1).items == nil or next(disk(1).items) == nil, "papers gone on disk too")
 check(market.rep(1) == 11 + 1 + 3, "rep for resell")
@@ -147,7 +147,7 @@ check(not r.ok and r.err:find("at least one"), "gamble without papers refused")
 items.give(1, "fake_plate", 2)
 fence.setRandom(function() return 0.99 end)
 r = sell(1, "EEE 555", "gamble")
-check(r.ok and r.pay == 4500 and not r.busted and items.count(1, "fake_plate") == 1, "gamble lucky: pays, one paper used")
+check(r.ok and r.pay == 5500 and not r.busted and items.count(1, "fake_plate") == 1, "gamble lucky: pays, one paper used")
 rec("FFF 666", accountOf(1), 10000)
 local repBefore, moneyBefore = market.rep(1), profile(1).ledger.money
 fence.setRandom(function() return 0.01 end)
@@ -161,7 +161,7 @@ fence.setRandom(nil)
 -- a car the game had no price for still sells, at the floor value
 rec("ZERO 000", accountOf(1), 0)
 r = sell(1, "ZERO 000", "strip")
-check(r.ok and r.pay == 600, "value 0: the floor (2000) is used, strip pays 600")
+check(r.ok and r.pay == 900, "value 0: the floor (2000) is used, strip pays 900")
 
 -- theft off: the fence is closed -----------------------------------------------------------------------------------------
 cfg.fence.enabled = false
@@ -192,7 +192,7 @@ rec("GAR 001", accountOf(1), 10000)
 rec("GAR 002", accountOf(2), 10000)
 now = now + 5
 local m = gquote(1, {plate = "GAR 001", model = "etk800", value = 1})
-check(m.ok and m.kind == "stolen" and m.strip == 3000, "menu: stolen car priced from the server record, not the client value")
+check(m.ok and m.kind == "stolen" and m.strip == 4500, "menu: stolen car priced from the server record, not the client value")
 check(#m.fit == 0, "menu: nothing to fit without items")
 now = now + 5
 m = gquote(1, {plate = "GAR 002"})
@@ -219,13 +219,13 @@ check(not gdo(1, {action = "fit:vin_plate", plate = "NOPE 9"}).ok and items.coun
 check(disk(1).items == nil or disk(1).items.fake_plate == nil, "fitted item gone on disk")
 -- fitted papers count at the fence
 q = fence.quotes(1, 10000, theft.records()["GAR 001"])
-check(q.gamble == 4500 + 750 and q.gamblePapers == 2 and q.resell == nil, "quote counts fitted + owned papers")
+check(q.gamble == 5500 + 500 and q.gamblePapers == 2 and q.resell == nil, "quote counts fitted + owned papers")
 items.give(1, "part_number", 1)
 q = fence.quotes(1, 10000, theft.records()["GAR 001"])
-check(q.resell == 6000, "fitted + owned papers together allow a resell")
+check(q.resell == 7000, "fitted + owned papers together allow a resell")
 standAt(1, spot.x, spot.y)
 r = sell(1, "GAR 001", "resell")
-check(r.ok and r.pay == 6000 and items.count(1, "vin_plate") == 0 and items.count(1, "part_number") == 0 and items.count(1, "fake_plate") == 0,
+check(r.ok and r.pay == 7000 and items.count(1, "vin_plate") == 0 and items.count(1, "part_number") == 0 and items.count(1, "fake_plate") == 0,
   "resell uses the fitted paper (already used up) plus the two items")
 standAt(1, spot.x + 900, spot.y + 900)
 
@@ -233,23 +233,23 @@ standAt(1, spot.x + 900, spot.y + 900)
 rec("GAR 003", accountOf(1), 10000)
 local before = profile(1).ledger.money
 local sd = gdo(1, {action = "strip", plate = "GAR 003"})
-check(sd.ok and sd.pay == 3000 and sd.takeCar and profile(1).ledger.money == before + 3000 and theft.records()["GAR 003"] == nil, "garage strip of a stolen car pays 30%, no drop spot needed")
-check(lastSent(1, "rlsmpWalletSet").money == before + 3000, "wallet pushed")
+check(sd.ok and sd.pay == 4500 and sd.takeCar and profile(1).ledger.money == before + 4500 and theft.records()["GAR 003"] == nil, "garage strip of a stolen car pays 45%, no drop spot needed")
+check(lastSent(1, "rlsmpWalletSet").money == before + 4500, "wallet pushed")
 -- sell / resell / gamble from the garage too (no drop spot)
 rec("GAR 006", accountOf(1), 10000)
 now = now + 5
 m = gquote(1, {plate = "GAR 006"})
-check(m.sell == 3500 and m.resell == nil and m.gamble == nil and m.trap == 30, "menu: sell price, no resell or gamble without papers")
+check(m.sell == 4000 and m.resell == nil and m.gamble == nil and m.trap == 20, "menu: sell price, no resell or gamble without papers")
 check(not gdo(1, {action = "resell", plate = "GAR 006"}).ok and not gdo(1, {action = "gamble", plate = "GAR 006"}).ok and theft.records()["GAR 006"],
   "garage resell and gamble refused without papers, car kept")
 check(not gdo(1, {action = "sell", plate = "MYCAR 1", value = 5000}).ok, "garage sell is for stolen cars only")
 items.give(1, "fake_plate", 1)
 now = now + 5
 m = gquote(1, {plate = "GAR 006"})
-check(m.gamble == 4500 and m.resell == nil, "menu: gamble appears with one paper")
+check(m.gamble == 5500 and m.resell == nil, "menu: gamble appears with one paper")
 before = profile(1).ledger.money
 local gs = gdo(1, {action = "sell", plate = "GAR 006"})
-check(gs.ok and gs.action == "sell" and gs.pay == 3500 and gs.takeCar and profile(1).ledger.money == before + 3500 and theft.records()["GAR 006"] == nil,
+check(gs.ok and gs.action == "sell" and gs.pay == 4000 and gs.takeCar and profile(1).ledger.money == before + 4000 and theft.records()["GAR 006"] == nil,
   "garage sell pays the fence rate and takes the car")
 -- chased players cannot strip a stolen car
 rec("GAR 004", accountOf(1), 10000)
@@ -264,15 +264,15 @@ check(not gdo(3, {action = "strip", plate = "GAR 005"}).ok and theft.records()["
 before = profile(1).ledger.money
 now = now + 30
 sd = gdo(1, {action = "strip", plate = "MYCAR 1", model = "covet", value = 5000, inventoryId = 7})
-check(sd.ok and sd.pay == 1500 and sd.takeCar and sd.inventoryId == 7 and profile(1).ledger.money == before + 1500, "owned car strip pays 30% of the client value")
-check(disk(1).ledger.money == before + 1500, "owned strip saved to disk")
+check(sd.ok and sd.pay == 2250 and sd.takeCar and sd.inventoryId == 7 and profile(1).ledger.money == before + 2250, "owned car strip pays 45% of the client value")
+check(disk(1).ledger.money == before + 2250, "owned strip saved to disk")
 check(not gdo(1, {action = "strip", plate = "MYCAR 2", value = 5000}).ok, "second strip right away is refused (cooldown)")
 now = now + 30
 sd = gdo(1, {action = "strip", plate = "MYCAR 2", value = 10 ^ 12})
-check(sd.ok and sd.pay == 90000, "absurd value is capped")
+check(sd.ok and sd.pay == 135000, "absurd value is capped")
 now = now + 30
 sd = gdo(1, {action = "strip", value = 0})
-check(sd.ok and sd.pay == 600, "no price: the floor value is used")
+check(sd.ok and sd.pay == 900, "no price: the floor value is used")
 now = now + 30
 check(not gdo(1, {action = "fit:fake_plate", plate = "MYCAR 3"}).ok, "no fitting on ordinary cars")
 check(not gdo(1, {action = "weird"}).ok and not gdo(1, {}).ok and gdo(1, {action = 5}).ok == false, "garbage actions refused")
@@ -288,5 +288,15 @@ cfg.fence.garage = false
 now = now + 30
 check(not gdo(1, {action = "strip", value = 1000}).ok, "garage switched off in config")
 cfg.fence.garage = true
+
+-- the value is never below minValue and never above maxValue (or the model's cap)
+rec("LOW 111", accountOf(1), 500)
+standAt(1, spot.x, spot.y)
+local lr = sell(1, "LOW 111", "strip")
+check(lr.pay == 900, "value under minValue is lifted to it " .. tostring(lr.err))
+check(theft.capValue("bastion", 10 ^ 9) == 300000 and theft.capValue("bastion", 25000) == 25000, "theft cap: fence.maxValue, plausible values pass")
+cfg.fence.modelCaps = {bastion = 40000}
+check(theft.capValue("bastion", 90000) == 40000 and theft.capValue("covet", 90000) == 90000, "theft cap: per model")
+cfg.fence.modelCaps = {}
 
 print(string.format("fence_test: %d checks passed", passed))

@@ -81,6 +81,7 @@ luajit tests/plates_client_test.lua
 luajit tests/market_client_test.lua
 luajit tests/theft_client_test.lua
 luajit tests/mod_price_lib_test.lua
+luajit tests/stolen_value_lib_test.lua
 luajit tests/mod_price_client_test.lua
 luajit tests/meetup_client_test.lua
 luajit tests/garage_client_test.lua
