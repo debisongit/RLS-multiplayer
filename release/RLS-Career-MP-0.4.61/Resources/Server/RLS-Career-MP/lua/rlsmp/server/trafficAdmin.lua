@@ -79,6 +79,8 @@ local STATIC = {
   ["trafficVariety.respawn.repaintChance"] = {"number", 0, 1},
   ["trafficVariety.respawn.waitSeconds"] = {"number", 0.5, 30},
   ["trafficVariety.parked.amount"] = {"number", 0, 30, true},
+  ["trafficVariety.parked.fullPool"] = {"bool"},
+  ["trafficVariety.parked.simplifiedShare"] = {"number", 0, 1},
   ["trafficVariety.rarity.enabled"] = {"bool"},
   ["trafficVariety.rarity.common"] = {"number", 0, 1},
   ["trafficVariety.rarity.uncommon"] = {"number", 0, 1},
@@ -164,6 +166,7 @@ rules("theft.", {
 rules("fence.", {
   enabled = {"bool"}, maxValue = {"number", 0, 100000000, true}, minValue = {"number", 0, 1000000, true},
   stripRate = {"number", 0, 1}, resellRate = {"number", 0, 1}, phone = {"bool"},
+  maxSellDamage = {"number", 0, 1}, damageStripPenalty = {"number", 0, 1}, damageFreshSeconds = {"number", 10, 3600, true},
   ["rep.strip"] = {"number", 0, 25, true}, ["rep.sell"] = {"number", 0, 25, true}, ["rep.resell"] = {"number", 0, 25, true},
 })
 rules("market.", {
@@ -384,7 +387,7 @@ function M.snapshot()
       pool = {enabled = pool.enabled, avoidLast = pool.avoidLast, brandWindow = pool.brandWindow, brandMax = pool.brandMax, streetMax = pool.streetMax,
         configsPerModel = pool.configsPerModel, popPower = pool.popPower},
       respawn = {enabled = rs.enabled, mode = rs.mode, perMinute = rs.perMinute, chance = rs.chance, repaintChance = rs.repaintChance, waitSeconds = rs.waitSeconds},
-      parked = {amount = pk.amount},
+      parked = {amount = pk.amount, fullPool = pk.fullPool, simplifiedShare = pk.simplifiedShare},
       rarity = {enabled = ra.enabled, common = ra.common, uncommon = ra.uncommon, rare = ra.rare, uncommonValue = ra.uncommonValue, rareValue = ra.rareValue},
       focus = {enabled = fo.enabled, configs = fo.configs, minutes = fo.minutes},
       preload = {enabled = pl.enabled, minGapSeconds = pl.minGapSeconds,

@@ -14,6 +14,13 @@
 --   * the witness roll, the report time (30-120 s if seen, ~10 min if not, faster with a GPS tracker), stolen[plate] records
 --     in stolen.json, and the plate flag when a car is reported (plateRecords.flag through M.reportHook).
 --
+-- Parked cars of EVERY game can be stolen (owner: "everyone must be able to steal all parked cars"). BeamMP shows another player's parked cars to
+-- everybody as remote vehicles, but only their own game can delete them. So each game reports its parked cars (rlsmpParkedReport: BeamMP id "pid-vid", real
+-- model, exact config, plate, position), the server keeps the table and tells every player the ones near them (rlsmpParkedNear). A steal of a remote car goes
+-- through the same start/finish; on success the server asks the OWNER's game to delete the car and send its snapshot (rlsmpParkedTake / rlsmpParkedTaken),
+-- uses up the tools only then, and hands the snapshot to the thief (rlsmpTheftResult {car}). One steal per parked car (claim), a timeout keeps the tools.
+-- Never trusted: the client's claim about another player's car; the server's table, the thief's server-side position and the stealable pick decide.
+--
 -- Flow (all documented in docs/PROTOCOL.md "Car theft"). Players use the popup on the interact key (client rlsmp/theft.lua), never chat:
 --   client rlsmpTheftCheck {value, year}            -> rlsmpTheftCan {ok, method, label, seconds, noise, methods = [{method, label, seconds}]} (the popup choices)
 --   (developer fallback, only with ui.chatCommands) chat /steal [method] -> rlsmpTheftSteal {method}
@@ -50,6 +57,17 @@ local lastCheck = {} -- pid -> time of the last answered check (rate limit)
 local inspecting = {} -- pid -> {accountId, id, x, y, value, year, started, seconds}
 local inspectNext = {} -- pid -> time before which no new inspect starts
 local lastHint = {}  -- pid -> time of the last answered hint request (rate limit)
+local parked = {}    -- owner pid -> {at, count, cars = {sid -> rec}}: the parked cars each game reported
+local bySid = {}     -- sid -> rec {sid, owner, model, config, how, plate, pos = {x, y, z}, t}
+local claimed = {}   -- sid -> {pid, at}: the player busy with that parked car (one steal at a time per car)
+local gone = {}      -- sid -> time the car was taken (a late report of it is ignored)
+local nearTold = {}  -- pid -> {key, at, checked}: the last parked list sent to that player
+local lastParked = {} -- pid -> time of the last accepted parked report (rate limit)
+local takeToken = 0
+local MAX_POS_AGE = 20
+local MAX_PARKED, PARKED_GAP, PARKED_TTL, NEAR_RANGE, NEAR_MAX, NEAR_EVERY = 40, 3, 100, 120, 10, 3
+local TAKE_WAIT, CLAIM_KEEP, GONE_KEEP = 12, 200, 300
+local HOW = {full = true, map = true, ["standin-guess"] = true}
 
 local random = math.random
 function M.setRandom(fn) random = fn or math.random end
@@ -348,6 +366,50 @@ function M.fresh(pid, rec)
   return false
 end
 
+-- Damage of a stolen car (0..1), measured by the owner's game and reported (rlsmpTheftDamage, and with every sale request). A damaged car can
+-- only be stripped, never sold (fence.maxSellDamage). Stored on the record as rec.damage + rec.dt. See docs/RESEARCH_STOLEN_DAMAGE.md.
+function M.maxSellDamage() return clamp(n(fenceCfg and fenceCfg.maxSellDamage, 0.15), 0, 1) end
+function M.damageFreshSeconds() return math.max(10, n(fenceCfg and fenceCfg.damageFreshSeconds, 120)) end
+
+-- The owner's own record only. Rate limited: a report within 2 s of the last one counts only if the damage went UP.
+function M.noteDamage(pid, plate, damage)
+  damage = n(damage, nil)
+  if damage == nil then return false end
+  plate = M.cleanPlate(plate)
+  local rec = plate and stolen[plate]
+  if not rec or rec.by ~= accountOf(pid) then return false end
+  damage = math.floor(clamp(damage, 0, 1) * 100 + 0.5) / 100
+  local now = util.now()
+  local old = n(rec.damage, nil)
+  if old ~= nil and now - n(rec.dt, 0) < 2 and damage <= old then return false end
+  local changed = old == nil or math.abs(damage - old) >= 0.05 or (damage > M.maxSellDamage()) ~= (old > M.maxSellDamage())
+  rec.damage, rec.dt = damage, now
+  if changed then save() end         -- a small change stays in memory until the next save (the time is only needed while the server runs)
+  return true
+end
+
+-- nil when the record may be sold; else the plain message and a code ("damaged" | "unchecked").
+function M.sellBlock(rec)
+  local d = n(rec and rec.damage, nil)
+  if d == nil or util.now() - n(rec.dt, 0) > M.damageFreshSeconds() then return "Stand next to the car so it can be checked.", "unchecked" end
+  if d > M.maxSellDamage() then return "Too damaged to sell: strip it.", "damaged" end
+  return nil
+end
+
+-- What strip pays when the car is damaged: payout x (1 - fence.damageStripPenalty x damage).
+function M.stripFactor(rec)
+  local d = clamp(n(rec and rec.damage, 0), 0, 1)
+  return 1 - clamp(n(fenceCfg and fenceCfg.damageStripPenalty, 0.5), 0, 1) * d
+end
+
+local function onDamage(pid, d)
+  if type(d) ~= "table" or type(d.cars) ~= "table" or not enabled() then return end
+  for i, c in ipairs(d.cars) do
+    if i > 8 then break end
+    if type(c) == "table" then M.noteDamage(pid, c.plate, c.damage) end
+  end
+end
+
 local function onValue(pid, d)
   if type(d) ~= "table" or not enabled() then return end
   local plate = M.cleanPlate(d.plate)
@@ -373,10 +435,11 @@ end
 
 local function chat(pid, msg) if MP and MP.SendChatMessage then MP.SendChatMessage(pid, "[Theft] " .. msg) end end
 
--- Ownership ----------------------------------------------------------------------------------------
--- A player may only steal, inspect or scout parked cars of their OWN game. BeamMP shows everybody's parked cars to everybody (as remote vehicles),
--- so the client sends the BeamMP server id ("pid-vid") of the car; it must carry the sender's own player number and, when the server can list
--- the sender's vehicles, be one of them. The client checks the same (rlsmp/theft.lua); this is the server's look at it. Logged as RLSMP-THEFT.
+-- Which parked cars a player may touch -------------------------------------------------------------------------------
+-- A client names a parked car by its BeamMP server id ("pid-vid"). "own": the id carries the sender's own player number (and, when the server can list the
+-- sender's vehicles, one of them): a car of the sender's game, judged by the client as before. "remote": a parked car ANOTHER game reported (the table below),
+-- with its owner online, the sender's server-side position near the REPORTED spot and, when `pick` is not false, the spot a stealable one (the same rule as the
+-- client). Anything else (an unlisted id, an AI car, another player's real car) is refused. Logged as RLSMP-THEFT.
 function M.ownsSid(pid, sid)
   local p, v = tostring(sid or ""):match("^(%d+)%-(%d+)$")
   if not p or tonumber(p) ~= tonumber(pid) then return false end
@@ -387,18 +450,134 @@ function M.ownsSid(pid, sid)
   return true
 end
 
-local function ownOr(pid, d)
-  if M.ownsSid(pid, type(d) == "table" and d.sid or nil) then return true end
-  util.info(string.format("RLSMP-THEFT refused: not our car id=%s sid=%s from pid=%s", tostring(type(d) == "table" and d.id or nil),
-    tostring(type(d) == "table" and d.sid or nil), tostring(pid)))
-  return false
+local function dist2(a, b) return math.sqrt((a.x - b.x) ^ 2 + (a.y - b.y) ^ 2) end
+
+-- Returns kind ("own" | "remote"), the parked record (or nil), and on a refusal nil, nil, why.
+function M.target(pid, sid, range, pick)
+  if M.ownsSid(pid, sid) then return "own", bySid[sid] end
+  local rec = type(sid) == "string" and bySid[sid] or nil
+  if not rec then return nil, nil, "not listed" end
+  local now = util.now()
+  if not sessions.isLoaded(rec.owner) then return nil, nil, "owner gone" end
+  if now - rec.t > PARKED_TTL then return nil, nil, "old report" end
+  local pos = positions.get(pid)
+  if not pos or now - pos.t > MAX_POS_AGE then return nil, nil, "no fresh position" end
+  if dist2(pos, rec.pos) > range then return nil, nil, "too far" end
+  if pick ~= false and not M.stealableAt(M.periodAt(now), rec.pos) then return nil, nil, "not stealable" end
+  return "remote", rec
+end
+
+-- For the scout tip (server/market.lua): own car or a listed car of another game, with its REPORTED position (no distance, the tip checks its own).
+function M.scoutKind(pid, sid)
+  if M.ownsSid(pid, sid) then return "own" end
+  local rec = type(sid) == "string" and bySid[sid] or nil
+  if rec and sessions.isLoaded(rec.owner) and util.now() - rec.t <= PARKED_TTL then return "remote", rec.pos end
+  return nil
+end
+
+local function stealRange() return clamp(n(cfg.radius, 3), 1, 10) + 10 end
+
+local function targetOr(pid, d, range, pick)
+  local kind, rec, why = M.target(pid, type(d) == "table" and d.sid or nil, range, pick)
+  if kind then return kind, rec end
+  util.info(string.format("RLSMP-THEFT refused: not a car you may take id=%s sid=%s from pid=%s (%s)", tostring(type(d) == "table" and d.id or nil),
+    tostring(type(d) == "table" and d.sid or nil), tostring(pid), tostring(why)))
+  return nil
+end
+
+-- The parked table ---------------------------------------------------------------------------------------------------
+local function cleanConfigPath(s) return type(s) == "string" and #s <= 160 and not s:find("[^%w_%-%./ ]") and s or nil end
+local function coord(v)
+  v = n(v, nil)
+  if v == nil or math.abs(v) > 100000 then return nil end
+  return v
+end
+
+local function dropOwner(pid)
+  local p = parked[pid]
+  if p then for sid in pairs(p.cars) do bySid[sid] = nil end end
+  parked[pid] = nil
+end
+
+local function removeCar(sid)
+  local rec = bySid[sid]
+  bySid[sid] = nil
+  if rec and parked[rec.owner] then parked[rec.owner].cars[sid] = nil end
+  gone[sid] = util.now()
+end
+
+function M.parkedRec(sid) return bySid[sid] end
+function M.parkedCount(pid) local p = parked[pid] return p and p.count or 0 end
+
+-- rlsmpParkedReport {cars = [{sid, model, config, how, plate, x, y, z}]}: the sender's whole list of parked cars (replaces the last one).
+local function onParkedReport(pid, d)
+  if not enabled() or type(d) ~= "table" or type(d.cars) ~= "table" or not sessions.isLoaded(pid) then return end
+  local now = util.now()
+  if lastParked[pid] and now - lastParked[pid] < PARKED_GAP then return end
+  lastParked[pid] = now
+  local cars, count, refused = {}, 0, 0
+  for _, c in ipairs(d.cars) do
+    if count >= MAX_PARKED then break end
+    local sid = type(c) == "table" and c.sid or nil
+    local x, y, z = coord(type(c) == "table" and c.x), coord(type(c) == "table" and c.y), coord(type(c) == "table" and c.z)
+    local model = type(c) == "table" and cleanModel(c.model) or nil
+    if type(sid) == "string" and x and y and z and model then
+      if not M.ownsSid(pid, sid) then
+        refused = refused + 1
+      elseif not (gone[sid] and now - gone[sid] < GONE_KEEP) then
+        cars[sid] = {sid = sid, owner = pid, model = model, config = cleanConfigPath(c.config), how = HOW[c.how] and c.how or nil,
+          plate = M.cleanPlate(c.plate), pos = {x = x, y = y, z = z}, t = now}
+        count = count + 1
+      end
+    end
+  end
+  local old = parked[pid] and parked[pid].count
+  dropOwner(pid)
+  parked[pid] = {at = now, count = count, cars = cars}
+  for sid, rec in pairs(cars) do bySid[sid] = rec end
+  if refused > 0 then util.info(string.format("RLSMP-THEFT refused: %d parked car(s) in the report of pid=%s are not theirs", refused, tostring(pid))) end
+  if old ~= count then util.info(string.format("[theft] parked cars reported by %s: %d", tostring(pid), count)) end
+end
+
+local function release(pid)
+  for sid, c in pairs(claimed) do if c.pid == pid then claimed[sid] = nil end end
+end
+
+-- The parked cars of other games within NEAR_RANGE of a player, for the client to match with BeamMP's remote vehicles.
+local function pushNear(pid, now)
+  local t = nearTold[pid]
+  if not t then t = {key = "", at = -1e9, checked = -1e9} nearTold[pid] = t end
+  if now - t.checked < NEAR_EVERY then return end
+  t.checked = now
+  local pos = positions.get(pid)
+  local list = {}
+  if pos and now - pos.t <= 30 then
+    for sid, rec in pairs(bySid) do
+      local c = claimed[sid]
+      if rec.owner ~= pid and sessions.isLoaded(rec.owner) and not (c and c.pid ~= pid and now - c.at < CLAIM_KEEP) then
+        local dd = dist2(pos, rec.pos)
+        if dd <= NEAR_RANGE then list[#list + 1] = {d = dd, rec = rec} end
+      end
+    end
+  end
+  table.sort(list, function(a, b) if a.d ~= b.d then return a.d < b.d end return a.rec.sid < b.rec.sid end)
+  local cars, keys = {}, {}
+  for i = 1, math.min(#list, NEAR_MAX) do
+    local r = list[i].rec
+    cars[i] = {sid = r.sid, model = r.model, config = r.config, how = r.how, x = r.pos.x, y = r.pos.y, z = r.pos.z}
+    keys[i] = r.sid .. "|" .. r.model .. "|" .. tostring(r.config)
+  end
+  local key = table.concat(keys, ",")
+  if key == t.key and (key == "" or now - t.at < 15) then return end
+  t.key, t.at = key, now
+  net.send(pid, "rlsmpParkedNear", {cars = cars})
 end
 
 -- Handlers -----------------------------------------------------------------------------------------
 
 local function onCheck(pid, d)
   if not enabled() or not sessions.isLoaded(pid) then return end
-  if not ownOr(pid, d) then return end
+  if not targetOr(pid, d, stealRange()) then return end
   local now = util.now()
   if lastCheck[pid] == now then return end   -- at most one answer per second
   lastCheck[pid] = now
@@ -415,8 +594,6 @@ end
 -- The car's x/y come from the client, but the player's own server-side position (positions.lua) must be within range of them, and
 -- the pick is judged here with the same rule as the client. A non-member, a boring car or a player too far away gets no hint at all.
 
-local MAX_POS_AGE = 20
-
 local function carNear(pid, d, ic)
   local x, y = n(d.x, nil), n(d.y, nil)
   local pos = positions.get(pid)
@@ -428,11 +605,12 @@ end
 local function onHint(pid, d)
   local ic = M.inspectCfg()
   if not ic.enabled or type(d) ~= "table" or not sessions.isLoaded(pid) or not market.isMember(pid) then return end
-  if not ownOr(pid, d) then return end
+  local kind, rec = targetOr(pid, d, ic.range + 10)
+  if not kind then return end
   local now = util.now()
   if lastHint[pid] == now then return end
   lastHint[pid] = now
-  local car = carNear(pid, d, ic)
+  local car = kind == "remote" and {x = rec.pos.x, y = rec.pos.y} or carNear(pid, d, ic)
   if car and M.stealableAt(M.periodAt(now), car) then net.send(pid, "rlsmpTheftHint", {id = n(d.id, nil), ok = true}) end
 end
 
@@ -461,11 +639,13 @@ end
 local function onInspect(pid, d)
   local ic = M.inspectCfg()
   if not ic.enabled or type(d) ~= "table" or not sessions.isLoaded(pid) then return end
-  if not ownOr(pid, d) then return end
+  local kind, rec = targetOr(pid, d, ic.range + 10, false)   -- inspect answers for any parked car: the pick is judged at the end
+  if not kind then return end
   local now = util.now()
   if inspectNext[pid] and now < inspectNext[pid] then return end
   inspectNext[pid] = now + ic.cooldown
-  inspecting[pid] = {accountId = accountOf(pid), id = n(d.id, nil), x = n(d.x, nil), y = n(d.y, nil), value = M.cleanValue(d.value),
+  inspecting[pid] = {accountId = accountOf(pid), id = n(d.id, nil), x = kind == "remote" and rec.pos.x or n(d.x, nil),
+    y = kind == "remote" and rec.pos.y or n(d.y, nil), value = M.cleanValue(d.value),
     year = M.cleanYear(d.year), started = now, seconds = ic.seconds}
   net.send(pid, "rlsmpTheftInspectGo", {ok = true, seconds = ic.seconds})   -- the same for everybody and every car
 end
@@ -490,26 +670,33 @@ local function goFail(pid, err) net.send(pid, "rlsmpTheftGo", {ok = false, err =
 local function onStart(pid, d)
   if not enabled() then return goFail(pid, "Car theft is off on this server.") end
   if not sessions.isLoaded(pid) then return goFail(pid, "Not in career.") end
-  if type(d) ~= "table" or not ownOr(pid, d) then return goFail(pid, "That car is not yours to take.") end
+  if type(d) ~= "table" then return goFail(pid, "That car is not yours to take.") end
+  local kind, rec = targetOr(pid, d, stealRange())
+  if not kind then return goFail(pid, "That car is not yours to take.") end
   local now = util.now()
   local p = pending[pid]
   if p and p.accountId == accountOf(pid) and now - p.started < p.seconds + 60 then return goFail(pid, "You are already busy.") end
   if cooldown[pid] and now < cooldown[pid] then return goFail(pid, "Wait a moment before trying again.") end
+  local claim = kind == "remote" and claimed[rec.sid] or nil
+  if claim and claim.pid ~= pid and now - claim.at < CLAIM_KEEP then return goFail(pid, "Someone else is already at that car.") end
   local info, err = M.choose(pid, d.value, d.year, d.method)
   if not info then return goFail(pid, err) end
   pending[pid] = {accountId = accountOf(pid), method = info.method, seconds = info.seconds, noise = info.noise,
     failChance = info.failChance, tracker = info.tracker, tier = info.tier, value = M.cleanValue(d.value),
-    year = M.cleanYear(d.year), started = now, state = "running"}
+    year = M.cleanYear(d.year), started = now, state = "running",
+    remote = kind == "remote" and {sid = rec.sid, owner = rec.owner, pos = {x = rec.pos.x, y = rec.pos.y, z = rec.pos.z}} or nil}
+  if kind == "remote" then claimed[rec.sid] = {pid = pid, at = now} end
   util.info(string.format("[theft] %s starts %s on a %s car (%ds)", tostring(pid), info.method, info.tier, info.seconds))
   net.send(pid, "rlsmpTheftGo", {ok = true, method = info.method, label = info.label, seconds = info.seconds, noise = info.noise})
 end
 
 local function onCancel(pid)
-  if pending[pid] and pending[pid].state == "running" then pending[pid] = nil end
+  if pending[pid] and pending[pid].state == "running" then pending[pid] = nil release(pid) end
 end
 
 local function resultFail(pid, err)
   pending[pid] = nil
+  release(pid)
   cooldown[pid] = util.now() + math.max(0, math.floor(n(cfg.retrySeconds, 10)))
   net.send(pid, "rlsmpTheftResult", {ok = false, err = err})
 end
@@ -525,9 +712,64 @@ local function onFinish(pid)
     util.info(string.format("[theft] %s: %s failed", tostring(pid), p.method))
     return resultFail(pid, "It did not work. Try again or walk away.")
   end
+  if p.remote then
+    -- another game's parked car: nothing is used up until its owner's game has handed the car over (a slow or gone owner costs the thief nothing)
+    local rec = bySid[p.remote.sid]
+    if not rec or not sessions.isLoaded(rec.owner) then return resultFail(pid, "That car is gone.") end
+    takeToken = takeToken + 1
+    p.state, p.token, p.takeAt, p.owner = "taking", takeToken, now, rec.owner
+    net.send(rec.owner, "rlsmpParkedTake", {token = takeToken, sid = rec.sid})
+    util.info(string.format("[theft] %s asks %s to hand over parked car %s (token %d)", tostring(pid), tostring(rec.owner), rec.sid, takeToken))
+    return
+  end
   for _, it in ipairs(itemList(cfg.methods[p.method])) do items.use(pid, it) end
   p.state, p.openedAt = "open", now
   net.send(pid, "rlsmpTheftResult", {ok = true})
+end
+
+-- The snapshot an owner's game sent for a parked car (cleaned, finite and small). nil when unusable or when the car is not where it was reported.
+local function cleanSnap(d, sid, pos)
+  if type(d) ~= "table" then return nil end
+  local model, plate = cleanModel(d.model), M.cleanPlate(d.plate)
+  local x, y, z = coord(d.x), coord(d.y), coord(d.z)
+  if not (model and plate and x and y and z) then return nil end
+  if dist2({x = x, y = y}, pos) > 25 then return nil end
+  local t = {pos = {x = x, y = y, z = z}}
+  M.rememberCar(t, d)
+  local cfgJson = type(d.cfgJson) == "string" and #d.cfgJson <= 8000 and not d.cfgJson:find("%c") and d.cfgJson or nil
+  return {sid = sid, model = model, plate = plate, x = x, y = y, z = z, config = t.car.config, look = t.car.look, rot = t.last.rot,
+    cfgJson = cfgJson, how = HOW[d.how] and d.how or nil}
+end
+
+-- rlsmpParkedTaken {token, ok, car}: the owner's game answers a take. Matched by token AND by the player who was asked.
+local function onTaken(pid, d)
+  if type(d) ~= "table" then return end
+  local token = tonumber(d.token)
+  for thief, p in pairs(pending) do
+    if p.state == "taking" and p.token == token and p.owner == pid then
+      local sid = p.remote.sid
+      if d.ok ~= true then
+        removeCar(sid)
+        util.info(string.format("[theft] %s could not hand over parked car %s: it is gone", tostring(pid), sid))
+        return resultFail(thief, "That car is gone.")
+      end
+      local snap = cleanSnap(d.car, sid, p.remote.pos)
+      -- the owner's game has deleted the car already, so even a bad snapshot takes it off the table
+      removeCar(sid)
+      if not snap then
+        util.warn(string.format("[theft] unusable snapshot of parked car %s from %s", sid, tostring(pid)))
+        return resultFail(thief, "The car could not be taken.")
+      end
+      for _, it in ipairs(itemList(cfg.methods[p.method])) do items.use(thief, it) end
+      local now = util.now()
+      p.state, p.openedAt, p.snap = "open", now, snap
+      claimed[sid] = nil
+      util.info(string.format("[theft] %s took parked car %s of %s: %s %s config %s (%s)", tostring(thief), sid, tostring(pid), snap.model, snap.plate,
+        tostring(snap.config or (snap.cfgJson and "inline") or "none"), tostring(snap.how)))
+      return net.send(thief, "rlsmpTheftResult", {ok = true, car = snap})
+    end
+  end
+  util.warn("[theft] a late or unknown parked hand-over from " .. tostring(pid) .. " (token " .. tostring(token) .. ") was ignored; that parked car is lost")
 end
 
 -- What the client sent to rebuild the car later (config, three paints, rotation; docs/PROTOCOL.md "Stolen car restore"). Everything is
@@ -569,8 +811,15 @@ local function onDone(pid, d)
   if not p or p.state ~= "open" or p.accountId ~= accountOf(pid) then return end
   local now = util.now()
   pending[pid] = nil
+  release(pid)
   cooldown[pid] = now + math.max(0, math.floor(n(cfg.retrySeconds, 10)))
   if now - p.openedAt > 120 then return end
+  if p.snap then
+    -- a car of another game: what its owner's game sent decides plate, model, config, paints and place; the thief only adds colour, value and witnesses
+    local c = p.snap
+    d = {plate = c.plate, model = c.model, color = d.color, valueSource = d.valueSource, config = c.config, look = c.look, rot = c.rot,
+      x = c.x, y = c.y, z = c.z, witnesses = d.witnesses}
+  end
   local plate, model = M.cleanPlate(d.plate), cleanModel(d.model)
   if not plate or not model then
     util.warn("[theft] done without a usable plate/model from " .. tostring(pid))
@@ -621,6 +870,26 @@ function M.reportDue()
   return out
 end
 
+-- Once a second: take timeouts (the tools were not used), old reports, leavers, claims, and the near lists.
+function M.parkedTick()
+  local now = util.now()
+  for thief, p in pairs(pending) do
+    if p.state == "taking" and (now - p.takeAt > TAKE_WAIT or not sessions.isLoaded(p.owner)) then
+      util.warn(string.format("[theft] %s: the owner's game (%s) did not hand over parked car %s in time; nothing was used", tostring(thief), tostring(p.owner), p.remote.sid))
+      resultFail(thief, "The owner's game did not answer. Nothing was used. Try again.")
+    end
+  end
+  for owner, e in pairs(parked) do
+    if not sessions.isLoaded(owner) or now - e.at > PARKED_TTL then dropOwner(owner) end
+  end
+  for sid, c in pairs(claimed) do if now - c.at > CLAIM_KEEP then claimed[sid] = nil end end
+  for sid, t in pairs(gone) do if now - t > GONE_KEEP then gone[sid] = nil end end
+  for pid in pairs(sessions.all()) do
+    if sessions.isLoaded(pid) then pushNear(pid, now) end
+  end
+  for pid in pairs(nearTold) do if not sessions.isLoaded(pid) then nearTold[pid] = nil end end
+end
+
 function M.pushConfig()
   local live = {}
   local payload
@@ -635,7 +904,8 @@ function M.pushConfig()
     end
   end
   for pid in pairs(told) do if not live[pid] then told[pid], pending[pid], cooldown[pid], lastCheck[pid] = nil, nil, nil, nil
-    inspecting[pid], inspectNext[pid], lastHint[pid] = nil, nil, nil end end
+    inspecting[pid], inspectNext[pid], lastHint[pid], lastParked[pid] = nil, nil, nil, nil
+    release(pid) dropOwner(pid) end end
 end
 
 local offTold = false
@@ -655,6 +925,7 @@ function M.tick()
   offTold = false
   M.pushConfig()
   M.reportDue()
+  M.parkedTick()
   for pid in pairs(sessions.all()) do
     if sessions.isLoaded(pid) then M.repriceAsk(pid) end
   end
@@ -679,6 +950,7 @@ function M.init(config, pluginRoot)
   stolen, pending, cooldown, told, lastCheck = {}, {}, {}, {}, {}
   asked, capable = {}, {}
   inspecting, inspectNext, lastHint = {}, {}, {}
+  parked, bySid, claimed, gone, nearTold, lastParked, takeToken = {}, {}, {}, {}, {}, {}, 0
   file = pluginRoot and (pluginRoot .. "stolen.json") or nil
   offTold = false
   -- Always listening: every handler checks enabled() itself, so the in-game menu can switch theft on and off without a restart.
@@ -693,8 +965,11 @@ function M.init(config, pluginRoot)
   net.onClient("rlsmpTheftFinish", onFinish)
   net.onClient("rlsmpTheftDone", onDone)
   net.onClient("rlsmpTheftValue", onValue)
+  net.onClient("rlsmpTheftDamage", onDamage)
   net.onClient("rlsmpTheftCancel", onCancel)
   net.onClient("rlsmpTheftHint", onHint)
+  net.onClient("rlsmpParkedReport", onParkedReport)
+  net.onClient("rlsmpParkedTaken", onTaken)
   net.onClient("rlsmpTheftInspect", onInspect)
   net.onClient("rlsmpTheftInspectFinish", onInspectFinish)
   net.onChat("steal", onSteal, true)

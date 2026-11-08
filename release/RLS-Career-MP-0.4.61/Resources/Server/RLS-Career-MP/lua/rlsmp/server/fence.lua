@@ -76,7 +76,7 @@ end
 function M.quotes(pid, value, rec)
   value = clamp(math.floor(num(value, 0)), 0, math.floor(num(c().maxValue, 300000)))
   local out = {
-    strip = math.floor(value * num(c().stripRate, 0.45)),
+    strip = math.floor(value * num(c().stripRate, 0.45) * (rec and theft.stripFactor(rec) or 1)),
     sell = market.fenceQuote(value),
   }
   local have = pid and papersOwned(pid, rec) or {}
@@ -141,6 +141,10 @@ function M.sell(pid, plate, mode, opts)
   if not ledger.seeded then return fail("Wait for your first save, then try again.") end
   if busy[pid] then return fail("One at a time.") end
 
+  if mode ~= "strip" then
+    local why = theft.sellBlock(rec)
+    if why then return fail(why) end
+  end
   if theft.fresh and not theft.fresh(pid, rec) then return fail("Checking today's market price. Try again in a few seconds.") end
   local value = valueOf(rec)
   local q = M.quotes(pid, value, rec)
@@ -217,6 +221,7 @@ local function onGarageQuote(pid, d)
   if lastAsk[pid] and now - lastAsk[pid] < 1 then return end
   lastAsk[pid] = now
   if theft.repriceAsk then theft.repriceAsk(pid) end      -- the quote below uses the stored value; a fresher one is on its way
+  if d.plate ~= nil then theft.noteDamage(pid, d.plate, d.damage) end
   local menu = {ok = true, items = items.list(pid)}
   if not garageOn() then
     menu.ok, menu.err = false, "The garage strip is closed on this server."
@@ -228,11 +233,14 @@ local function onGarageQuote(pid, d)
       menu.ok, menu.err = false, "The fence only deals with black market members."
     else
       menu.kind, menu.plate, menu.model = t.kind, t.plate, t.model
-      menu.strip = math.floor(t.value * num(c().stripRate, 0.45))
+      menu.strip = math.floor(t.value * num(c().stripRate, 0.45) * (t.rec and theft.stripFactor(t.rec) or 1))
       menu.fit, menu.fitted = {}, {}
       if t.kind == "stolen" then
         local q = M.quotes(pid, t.value, t.rec)
         menu.sell, menu.resell = math.floor(q.sell), q.resell
+        menu.damage = t.rec.damage
+        menu.sellWhy = theft.sellBlock(t.rec)
+        menu.canSell = menu.sellWhy == nil
         for _, name in ipairs(PAPERS) do
           if fitted(t.rec, name) then menu.fitted[#menu.fitted + 1] = itemLabel(name)
           elseif items.has(pid, name) then menu.fit[#menu.fit + 1] = {name = name, label = itemLabel(name)} end
@@ -293,6 +301,7 @@ function M.garageDo(pid, d)
   if not garageOn() then return {ok = false, action = d.action, err = "The garage strip is closed on this server."} end
   if not sessions.isLoaded(pid) then return {ok = false, action = d.action, err = "Not in career."} end
   if d.phone == true and c().phone == false then return {ok = false, action = d.action, err = "Selling from the phone is switched off on this server."} end
+  if d.plate ~= nil then theft.noteDamage(pid, d.plate, d.damage) end
   local t, err = garageTarget(pid, d)
   if not t then return {ok = false, action = d.action, err = err} end
   if t.kind == "stolen" and not (enabled() and market.isMember(pid)) then
@@ -353,7 +362,9 @@ function M.summary(pid)
     local q = M.quotes(pid, valueOf(rec), rec)
     local old = tonumber(rec.prevValue)
     local fit, on = paperLists(pid, rec)
+    local why = theft.sellBlock(rec)
     out[#out + 1] = {plate = rec.plate, model = rec.model, strip = q.strip, sell = q.sell, resell = q.resell, fit = fit, fitted = on,
+      damage = rec.damage, canSell = why == nil, why = why,
       age = rec.vt and math.max(0, util.now() - rec.vt) or nil,       -- seconds since the price was last worked out
       trend = old and (valueOf(rec) > old and 1 or (valueOf(rec) < old and -1 or 0)) or 0}
   end
@@ -371,6 +382,7 @@ end
 
 local function onSell(pid, d)
   if type(d) ~= "table" then return end
+  theft.noteDamage(pid, d.plate, d.damage)
   local result = M.sell(pid, d.plate, type(d.mode) == "string" and d.mode or "")
   net.send(pid, "rlsmpFenceResult", result)
   if result.ok then

@@ -81,7 +81,7 @@ end
 
 function M.parked()
   local k = type(cfg.parked) == "table" and cfg.parked or {}
-  return {amount = tonumber(k.amount)}
+  return {amount = tonumber(k.amount), fullPool = k.fullPool ~= false, simplifiedShare = tonumber(k.simplifiedShare)}
 end
 
 local function wordList(src)

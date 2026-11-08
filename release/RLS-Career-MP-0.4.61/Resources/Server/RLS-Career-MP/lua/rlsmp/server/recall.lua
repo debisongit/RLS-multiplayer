@@ -54,7 +54,7 @@ end
 function M.spec(rec)
   local at = rec.last or rec.ownerPos or rec.pos or {}
   local car = rec.car or {}
-  return {plate = rec.plate, model = rec.model, config = car.config, look = car.look, value = rec.value, year = rec.year, color = rec.color,
+  return {plate = rec.plate, model = rec.model, config = car.config, look = car.look, value = rec.value, year = rec.year, color = rec.color, damage = rec.damage,
     x = at.x, y = at.y, z = at.z, rot = at.rot}
 end
 

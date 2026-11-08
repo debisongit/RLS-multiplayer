@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.61 (all untested in-game)
+- Everyone can steal ALL parked cars again, also the ones another player's game spawned (this replaces the wrong 'own cars only' rule of 0.4.60). The server asks the owner's game to remove the car and hand over its exact details. AI traffic, police, taxis and real player cars stay off limits. (Claude A)
+- Parked cars can be any available model, with or without a simplified version (`trafficVariety.parked.fullPool`, `simplifiedShare`). A stolen car keeps the exact config of the parked car (`theft config:` log lines). (Claude A)
+- A damaged stolen car can only be stripped: above 15% damage (`fence.maxSellDamage`) selling, reselling, gambling and meetup sales are refused. Strip pays less with damage. (Claude A)
+- Fixed: scout tips were always refused in 0.4.60. (Claude A)
+
+## Unreleased: everybody can steal every parked car (no build bump, untested in-game)
+- I misunderstood you in 0.4.60. Now ANY player can inspect and steal ANY parked car, also one that another player's game spawned. The thief's game finds it (the server lists the other games' parked cars near you), the normal steal timer runs on the server, then the owner's game deletes that car and hands over its exact data, and your game spawns the real car from it. Not stealable: traffic, police, taxis, other players' real cars, a car someone else is stealing or already took. (Claude A)
+- If the owner's game does not answer in 12 s the steal fails and none of your tools are used up. New events `rlsmpParkedReport`, `rlsmpParkedNear`, `rlsmpParkedTake`, `rlsmpParkedTaken` (see `docs/PROTOCOL.md`). The stolen car's place may get a new parked car from RLS later. (Claude A)
+- Same config: the stolen car now comes out exactly like the parked one (your Pessima TUNED stays tuned). A full parked car uses its own part config; a stand-in car is now only a look of a full pick we remember, so the exact pick is known. Only a stand-in nobody remembered is still guessed. The log says `theft config: ... (full|map|standin-guess)`. (Claude A)
+- Parked cars can be every available car, also those with no stand-in: `trafficVariety.parked.fullPool` (default on, RLS's parked filter, no police or taxi, junk words stay out) and `trafficVariety.parked.simplifiedShare` (default 0.5; 0 = always full cars). Both can be set in `config.json` or with the server's settings rules. (Claude A)
+- Fixed: scout tips (Black Market) were always refused since 0.4.60 because the game did not send the car ids. (Claude A)
+- Research and the verified/guessed list: `docs/RESEARCH_PARKED_THEFT.md`. (Claude A)
+
 ## 0.4.60 (all untested in-game)
 - Cops: no extra cops by default (`police.copCount` 0). A cop the game puts near you, in view, on your road or straight ahead/behind is moved to a road spot 1000 to 2500 m away (600 m minimum in a chase), right side preferred. If you want more cops, the count follows area and time of day: at most 3, one per 1500 m area. (Claude A)
 - Traffic is placed anywhere in a 250 to 4000 m ring when it respawns, and recycled past 4 km. Expect thinner traffic near you; raise `traffic.minAmount` if needed. (Claude A)
@@ -8,6 +22,7 @@
 - Fake plates on your own cars: garage tile, real plate change, no fines, own police record. (Claude A)
 
 ## Unreleased (no build bump, untested in-game)
+- Damaged stolen cars can only be stripped. The game measures the damage of the stolen car when you open the Black Market app, the garage tile or a sale, and the server refuses Sell, Resell and meetup sales above `fence.maxSellDamage` (default 15 percent) with "Too damaged to sell: strip it." Strip pays less the more it is damaged (`fence.damageStripPenalty`, 0.5: at 40 percent damage it pays 80 percent). If the damage is unknown or older than 2 minutes you must stand next to the car first. The app and the garage tile show "Damage 23%" and grey out the buttons that do not work. Both numbers are in the `[` menu (Fence page). A restored stolen car keeps its recorded damage. See `docs/RESEARCH_STOLEN_DAMAGE.md` (the 1000 = fully wrecked scale is a guess). (Claude A)
 - Cop budget uses the real spawn spot: the far road spot is chosen first and the one-cop-per-area rule looks at THAT spot's area, not the player's. The area and time target wins over `police.copCount`, the maximum of 3 always holds. A re-placed cop is still rebuilt or moved (count unchanged); with `copCount` 0 no cop is added, and cops are never removed by the budget. (Claude A)
 - Fake plates on your OWN cars: the garage computer has a new tile on every owned car, "Fit fake plate" (and "Fake plate (fitted)" when one is on). A popup shows 3 random plates to pick from, "Other plates" for 3 new ones, and "Restore real plate". Fitting uses up one `fake_plate` item from the Black Market (the server takes it) and the plate text really changes on the car and in RLS's garage record, so it should survive saves, respawns and the part shop. A check puts it back if RLS restores the real plate. New files: `rlsmp/fakePlate.lua`, `lib/fakePlate.lua`, `server/fakePlates.lua`. See `docs/RESEARCH_FAKE_PLATES.md` (what is verified and what is guessed). (Claude A)
 - With a fake plate fitted: no radar or red-light fine and no chase citation or arrest fine (`rlsmp_theft.hasFakePlate` is true for the own car, also after a rejoin because the server keeps the record in the player's profile). The chase itself still happens. (Claude A)

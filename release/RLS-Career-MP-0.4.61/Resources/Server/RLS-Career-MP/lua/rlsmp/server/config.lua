@@ -228,7 +228,10 @@ M.defaults = {
     -- Parked cars: RLS keeps as many as its game setting trafficParkingAmount says (a real log: 2). Each game raises that setting to this amount after the
     -- career starts (never lowers a higher one, gives the old value back on leaving). 0 = leave it alone. Every parked car is a car BeamMP syncs to the others
     -- and counts for the server's per-player car limit (MaxCars in ServerConfig.toml), so raise that too. Car theft needs parked cars to steal.
-    parked = {amount = 10},
+    -- fullPool: parked cars can be EVERY available model/config (full cars, also those with no simple_traffic stand-in), under RLS's own parked filter
+    -- (no police or taxi; junk stays out through excludeWords). simplifiedShare: of the picks that have a stand-in model, this share is shown as the cheap stand-in;
+    -- the car you get when you steal it is still the exact picked config (client rlsmp/trafficVariety.lua remembers it). 0 = always full cars.
+    parked = {amount = 10, fullPool = true, simplifiedShare = 0.5},
     -- Rarity: everyday cars are the clear majority. Shares of the picks per tier (renormalised over the tiers that exist). A config is "rare" when its model or
     -- config name has a rareWords word / is in rareModels / has Config Type Race or Drift / a Value of rareValue or more; "uncommon" for uncommonWords or
     -- uncommonValue; else common. Words of 5+ letters match inside names ("offroad" in "offroada331972"), shorter ones whole words only.
@@ -422,6 +425,11 @@ M.defaults = {
     maxValue = 300000,        -- the car value the fence works from is capped here (the value comes from the client)
     modelCaps = {},           -- optional: model name -> highest value accepted for that model, e.g. {bastion = 40000}
     stripRate = 0.45,         -- parts for cash, no papers
+    -- A stolen car that is damaged more than this (0..1, 0.15 = 15 percent) cannot be sold, resold or met up: only stripped. Strip pays less the more it is
+    -- damaged: payout x (1 - damageStripPenalty x damage). The damage is measured by the owner's game; a sale needs a report younger than damageFreshSeconds.
+    maxSellDamage = 0.15,
+    damageStripPenalty = 0.5,
+    damageFreshSeconds = 120,
     resellRate = 0.70,        -- fake plate + VIN plate + part number, all used up
     -- Strip / sell / resell can also be done from the Black Market phone app, for any stolen car (no drop spot, the garage rules). false = only the garage computer
     -- and the drop spot.

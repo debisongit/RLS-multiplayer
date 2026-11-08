@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.61 (all untested in-game)
+- Everyone can steal ALL parked cars again, also the ones another player's game spawned (this replaces the wrong 'own cars only' rule of 0.4.60). The server asks the owner's game to remove the car and hand over its exact details. AI traffic, police, taxis and real player cars stay off limits. (Claude A)
+- Parked cars can be any available model, with or without a simplified version (`trafficVariety.parked.fullPool`, `simplifiedShare`). A stolen car keeps the exact config of the parked car (`theft config:` log lines). (Claude A)
+- A damaged stolen car can only be stripped: above 15% damage (`fence.maxSellDamage`) selling, reselling, gambling and meetup sales are refused. Strip pays less with damage. (Claude A)
+- Fixed: scout tips were always refused in 0.4.60. (Claude A)
+
 ## Unreleased: everybody can steal every parked car (no build bump, untested in-game)
 - I misunderstood you in 0.4.60. Now ANY player can inspect and steal ANY parked car, also one that another player's game spawned. The thief's game finds it (the server lists the other games' parked cars near you), the normal steal timer runs on the server, then the owner's game deletes that car and hands over its exact data, and your game spawns the real car from it. Not stealable: traffic, police, taxis, other players' real cars, a car someone else is stealing or already took. (Claude A)
 - If the owner's game does not answer in 12 s the steal fails and none of your tools are used up. New events `rlsmpParkedReport`, `rlsmpParkedNear`, `rlsmpParkedTake`, `rlsmpParkedTaken` (see `docs/PROTOCOL.md`). The stolen car's place may get a new parked car from RLS later. (Claude A)
