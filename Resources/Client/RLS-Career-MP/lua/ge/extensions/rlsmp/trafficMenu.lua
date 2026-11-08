@@ -244,6 +244,14 @@ local function sectionBehaviour(ui)
     ui.SameLine()
     ui.Text(string.format("= %.1f%%", shares[p[1]]))
   end
+  ui.Separator()
+  ui.TextWrapped("At night every weight above is multiplied by these numbers (1 = no change), so night traffic has more racers, aggressive and drunk drivers. The share it gives is shown next to each.")
+  local nightShares = L.nightShares(st)
+  for _, p in ipairs(L.PERSONALITIES) do
+    num(ui, p[2] .. " at night x", {"smartTraffic", "nightMult", p[1]}, 0, 20, "%.1f")
+    ui.SameLine()
+    ui.Text(string.format("= %.1f%%", nightShares[p[1]]))
+  end
 end
 
 local function sectionAmount(ui)

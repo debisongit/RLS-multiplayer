@@ -111,7 +111,7 @@ Log lines: `RLSMP-P3 ... plates:` (client), `[plates]` (server).
 
 | Direction | Event | Body |
 |---|---|---|
-| S→C | `rlsmpSmartTraffic` | `{enabled, mix = {normal, slow, aggressive, racer, drunk}, policeReact}` sent once when a player finishes loading (also when `enabled` is false) |
+| S→C | `rlsmpSmartTraffic` | `{enabled, mix = {normal, slow, aggressive, racer, drunk}, nightMult = {same names}, policeReact}` (`nightMult`: each weight is multiplied by it at night, missing or bad = 1; the client reads the game's light state and draws new personalities when it flips) sent once when a player finishes loading (also when `enabled` is false) |
 
 Server `smartTraffic.lua` owns `config.smartTraffic` (defaults: on, mix 80/10/6/3/1, policeReact on) and sends weights as numbers >= 0
 (anything else becomes 0); they need not add up to 100. Client `personalities.lua` (`rlsmp_personalities`, pure logic in `lib/personality.lua`)

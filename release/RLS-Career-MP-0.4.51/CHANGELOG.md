@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.4.51 (untested in-game)
+- More bad drivers at night: at night every driver personality's weight is multiplied (`smartTraffic.nightMult`, default slow x0.5, aggressive x2.5, racer x4, drunk x6, normal x1). With the default mix that is about 68% normal, 4% slow, 13% aggressive, 10% racers and 5% drunk drivers at night, against 80/10/6/3/1 by day. When day turns to night (and back) every traffic car draws a new personality from the new mix, so the change shows within seconds. The multipliers are sliders on the Behaviour page of the `[` menu, with the resulting night shares next to them. A server that sends no multipliers changes nothing. Log line `smart: it is night now`. Existing servers pick up the default automatically (a missing key is filled in). (Claude B)
+
 ## 0.4.50 (untested in-game)
 - No speeding tickets or fines in a car that is not yours: when you drive a stolen car (one made from a parked car), RLS's "Police fine" that is charged when a chase ends in a citation or an arrest is not charged, and the message says "Citation/Arrest: no fine, this car is not registered to you." The chase, the arrest and the plate flag still happen, only the money fine is skipped. Cars from your own garage (also loaned or rented ones) still get fined as before. Switch: `police.noFineInStolenCar` (default on, also in the `[` menu on the Police page). Log line `police fine NOT charged`. (Claude B)
 

@@ -111,7 +111,10 @@ STATIC["modPrice.sell"] = {"bool"}
 STATIC["modPrice.max"] = {"number", 1000, 100000000, true}
 STATIC["modPrice.min"] = {"number", 100, 100000, true}
 STATIC["modPrice.tolerance"] = {"number", 0, 2}
-for _, name in ipairs(PERSONALITIES) do STATIC["smartTraffic.mix." .. name] = {"number", 0, 100} end
+for _, name in ipairs(PERSONALITIES) do
+  STATIC["smartTraffic.mix." .. name] = {"number", 0, 100}
+  STATIC["smartTraffic.nightMult." .. name] = {"number", 0, 20}
+end
 for _, name in ipairs(CONDITIONS) do STATIC["weather.mix." .. name] = {"number", 0, 100} end
 
 -- Car theft, the fence and the black market (all read live by their modules, except what is said in the comments).
@@ -339,7 +342,7 @@ function M.snapshot()
     traffic = {enabled = t.enabled, totalBudget = t.totalBudget, baseBudget = t.baseBudget, perPlayerBudget = t.perPlayerBudget,
       minPerPlayer = t.minPerPlayer, maxPerPlayer = t.maxPerPlayer,
       respawnRange = t.respawnRange, respawnDistance = t.respawnDistance, respawnDelay = t.respawnDelay, unjam = copyMap(t.unjam)},
-    smartTraffic = {enabled = s.enabled, policeReact = s.policeReact, mix = copyMap(s.mix)},
+    smartTraffic = {enabled = s.enabled, policeReact = s.policeReact, mix = copyMap(s.mix), nightMult = copyMap(s.nightMult)},
     trafficVariety = {enabled = v.enabled, applyToTraffic = v.applyToTraffic, applyToParked = v.applyToParked,
       maxShare = v.maxShare, oversample = v.oversample, maxCandidates = v.maxCandidates,
       typeWeights = copyMap(v.typeWeights), models = copyMap(v.models), mods = copyMap(v.mods),

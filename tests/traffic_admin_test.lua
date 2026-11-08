@@ -277,6 +277,11 @@ check(next(sn.theft.methods) ~= nil and allOn, "the default methods have no enab
 cfg.theft.methods.relay_box.enabled = false
 check(admin.snapshot().theft.methods.relay_box.enabled == false and admin.snapshot().theft.methods.signal_cloner.enabled == true, "a method switched off shows as off")
 cfg.theft.methods.relay_box.enabled = nil
+set(0, {{p = {"smartTraffic", "nightMult", "drunk"}, v = 8}, {p = {"smartTraffic", "nightMult", "racer"}, v = 25}, {p = {"smartTraffic", "nightMult", "bogus"}, v = 1}})
+r = lastResult()
+check(r and r.applied == 1 and #r.rejected == 2 and cfg.smartTraffic.nightMult.drunk == 8, "night multipliers: in range accepted, out of range and unknown names refused")
+check(admin.snapshot().smartTraffic.nightMult.drunk == 8 and admin.snapshot().smartTraffic.nightMult.racer == 4, "the snapshot carries them")
+cfg.smartTraffic.nightMult.drunk = 6
 set(0, {{p = {"police", "noFineInStolenCar"}, v = false}})
 r = lastResult()
 check(r and r.applied == 1 and cfg.police.noFineInStolenCar == false and admin.snapshot().police.noFineInStolenCar == false, "the no-fine-in-a-stolen-car switch can be changed from the menu")

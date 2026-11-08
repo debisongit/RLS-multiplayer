@@ -210,6 +210,9 @@ M.defaults = {
   smartTraffic = {
     enabled = true,
     mix = {normal = 80, slow = 10, aggressive = 6, racer = 3, drunk = 1},
+    -- At night every personality's weight is multiplied by this (so night traffic has more racers, aggressive and drunk drivers and fewer slow ones).
+    -- With the default mix: about 68% normal, 4% slow, 13% aggressive, 10% racers, 5% drunk. 1 = no change. Cars get a new personality when day turns to night and back.
+    nightMult = {normal = 1, slow = 0.5, aggressive = 2.5, racer = 4, drunk = 6},
     policeReact = true,
   },
 

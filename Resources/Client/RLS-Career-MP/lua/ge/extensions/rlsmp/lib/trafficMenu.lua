@@ -198,6 +198,20 @@ function M.shares(st)
   return out
 end
 
+-- Share of each personality at night in percent (the day weights times the night multipliers), for display.
+function M.nightShares(st)
+  local total, weights = 0, {}
+  for _, p in ipairs(M.PERSONALITIES) do
+    local w = tonumber(M.get(st, {"smartTraffic", "mix", p[1]}, 0)) or 0
+    local m = tonumber(M.get(st, {"smartTraffic", "nightMult", p[1]}, 1)) or 1
+    weights[p[1]] = w * m
+    total = total + w * m
+  end
+  local out = {}
+  for _, p in ipairs(M.PERSONALITIES) do out[p[1]] = total > 0 and weights[p[1]] / total * 100 or 0 end
+  return out
+end
+
 -- The map a "Where & when" edit goes to: zones[zone] when a road class is chosen with "any time", else day/night.
 -- (A weight for a road class AND a time of day is the product of the two maps, so one of them is chosen at a time.)
 function M.whereMap(st)

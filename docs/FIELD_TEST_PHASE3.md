@@ -531,3 +531,11 @@ Known gaps: never played. Drop spot places are only in `config.json`. Changes ma
 2. Do the same in a car from your own garage: the fine is charged as before.
 3. If you are fined in the stolen car anyway, send the game log lines with `finePay` / `police fine` and the exact message you saw: it means RLS charged the fine another way.
 Known gaps: only RLS's own "Police fine" is covered (not other fees); the chase, arrest and plate flag still happen. Loaned or rented garage cars are still fined.
+
+
+## More bad drivers at night (build 0.4.51)
+
+1. Drive in traffic at night (the game's light state says night) for a few minutes and watch: about one in three cars should now be something other than a normal driver (aggressive tailgaters, racers going far over the limit, drunk weavers). By day it is about one in five.
+2. The log has `smart: it is night now: new personalities from the night mix` when night falls and `... day now ...` at dawn. The line `smart: personalities now ...` (census) shows the counts if you call `rlsmp_personalities.census()` from the console.
+3. Menu (`[`), Behaviour page: the "at night x" sliders change it live. Set a night multiplier to 1 to switch the effect off.
+Known gaps: never played; it only changes WHICH personality a car draws, not how bad a racer or a drunk is.
