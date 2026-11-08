@@ -4,6 +4,8 @@
 - New meetup selling. A Marketplace sale no longer finishes at once: you get a GPS route to a meetup spot the server picks, stop there for a moment, and the sale completes. Spots change each time and there is a cooldown. Untested in game, and the hook into the Marketplace is unverified (see `docs/RESEARCH_MEETUP_SALE.md`). (untested) (Claude A)
 - A fully legal car is never set up. A stolen car or a car with a police-flagged plate has a chance that the buyer is a police setup: 1 or 2 cops chase you, no roadblocks, no sale. The chance is never 0 or 100 percent for those cars, so you cannot be sure. (untested) (Claude A)
 - Black market: `/meetup black` sells a stolen car you drive by meetup; the server pays. `/meetup` is the fallback for a garage car. Settings in config `meetup`. (untested) (Claude A)
+## Unreleased (police variety, build number not bumped)
+- Police cars: RLS's west coast police list is 5 Bastions (4 of 5 unmarked or undercover), and its police do not even go through the group builder we wrapped. We now also wrap `fitGroup` and re-pick police groups from every police config the game has: Bastion weight 0.3, about 10 percent undercover, at most 40 percent of one model. New server block `trafficVariety.police` (also in the `[` menu on the amount page). Research: `docs/RESEARCH_POLICE_MIX.md`. Untested in game. (Claude A)
 
 ## 0.4.34
 - Car theft now logs `parked cars known: N, within 60 m: M, nearest ...` every 30 s while you walk, to find out why so few cars can be stolen. Your last log showed RLS only spawned 2 parked cars in total. (Claude A)
