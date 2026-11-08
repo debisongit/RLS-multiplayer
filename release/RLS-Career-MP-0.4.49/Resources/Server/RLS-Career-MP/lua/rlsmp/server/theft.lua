@@ -505,6 +505,40 @@ local function onFinish(pid)
   net.send(pid, "rlsmpTheftResult", {ok = true})
 end
 
+-- What the client sent to rebuild the car later (config, three paints, rotation; docs/PROTOCOL.md "Stolen car restore"). Everything is
+-- cleaned: unknown shapes are dropped, numbers are finite and small. Written into rec.car and rec.last.
+local function cleanNum(v, lim)
+  v = n(v, nil)
+  if v == nil or math.abs(v) > lim then return nil end
+  return v
+end
+function M.rememberCar(rec, d)
+  local car = {}
+  if type(d.config) == "string" and #d.config <= 160 and not d.config:find("[^%w_%-%./ ]") then car.config = d.config end
+  if type(d.look) == "table" then
+    car.look = {}
+    for i = 1, 3 do
+      local c = d.look[i]
+      if type(c) == "table" then
+        local out = {x = cleanNum(c.x, 1e3), y = cleanNum(c.y, 1e3), z = cleanNum(c.z, 1e3), w = cleanNum(c.w, 1e3)}
+        if out.x and out.y and out.z and out.w then
+          if type(c.m) == "table" then
+            out.m = {}
+            local count = 0
+            for k, v in pairs(c.m) do
+              if type(k) == "string" and #k <= 24 and not k:find("[^%w_]") and cleanNum(v, 1e6) and count < 8 then out.m[k], count = v, count + 1 end
+            end
+          end
+          car.look[i] = out
+        end
+      end
+    end
+  end
+  rec.car = car
+  local r = type(d.rot) == "table" and {x = cleanNum(d.rot.x, 2), y = cleanNum(d.rot.y, 2), z = cleanNum(d.rot.z, 2), w = cleanNum(d.rot.w, 2)} or nil
+  rec.last = {x = rec.pos.x, y = rec.pos.y, z = rec.pos.z, rot = r and r.x and r.y and r.z and r.w and r or nil, t = util.now()}
+end
+
 local function onDone(pid, d)
   local p = pending[pid]
   if not p or p.state ~= "open" or p.accountId ~= accountOf(pid) then return end
@@ -530,6 +564,7 @@ local function onDone(pid, d)
     by = p.accountId, name = s and s.name or nil, t = now, seen = seen, tracker = tracker == true,
     reportAt = now + delay, reported = false,
   }
+  M.rememberCar(stolen[plate], d)
   save()
   util.info(string.format("[theft] %s stole %s %s (%s, %s), seen=%s (%.0f%%), report in %ds",
     tostring(s and s.name or pid), model, plate, p.tier, p.method, tostring(seen), chance * 100, delay))

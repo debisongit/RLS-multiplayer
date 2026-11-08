@@ -30,7 +30,7 @@ Branch `claude/amazing-sagan-kh6ecn` is pushed and up to date at build **0.4.47*
 
 **Two helpers were still running when this was written (their work is NOT merged):**
 1. (MERGED in 0.4.48) Agent `ac39478638e473c50` (worktree `.claude/worktrees/agent-ac39478638e473c50`): (a) the Black Market phone app invite field cannot be typed in (RLS forms use a `typing.onFocus/onBlur` helper, see `bank/TransferForm.vue`), (b) stolen car value must be refreshed every X minutes (`theft.repriceMinutes`, default 30, max step 25 percent) from RLS's current market valuation, not once (the Bastion stolen before 0.4.47 still shows Strip $600 / Sell $700 because stolen.json kept the old fallback value of 2000).
-2. Agent `a80ce63bd689c074c` (worktree `.claude/worktrees/agent-a80ce63bd689c074c`): the stolen car is a local car and vanishes when the owner leaves; stolen record must keep model/config/paints/plate/last position, respawn on rejoin, plus a "Bring my stolen car here" button in garage and Black Market app (UI only).
+2. (MERGED in 0.4.49) Agent `a80ce63bd689c074c` (worktree `.claude/worktrees/agent-a80ce63bd689c074c`): the stolen car is a local car and vanishes when the owner leaves; stolen record must keep model/config/paints/plate/last position, respawn on rejoin, plus a "Bring my stolen car here" button in garage and Black Market app (UI only).
 Check `git log --oneline HEAD..worktree-agent-<id>` for their commits; if nothing was committed, redo the tasks from the lines above.
 
 **What the owner confirmed works in game**: Black Market phone app opens, popups work, async car re-roll has no freeze, parked cars raised 4 -> 10, car variety and custom configs work, mod car prices (dealership) in place (untested numbers).

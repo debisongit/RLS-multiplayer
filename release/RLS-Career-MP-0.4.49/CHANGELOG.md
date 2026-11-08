@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.4.49 (untested in-game)
+- Stolen cars come back after you leave and rejoin: the server keeps their model, config, paint, plate and last place, and your game rebuilds them. New 'Bring my stolen car here' button in the garage computer and the Black Market app (`theft.recallCooldown` 120 s, `theft.recallFee` 0). Cars stolen before this build return as the model's default config. (Claude A)
+
 ## 0.4.48 (untested in-game)
 - You can type in the Black Market app invite field again (it tells the game you are typing, like RLS's own forms). (Claude A)
 - Stolen car prices follow RLS's real used-car market and refresh every `theft.repriceMinutes` (default 30, at most `theft.maxRepriceStep` percent per update). Old records with the flat fallback value get fixed once. The app shows 'Price up/down, updated N min ago'. (Claude A)
@@ -7,6 +10,9 @@
 ## Unreleased (untested in-game)
 - Black Market app: the "Player name" invite field can be typed in now. Like RLS's own forms, focus tells the game to stop treating keys as game controls (`setCEFTyping(true)`, sent by raw engineLua), Enter invites, Esc, blur and closing the app give the keyboard back. (Claude A)
 - Stolen car prices follow RLS's used-car market (global economy vehicle market index) and are refreshed every `theft.repriceMinutes` (default 30): the owner's game works the value out again and sends it (`rlsmpTheftValue`); the server takes it only for the owner's own record, capped by `fence.maxValue` and `fence.modelCaps`, at most `theft.maxRepriceStep` percent (default 25) per update. Cars stolen before the value fix (no `valueSource`) get one free correction. A quote or sale with an old price asks first. The app shows "Price up/down, updated N min ago". Both settings are in the traffic menu (Theft page). New records store `valueSource` and `config`; log lines `theft value:`. (Claude A)
+## Unreleased (untested in-game)
+- Stolen cars survive leaving the game. The theft record now keeps the config, the three paints, the plate, and the last place and rotation of the car (the game reports them about every 30 s, the server stores them, rate limited per plate, plus the owner's last server-side position). After rejoining, once the career runs, each still-owned stolen car is created again at its last place (same safe spawn as the theft convert: never parked, the owner may enter it, log `stolen car restored:`) when the place is free and no car with that plate exists; an invalid place or one more than 5 km from the player goes to the nearest drop spot, else beside the player. Sold, stripped or trapped cars are gone from the list and never come back. At most 3 tries per car, once per join. (Claude A)
+- New button "Bring my stolen car here" in the garage computer and in the Black Market app (stolen cars section): puts the car beside the player (the old copy is removed first, so only one exists). The server checks owner and record, `theft.recallCooldown` (default 120 s) and `theft.recallFee` (default 0). No chat commands. (Claude A)
 
 ## 0.4.47 (untested in-game)
 - Stolen cars are worth their real used price (found from the real config or RLS's own valuation), not a flat 2,000. Payouts: strip 45%, sell without papers 40%, gamble 55 to 60% with a 20% trap chance, resell with all papers 70%. Existing servers keep their old values in `config.json`: change `fence.stripRate`, `fence.gambleBase`, `fence.gamblePerPaper`, `fence.gambleBust`, `fence.resellRate` and the market `fenceCarRate`. (Claude A)

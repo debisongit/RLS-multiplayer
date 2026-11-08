@@ -279,6 +279,9 @@ M.defaults = {
     retrySeconds = 10,
     repriceMinutes = 30,      -- the stolen car value is worked out again by the owner's game this often (RLS used-car market moves)
     maxRepriceStep = 25,      -- one update may change the value by at most this many percent (the first one for an old record may jump)
+    recallCooldown = 120,      -- seconds between two "Bring my stolen car here" presses
+    recallFee = 0,             -- dollars for one press (0 = free)
+    recallReportEvery = 20,    -- seconds: the least time between two place reports for one stolen car
     tiers = {immobilizerYear = 1995, keylessYear = 2010, newestYear = 2021, luxuryValue = 120000, unknownYear = 2000},
     methods = {
       window_screwdriver = {tier = "old", order = 1, label = "Smash the window, screwdriver in the ignition",

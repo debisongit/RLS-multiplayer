@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.4.49 (untested in-game)
+- Stolen cars come back after you leave and rejoin: the server keeps their model, config, paint, plate and last place, and your game rebuilds them. New 'Bring my stolen car here' button in the garage computer and the Black Market app (`theft.recallCooldown` 120 s, `theft.recallFee` 0). Cars stolen before this build return as the model's default config. (Claude A)
+
 ## 0.4.48 (untested in-game)
 - You can type in the Black Market app invite field again (it tells the game you are typing, like RLS's own forms). (Claude A)
 - Stolen car prices follow RLS's real used-car market and refresh every `theft.repriceMinutes` (default 30, at most `theft.maxRepriceStep` percent per update). Old records with the flat fallback value get fixed once. The app shows 'Price up/down, updated N min ago'. (Claude A)
