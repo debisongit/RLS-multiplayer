@@ -172,6 +172,9 @@ function M.uiGet()
   return {enabled = true, state = appState, result = appResult}
 end
 
+-- A short message for the phone's message box from another client extension (the garage result handler): shown like a server answer.
+function M.note(text) if type(text) == "string" then onResult({text = text}) end end
+
 -- action: "buy" (item, n) | "pickup" | "invite" (who) | "accept" | "scout" (sends the stealable parked cars this game sees near us) go to the server;
 -- "fence" (mode) | "meetup" (stolen car) | "meetupCancel" are done by the other client extensions. The answer arrives as a result and a new state.
 function M.uiAct(action, a, b)
@@ -180,6 +183,9 @@ function M.uiAct(action, a, b)
   if action == "fence" then
     if rlsmp_theft and rlsmp_theft.fence then rlsmp_theft.fence(a) end
     return true
+  elseif action == "stolenDo" then
+    -- a = plate, b = "strip" | "sell" | "resell" | "fit:<paper>" (rlsmp_garage checks both)
+    return rlsmp_garage ~= nil and rlsmp_garage.doStolen ~= nil and rlsmp_garage.doStolen(a, b) == true
   elseif action == "recall" then
     if rlsmp_recall and rlsmp_recall.bringHere then rlsmp_recall.bringHere(type(a) == "string" and a or nil) end
     return true

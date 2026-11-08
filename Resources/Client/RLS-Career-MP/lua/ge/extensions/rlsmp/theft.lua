@@ -729,7 +729,7 @@ end
 
 -- The Black Market phone app button (rlsmp_market.uiAct "fence"): same as the server's ask, started here. Mode is one of our fixed words.
 function M.fence(mode)
-  if mode == "strip" or mode == "sell" or mode == "resell" or mode == "gamble" then onFenceAsk({mode = mode}) end
+  if mode == "strip" or mode == "sell" or mode == "resell" then onFenceAsk({mode = mode}) end
 end
 
 local function onFenceResult(d)

@@ -253,7 +253,7 @@ check(cfg.theft.perMille == 300 and cfg.theft.methods.window_screwdriver.seconds
   and cfg.fence.stripRate == 0.4 and cfg.fence.rep.resell == 5 and cfg.market.tiers.screwdriver.price == 999 and cfg.market.tiers.jammer.off == true
   and cfg.market.fenceCarRate == 0.5 and cfg.theft.enabled == true, "...and written into the live config tables")
 set(0, {{p = {"theft", "perMille"}, v = 5000}, {p = {"theft", "witnessCap"}, v = -1}, {p = {"theft", "tiers", "keylessYear"}, v = 1800},
-  {p = {"fence", "gambleBust"}, v = 2}, {p = {"fence", "gambleMaxPapers"}, v = 9}, {p = {"market", "pickupRadius"}, v = 1},
+  {p = {"fence", "rep", "resell"}, v = 99}, {p = {"fence", "stripRate"}, v = 3}, {p = {"market", "pickupRadius"}, v = 1},
   {p = {"market", "tiers", "screwdriver", "price"}, v = 0}, {p = {"theft", "methods", "window_screwdriver", "noise"}, v = 3}, {p = {"theft", "methods", "signal_cloner", "failChance"}, v = 2}})
 r = lastResult()
 check(r.applied == 0 and #r.rejected == 9, "every out-of-range value is refused (" .. tostring(#r.rejected) .. " of 9)")
@@ -277,6 +277,11 @@ check(next(sn.theft.methods) ~= nil and allOn, "the default methods have no enab
 cfg.theft.methods.relay_box.enabled = false
 check(admin.snapshot().theft.methods.relay_box.enabled == false and admin.snapshot().theft.methods.signal_cloner.enabled == true, "a method switched off shows as off")
 cfg.theft.methods.relay_box.enabled = nil
+set(0, {{p = {"fence", "phone"}, v = false}, {p = {"fence", "gambleBust"}, v = 0.1}, {p = {"fence", "gambleBase"}, v = 0.5}})
+r = lastResult()
+check(r and r.applied == 1 and #r.rejected == 2 and cfg.fence.phone == false and admin.snapshot().fence.phone == false, "fence.phone can be switched; the gamble settings are gone from the menu's allowlist")
+check(admin.snapshot().fence.gambleBust == nil and admin.snapshot().fence.rep.gamble == nil, "...and from the snapshot")
+cfg.fence.phone = true
 set(0, {{p = {"police", "respawnBehind"}, v = false}, {p = {"police", "respawnPerMinute"}, v = 99}, {p = {"police", "respawnGap"}, v = 200}, {p = {"police", "respawnGap"}, v = 5}})
 r = lastResult()
 check(r and r.applied == 2 and #r.rejected == 2 and cfg.police.respawnBehind == false and cfg.police.respawnGap == 200, "cop respawn settings: in range accepted, out of range refused")

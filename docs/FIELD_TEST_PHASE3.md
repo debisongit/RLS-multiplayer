@@ -549,3 +549,13 @@ Known gaps: never played; it only changes WHICH personality a car draws, not how
 4. Check that the new cop chases you like the others (role police is set the way RLS's own police service does it).
 Settings: Police page of the `[` menu (on/off, builds a minute, how far behind).
 Known gaps: never played. What `roadBehind` does with one car and a gap is a guess (the log lines tell); BeamMP sends each spawn and delete to everybody, and the per-player car limit (`MaxCars`) can refuse the extra car for a moment.
+
+
+## Selling stolen cars through the phone, no gamble (build 0.4.53)
+
+1. Steal a car (see the theft section), open the Black Market app on the phone: under "Stolen cars" every car has Strip, Sell and Resell buttons with prices (Resell greyed out without all three papers) and a Fit button for each illegal part you own. There is no Gamble.
+2. Tap Sell: the car disappears, the money goes up by the price on the button, the app's message box says "Sold (sell): $...". No driving to the drop spot, the car can be anywhere.
+3. Order a fake plate, a VIN plate and a part number kit (Black Market app), press Fit for each, then Resell pays the most (70% of the value).
+4. Switch `fence.phone` off on the Fence page of the `[` menu: the phone buttons then say "Selling from the phone is switched off on this server"; the garage computer still works.
+5. Send me the `RLSMP-GARAGE` and `[fence]` lines if something is off.
+Known gaps: never played; the phone can sell a car that is far away (a stolen car is paid for without being delivered), see `fence.phone`.

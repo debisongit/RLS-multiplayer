@@ -2,8 +2,9 @@
 -- SPDX-License-Identifier: AGPL-3.0-only
 --
 -- Ways to sell: strip (parts for cash, no papers, pays least, safe), sell (as it is, a bit more), resell (fake plate + VIN plate + part number
--- first, all three used up, pays most, safe), gamble (one or two of the papers, used up: pays between, but the buyer may be a trap).
--- Players use the garage computer buttons (client rlsmp/garage.lua) or the Black Market phone app (stolen cars section); the chat command
+-- first, all three used up, pays most, safe). (There is no gamble any more: removed at the owner's request.)
+-- Players use the Black Market phone app (stolen cars section: every car has Strip, Sell, Resell and the illegal parts buttons, no drop spot needed)
+-- or the garage computer buttons (client rlsmp/garage.lua); the chat command
 -- /fence <mode> is a hidden developer fallback (only with config ui.chatCommands).
 -- A sale needs: black market member, theft record of the player's own, standing within market.pickupRadius of the ACTIVE drop spot
 -- (fresh position report), not being chased. The server owns the money and the record; the client only names the car (its plate)
@@ -13,12 +14,13 @@
 -- (client rlsmp/garage.lua). It asks what is possible, shows a dialog, then asks to do one thing:
 --   client rlsmpGarageQuote {plate, model, value, year} -> server rlsmpGarageMenu {ok, kind, plate, strip, fit = [...], items = [...]}
 --   client rlsmpGarageDo {action, plate, model, value, year} -> server rlsmpGarageResult {ok, action, pay?, takeCar?, fitted?, err?}
---   action = "strip" | "sell" | "resell" | "gamble" | "fit:fake_plate" | "fit:vin_plate" | "fit:part_number". Fitting uses up the item at once and marks the stolen car's
---   record (rec.papers); resell and gamble then count fitted papers first. The garage menu also carries sell/resell/gamble prices (null = missing papers). Strip of a STOLEN car (needs market membership) and
+--   action = "strip" | "sell" | "resell" | "fit:fake_plate" | "fit:vin_plate" | "fit:part_number". Fitting uses up the item at once and marks the stolen car's
+--   record (rec.papers); resell then counts fitted papers first. The garage menu also carries sell/resell prices (null = missing papers).
+--   The phone app sends the same rlsmpGarageDo with `phone = true` (refused when fence.phone is false). Strip of a STOLEN car (needs market membership) and
 --   an OWNED car (value comes from the client, capped by fence.maxValue, one per fence.garageCooldown seconds) pays stripRate x value.
 -- Flow at the drop spot (phone app button or chat fallback): rlsmpFenceAsk {mode} -> (the client finds the stolen car next to the player)
 --       client              -> rlsmpFenceSell {plate, mode}
---       server              -> rlsmpFenceResult {ok, mode, pay, busted, takeCar, err}
+--       server              -> rlsmpFenceResult {ok, mode, pay, takeCar, err}
 -- Order of writes: the record leaves memory, the wallet and papers change in ONE profile save, then the theft file is written.
 -- If the profile cannot be saved, everything is undone.
 
@@ -40,7 +42,7 @@ local random = math.random
 function M.setRandom(fn) random = fn or math.random end
 
 local PAPERS = {"fake_plate", "vin_plate", "part_number"}
-M.MODES = {"strip", "sell", "resell", "gamble"}
+M.MODES = {"strip", "sell", "resell"}
 
 local function c() return cfg.fence end
 local function say(pid, text) MP.SendChatMessage(pid, "[Fence] " .. text) end
@@ -70,7 +72,7 @@ local function papersOwned(pid, rec)       -- papers already fitted to the car c
   return have
 end
 
--- The price list for a car value and a player's papers: {strip = n, sell = n, resell = n or nil (missing papers), gamble = n or nil}.
+-- The price list for a car value and a player's papers: {strip = n, sell = n, resell = n or nil (missing papers)}.
 function M.quotes(pid, value, rec)
   value = clamp(math.floor(num(value, 0)), 0, math.floor(num(c().maxValue, 300000)))
   local out = {
@@ -79,11 +81,6 @@ function M.quotes(pid, value, rec)
   }
   local have = pid and papersOwned(pid, rec) or {}
   if #have == 3 then out.resell = math.floor(value * num(c().resellRate, 0.70)) end
-  if #have >= 1 then
-    local used = math.min(#have, math.floor(num(c().gambleMaxPapers, 2)))
-    out.gamble = math.floor(value * (num(c().gambleBase, 0.55) + num(c().gamblePerPaper, 0.05) * (used - 1)))
-    out.gamblePapers = used
-  end
   return out
 end
 
@@ -131,7 +128,7 @@ function M.sell(pid, plate, mode, opts)
   plate = theft.cleanPlate(plate)
   local known = false
   for _, m in ipairs(M.MODES) do if m == mode then known = true end end
-  if not known then return fail("Unknown way to sell. Use strip, sell, resell or gamble.") end
+  if not known then return fail("Unknown way to sell. Use strip, sell or resell.") end
   local rec = theft.records()[plate]
   if not rec or rec.by ~= s.accountId then return fail("That car is not on your list.") end
   if opts and opts.garage then
@@ -147,24 +144,19 @@ function M.sell(pid, plate, mode, opts)
   if theft.fresh and not theft.fresh(pid, rec) then return fail("Checking today's market price. Try again in a few seconds.") end
   local value = valueOf(rec)
   local q = M.quotes(pid, value, rec)
-  local pay, taken, busted = q[mode], {}, false
+  local pay, taken = q[mode], {}
   if mode == "resell" and not pay then
     local missing = {}
     for _, name in ipairs(PAPERS) do if not fitted(rec, name) and not items.has(pid, name) then missing[#missing + 1] = itemLabel(name) end end
     return fail("To resell you need: " .. table.concat(missing, ", ") .. " (order them in the Black Market app).")
   end
-  if mode == "gamble" and not pay then return fail("To gamble you need at least one of: fake plate, VIN plate, part number.") end
   if pay <= 0 then return fail("The fence is not interested in that car.") end
 
   -- papers this sale uses up
   local use = {}      -- papers still to take from the player's items (fitted ones were used up when fitted)
   if mode == "resell" then
     for _, name in ipairs(PAPERS) do if not fitted(rec, name) then use[#use + 1] = name end end
-  elseif mode == "gamble" then
-    local have = papersOwned(pid, rec)
-    for i = 1, q.gamblePapers do if not fitted(rec, have[i]) then use[#use + 1] = have[i] end end
   end
-  if mode == "gamble" and random() < clamp(num(c().gambleBust, 0.20), 0, 1) then busted, pay = true, 0 end
 
   busy[pid] = true
   local saved = {}
@@ -192,17 +184,10 @@ function M.sell(pid, plate, mode, opts)
   theft.save()
   if pay > 0 then net.send(pid, "rlsmpWalletSet", {money = ledger.money, why = "fence"}) end
 
-  local result = {ok = true, mode = mode, pay = pay, busted = busted, takeCar = true}
-  if busted then
-    market.bust(pid, {})
-    result.ok = false
-    result.err = "The buyer was a trap. The police have the car."
-  else
-    local rep = repFor(mode)
-    if rep > 0 then market.addRep(pid, rep, "fence") end
-  end
-  util.info(string.format("[fence] %s %s %s (%s, value %d) -> %s%s", tostring(s.name), mode, plate, tostring(rec.model), value,
-    dollars(pay), busted and ", BUSTED" or ""))
+  local result = {ok = true, mode = mode, pay = pay, takeCar = true}
+  local rep = repFor(mode)
+  if rep > 0 then market.addRep(pid, rep, "fence") end
+  util.info(string.format("[fence] %s %s %s (%s, value %d) -> %s", tostring(s.name), mode, plate, tostring(rec.model), value, dollars(pay)))
   return result
 end
 
@@ -247,8 +232,7 @@ local function onGarageQuote(pid, d)
       menu.fit, menu.fitted = {}, {}
       if t.kind == "stolen" then
         local q = M.quotes(pid, t.value, t.rec)
-        menu.sell, menu.resell, menu.gamble = math.floor(q.sell), q.resell, q.gamble
-        menu.trap = math.floor(num(c().gambleBust, 0.20) * 100 + 0.5)
+        menu.sell, menu.resell = math.floor(q.sell), q.resell
         for _, name in ipairs(PAPERS) do
           if fitted(t.rec, name) then menu.fitted[#menu.fitted + 1] = itemLabel(name)
           elseif items.has(pid, name) then menu.fit[#menu.fit + 1] = {name = name, label = itemLabel(name)} end
@@ -308,6 +292,7 @@ function M.garageDo(pid, d)
   if type(d) ~= "table" or type(d.action) ~= "string" then return {ok = false, err = "Bad request."} end
   if not garageOn() then return {ok = false, action = d.action, err = "The garage strip is closed on this server."} end
   if not sessions.isLoaded(pid) then return {ok = false, action = d.action, err = "Not in career."} end
+  if d.phone == true and c().phone == false then return {ok = false, action = d.action, err = "Selling from the phone is switched off on this server."} end
   local t, err = garageTarget(pid, d)
   if not t then return {ok = false, action = d.action, err = err} end
   if t.kind == "stolen" and not (enabled() and market.isMember(pid)) then
@@ -343,15 +328,23 @@ local function list(pid)
     local q = M.quotes(pid, valueOf(rec))
     local parts = {string.format("strip %s", dollars(q.strip)), string.format("sell %s", dollars(q.sell))}
     parts[#parts + 1] = q.resell and string.format("resell %s", dollars(q.resell)) or "resell (needs fake plate + VIN plate + part number)"
-    parts[#parts + 1] = q.gamble and string.format("gamble %s (%d%% trap)", dollars(q.gamble), math.floor(num(c().gambleBust, 0.20) * 100 + 0.5))
-      or "gamble (needs a paper)"
     say(pid, string.format("%s %s: %s", tostring(rec.model), rec.plate, table.concat(parts, ", ")))
   end
   local spot = market.spotAt(util.now())
   say(pid, "Bring the car to " .. (spot and spot.name or "the drop spot") .. " and use the Black Market app, or sell at the garage computer.")
 end
 
--- For the Black Market phone app: the player's stolen cars with what each way pays (nil = missing papers).
+-- For the Black Market phone app: the player's stolen cars with what each way pays (nil = missing papers), and the illegal parts that can be fitted
+-- (`fit` = the ones the player owns and the car lacks, `fitted` = labels of the ones already on it). `phone` tells the app whether the buttons work.
+local function paperLists(pid, rec)
+  local fit, on = {}, {}
+  for _, name in ipairs(PAPERS) do
+    if fitted(rec, name) then on[#on + 1] = itemLabel(name)
+    elseif items.has(pid, name) then fit[#fit + 1] = {name = name, label = itemLabel(name)} end
+  end
+  return fit, on
+end
+
 function M.summary(pid)
   local out = {}
   if not enabled() then return out end
@@ -359,7 +352,8 @@ function M.summary(pid)
   for _, rec in ipairs(mine(pid)) do
     local q = M.quotes(pid, valueOf(rec), rec)
     local old = tonumber(rec.prevValue)
-    out[#out + 1] = {plate = rec.plate, model = rec.model, strip = q.strip, sell = q.sell, resell = q.resell, gamble = q.gamble,
+    local fit, on = paperLists(pid, rec)
+    out[#out + 1] = {plate = rec.plate, model = rec.model, strip = q.strip, sell = q.sell, resell = q.resell, fit = fit, fitted = on,
       age = rec.vt and math.max(0, util.now() - rec.vt) or nil,       -- seconds since the price was last worked out
       trend = old and (valueOf(rec) > old and 1 or (valueOf(rec) < old and -1 or 0)) or 0}
   end

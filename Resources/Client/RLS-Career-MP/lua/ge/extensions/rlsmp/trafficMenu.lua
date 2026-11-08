@@ -411,17 +411,14 @@ end
 local function sectionFence(ui)
   ui.TextWrapped("The fence turns stolen cars into money at the black market's drop spot. The shares are of the car's value.")
   checkbox(ui, "Fence open", {"fence", "enabled"})
+  checkbox(ui, "Strip, sell and resell from the phone app (any stolen car)", {"fence", "phone"})
   num(ui, "Strip pays", {"fence", "stripRate"}, 0, 1)
   num(ui, "Resell with all papers pays", {"fence", "resellRate"}, 0, 1)
-  num(ui, "Gamble pays (one paper)", {"fence", "gambleBase"}, 0, 1)
-  num(ui, "Gamble: more per extra paper", {"fence", "gamblePerPaper"}, 0, 0.5)
-  num(ui, "Gamble uses at most (papers)", {"fence", "gambleMaxPapers"}, 1, 3, "%.0f")
-  num(ui, "Gamble: chance of a trap", {"fence", "gambleBust"}, 0, 1)
   intInput(ui, "Value of a car with no price", {"fence", "minValue"}, 0, 1000000)
   intInput(ui, "Highest car value counted", {"fence", "maxValue"}, 0, 100000000)
   ui.Separator()
   ui.Text("Reputation for a good sale")
-  for _, mode in ipairs({"strip", "sell", "resell", "gamble"}) do
+  for _, mode in ipairs({"strip", "sell", "resell"}) do
     num(ui, "  " .. mode, {"fence", "rep", mode}, 0, 25, "%.0f")
   end
   ui.TextWrapped("\"Sell\" pays the black market's fence share (Market section).")

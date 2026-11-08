@@ -7,7 +7,8 @@
 --   * general:         rlsmpStolen  "Stolen car: PLATE" (only when one of our stolen cars stands near the player; stolen cars are not in the
 --                      RLS inventory on purpose, RLS's own Sell button would pay full price and skip the fence)
 --   * general:         rlsmpItems   "Black market items" (the server's item list; RLS has no item inventory we could safely write to)
--- Stolen cars get Strip, Sell, Resell and Gamble here (prices from the server; resell and gamble are greyed out without the papers).
+-- Stolen cars get Strip, Sell and Resell here (prices from the server; resell is greyed out without the papers). The Black Market phone app does the same
+-- for any stolen car through M.doStolen (no dialog).
 -- A button asks the server (rlsmpGarageQuote), the answer (rlsmpGarageMenu) opens a dialog (vanilla guihook showConfirmationDialog, same
 -- one RLS's own debug menu uses), a dialog button calls M.choose(action) -> rlsmpGarageDo -> rlsmpGarageResult.
 -- All rules and money live in server/fence.lua. This side only removes the car after the server paid. Untested in game. Log tag RLSMP-GARAGE.
@@ -134,8 +135,6 @@ local function onMenu(d)
       buttons[#buttons + 1] = button(string.format("Sell as it is for $%d", math.floor(tonumber(d.sell) or 0)), "sell")
       buttons[#buttons + 1] = tonumber(d.resell) and button(string.format("Resell with new papers for $%d", math.floor(d.resell)), "resell")
         or button("Resell (needs fake plate, VIN plate and part number)", "resell", false)
-      buttons[#buttons + 1] = tonumber(d.gamble) and button(string.format("Gamble for $%d (%s%% chance of a trap)", math.floor(d.gamble), tostring(d.trap or "?")), "gamble")
-        or button("Gamble (needs at least one illegal part)", "gamble", false)
     end
     for _, f in ipairs(d.fit or {}) do
       if type(f.name) == "string" and f.name:match("^[%a_]+$") then
@@ -148,11 +147,28 @@ local function onMenu(d)
   say("I", "menu shown: " .. tostring(d.kind) .. " " .. tostring(d.plate))
 end
 
+-- The phone app shows the result in its own message box too.
+local function note(t, text)
+  if t and t.phone and rlsmp_market and rlsmp_market.note then rlsmp_market.note(text) end
+end
+
+-- The Black Market phone app (rlsmp_market.uiAct "stolenDo"): one thing to do with one stolen car, named by its plate: "strip", "sell", "resell" or
+-- "fit:<paper>". The server checks everything (member, the plate is the player's own record, fence.phone, not chased). The car is removed from this game
+-- by the result handler below when the server paid (it may not be in this game any more: then only the record goes).
+function M.doStolen(plate, action)
+  if not enabled or type(plate) ~= "string" or type(action) ~= "string" or #plate > 16 then return false end
+  if not (action == "strip" or action == "sell" or action == "resell" or action:match("^fit:[%a_]+$")) then return false end
+  target = {kind = "stolen", plate = plate, phone = true}
+  say("I", string.format("phone: %s for stolen car %s", action, plate))
+  net.send("rlsmpGarageDo", {action = action, plate = plate, phone = true})
+  return true
+end
+
 -- Called by a dialog button (raw Lua string, see button()).
 function M.choose(action)
   local t = target
   if not (enabled and t and type(action) == "string") then return end
-  local stolenWays = action == "sell" or action == "resell" or action == "gamble"
+  local stolenWays = action == "sell" or action == "resell"
   if stolenWays and t.kind ~= "stolen" then return end
   if not (action == "strip" or stolenWays or action:match("^fit:[%a_]+$")) then return end
   if action == "strip" and t.kind == "owned" then
@@ -180,13 +196,10 @@ end
 local function onResult(d)
   if not enabled or type(d) ~= "table" then return end
   local t = target
-  local ways = d.action == "strip" or d.action == "sell" or d.action == "resell" or d.action == "gamble"
+  local ways = d.action == "strip" or d.action == "sell" or d.action == "resell"
   if d.ok ~= true then
-    if ways and d.takeCar and t and t.kind == "stolen" then     -- a gamble that went wrong: the car is gone from the server's list
-      if rlsmp_theft and rlsmp_theft.removeStolenByPlate then rlsmp_theft.removeStolenByPlate(t.plate) end
-      target = nil
-    end
-    return toast(d.takeCar and "error" or "warning", tostring(d.err or "No."), 8000)
+    note(t, tostring(d.err or "No."))
+    return toast("warning", tostring(d.err or "No."), 8000)
   end
   if ways then
     local removedOk = true
@@ -198,10 +211,16 @@ local function onResult(d)
       end
     end
     target = nil
-    if removedOk then toast("success", string.format("Sold (%s): $%d.", tostring(d.action), math.floor(tonumber(d.pay) or 0))) end
+    if removedOk then
+      local text = string.format("Sold (%s): $%d.", tostring(d.action), math.floor(tonumber(d.pay) or 0))
+      toast("success", text)
+      note(t, text)
+    end
   else
-    toast("success", tostring(d.fitted or "Part") .. " fitted.")
-    if t then M.openFor(t) end            -- show the dialog again with the new state
+    local text = tostring(d.fitted or "Part") .. " fitted."
+    toast("success", text)
+    note(t, text)
+    if t and not t.phone then M.openFor(t) end            -- show the dialog again with the new state (not for the phone: it refreshes itself)
   end
   say("I", string.format("result: action=%s pay=%s", tostring(d.action), tostring(d.pay)))
 end

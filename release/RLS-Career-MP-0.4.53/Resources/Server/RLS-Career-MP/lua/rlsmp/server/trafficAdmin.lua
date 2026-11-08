@@ -137,9 +137,8 @@ rules("theft.", {
 })
 rules("fence.", {
   enabled = {"bool"}, maxValue = {"number", 0, 100000000, true}, minValue = {"number", 0, 1000000, true},
-  stripRate = {"number", 0, 1}, resellRate = {"number", 0, 1}, gambleBase = {"number", 0, 1}, gamblePerPaper = {"number", 0, 0.5},
-  gambleMaxPapers = {"number", 1, 3, true}, gambleBust = {"number", 0, 1},
-  ["rep.strip"] = {"number", 0, 25, true}, ["rep.sell"] = {"number", 0, 25, true}, ["rep.resell"] = {"number", 0, 25, true}, ["rep.gamble"] = {"number", 0, 25, true},
+  stripRate = {"number", 0, 1}, resellRate = {"number", 0, 1}, phone = {"bool"},
+  ["rep.strip"] = {"number", 0, 25, true}, ["rep.sell"] = {"number", 0, 25, true}, ["rep.resell"] = {"number", 0, 25, true},
 })
 rules("market.", {
   enabled = {"bool"}, bustRep = {"number", 0, 100, true}, bustTakesPapers = {"bool"}, bustTakesTools = {"bool"},
