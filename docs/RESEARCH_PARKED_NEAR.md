@@ -1,0 +1,35 @@
+# Research: parked cars never come near the player
+
+Claude A. Untested in game. Owner: "it doesn't seem like any parked cars are spawning in." Log (build 0.4.62): `parked: setting 10 wanted`, `Parking system started with 9 active / 9 total vehicles` once at 125 s, then `parked cars known: 9, within 60 m: 0, nearest: 425-832 m` for 8 minutes while the player moved around. No `Moved N parked cars into nearby lots` line anywhere.
+
+Source: RLS `overhaul/integration/services/parking.lua` (read only, line numbers of this copy).
+
+## 1. How RLS places parked cars (verified in the source)
+- Spots come from the map's sites file (`gameplay_city.getSites().parkingSpots`, `loadSites` line 65). `findParkingSpots(pos, minR, maxR)` (296) queries a quadtree and returns `{ps, squaredDistance}` sorted near to far. `filterParkingSpots(entries, filters)` (331): `checkVehicles` (spot occupied), `standardSize`, `avoidVisible` (not in view / not within 120 m), `useProbability` (day/night odds). A nil `filters` means `{useProbability = true}`: at night that drops most spots.
+- Spawn (`setupVehicles` 1208): `core_multiSpawn.spawnGroup(group, n, {name = "autoParking", customTransforms = spots})`. Up to `nearSpawnCount` (3) spots 18..50 m around the player, the rest 120 m or more away. Then `onVehicleGroupSpawned` -> `activate` (1150) -> `insertVehicle` puts every car in the pool `overhaulParking` (`core_vehicleActivePooling`).
+- `activate` runs `applyFarInactive()` (1086): every parked car farther than `keepActiveRadiusMeters` (50 m) from the player that is not in view is set INACTIVE (`vehPool:setVeh(id, false)`). The log line `9 active / 9 total` is `min(vars.activeAmount, #parkedVehIds)` (`getParkedCarsAmount(true)`, 830): a COUNT limit, not the number of switched-on cars.
+- The only rescue at load is `ensureNearbyParkedCars` (1113): moves up to 3 cars to spots 18..50 m from the player, once (`loadFixupsPending`). It logs `Moved %d parked cars into nearby lots around the player`. The log has no such line, so it moved nothing (no free standard spot within 50 m of where the player stood, or the player was not placed yet: not known which).
+- Recycling later is in `onUpdate` (1400): one parked car per frame (`queuedIndex`). Only `if be:getObjectActive(currId)` cars are looked at: an ACTIVE car outside its active radius (about 50 m + speed + up to 150 m ahead) gets `processNextSpawn` (951), which takes `vehPool.inactiveVehs[1]`, moves it with `moveToParkingSpot` to a spot from `currParkingSpots` (searched 200 m ahead of the player, `searchRadiusMeters` 200) that is at least `keepClearRadiusMeters` (120 m) away, then cycles it in. An INACTIVE car is only switched on again when it is `isProtectedPosition` (within 120 m of the camera or in the camera frustum), line ~1549.
+- `getParkedCarsList()` (834) returns the live table `parkedVehIds` (the argument `true` our other code passes is ignored). `moveToParkingSpot(id, spot, lowPrecision, initialPlacement)` (179) refuses a spot inside `isProtectedPosition` (120 m of the camera/focus or in view), a car that is `clearedForSpawn` or recovering, and a car that `canRelocateParkedCar` rejects (active and in view). `forceTeleport` (484) and `scatterParkedCars` (642) exist but use `focus.pos`.
+
+## 2. Why the 9 cars stay far (verified from source + log, the exact start is guessed)
+After the one-time spawn all 9 cars were far from the player and `applyFarInactive` switched them off. RLS's recycling needs an ACTIVE parked car to leave the player's range before it moves an inactive one in. With zero active parked cars that never starts, so the cars stay where they were created (the log: constant distances 425 to 832 m, changing only as the player moves). GUESSED: why `ensureNearbyParkedCars` found nothing (no standard spots within 50 m of the start; the log does not say).
+
+No RLS setting or function fixes it (checked `trafficParkingAmount`, `syncParkedCount`, `setActiveAmount`: they change counts, never positions; `syncParkedCount` even spawns top-ups `farOnly`). So our own mover is needed.
+
+## 3. What was built (client `rlsmp/parked.lua nearStep`, pure part `lib/parked.lua`)
+Every `moveEverySeconds` (8) while the player is not fast (`<= 12 m/s`): count our parked cars within `nearRadius` (350 m). If fewer than `nearCount` (6; `nearNightCount` 10 at night) and a parked car exists that is farther than `farRadius` (700 m) from the player AND every other player, move the farthest such car with RLS's own calls:
+1. `findParkingSpots(player, 120, nearRadius)`, a random sample of 16 of them,
+2. `filterParkingSpots(sample, {checkVehicles, standardSize, avoidVisible})` (always a table, never the odds filter),
+3. our own gap rule (40 m to other parked cars), then `checkParkingSpot(id, spot)` (no min/max: it measures from `focus.pos`),
+4. `moveToParkingSpot(id, spot, not obj:isReady())` (a teleport, exactly what `processNextSpawn` does for an inactive pool car). The car stays in RLS's pool; RLS switches it on when it comes within 120 m or into view. No delete, no spawn, no `onRefresh` (the car never drove).
+The 120 m inner limit is RLS's own (spots closer are refused), so it also keeps the car away from the player's path and out of the camera view.
+Skipped: while a chase is on, RLS or the traffic swap is spawning (`isSpawnPending`, `trafficSwap.isBusy`/`canBuild`), frames were slow in the last seconds, and for any car `theft.holdsCar` (stolen/converted, target, being inspected or taken from another player) or `simplified.holdsCar` (swapped by us) or `clearedForSpawn` holds. After a move `theft.reportParked` runs so other games match the car by its new spot.
+Config `trafficVariety.parked.nearCount, nearNightCount, nearRadius, farRadius, moveEverySeconds` (0 `nearCount` = off); menu fields; `docs/PROTOCOL.md`.
+Log: `parked near: moved car ID from A m to B m; near X -> Y of W, far F, parked N`, `parked near: car ID (A m away) not moved, ... (fails=N)`, every 30 s `parked near: enough|none (...)`. The census line `parked cars known: ...` (theft.lua) stays.
+
+## 4. Verified vs guessed
+- Verified (source): everything in sections 1 and 2 about the code paths; the call signatures; `moveToParkingSpot` on an inactive car is what RLS does itself.
+- Verified (tests with fakes, `tests/parked_near_test.lua`): count, pick (farthest, busy and other-player cars skipped), rate, speed, slow frame, night, config limits, refusals.
+- Guessed / untested in game: that the inactive car is teleported and shown (RLS's world box of an inactive car may be stale, so it may pop in at 120 m instead of earlier); that `finishParkingPlacement` repaints the car (`randomPaint`) and how BeamMP syncs a teleport of an inactive car; that `focus.pos` follows a walking player (if not, `checkParkingSpot` refuses and the log says `RLS refused the spot`); that 16 sampled spots usually hold a free one; the cost of `checkVehicles` on 16 spots every 8 s (small).
+- Cars between 350 and 700 m are not moved on purpose (a player driving past would see cars jump); with fewer than `farRadius`-far cars nothing moves (`none` in the log).

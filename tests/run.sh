@@ -76,6 +76,7 @@ luajit tests/simplified_client_test.lua
 luajit tests/view_gate_test.lua
 luajit tests/range_test.lua
 luajit tests/parked_client_test.lua
+luajit tests/parked_near_test.lua
 luajit tests/weather_client_test.lua
 luajit tests/police_client_test.lua
 luajit tests/cop_budget_lib_test.lua

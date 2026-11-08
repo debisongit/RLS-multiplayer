@@ -1,5 +1,8 @@
 # Changelog
 
+## Unreleased (untested in-game)
+- Parked cars now stay near you. RLS switches far parked cars off and never moves them again, so all of them sat where they were created (the log showed the nearest 425 to 832 m away for 8 minutes). Every 8 seconds, while you walk or drive slowly, if fewer than 6 parked cars (10 at night) are within 350 m, one parked car that is farther than 700 m from every player is moved to a free parking spot 120 to 350 m from you, out of view, using RLS's own parking spot functions. Cars being stolen or inspected are never moved. Config `trafficVariety.parked.nearCount`, `nearNightCount`, `nearRadius`, `farRadius`, `moveEverySeconds` (0 `nearCount` = off); menu fields. Log lines `parked near:`. See `docs/RESEARCH_PARKED_NEAR.md`. (Claude A)
+
 ## 0.4.62 (untested in-game)
 - Joining again after a dropped connection: if the game reconnects on its own while the join is still waiting for the server (a friend's log showed the launcher link breaking 7 s after the hello), the join starts again instead of failing after 60 s with `no_answer`; if the connection is lost during the join the join is forgotten so the next world-ready starts a new one. (Claude A)
 - More parked cars at night: `trafficVariety.parked.nightAmount` (default 16, day amount stays 10). No parked cars are added while the frame rate is bad. Menu: Parked cars at night. Existing servers keep their own `parked` block: add `nightAmount` to `config.json`. (Claude A)

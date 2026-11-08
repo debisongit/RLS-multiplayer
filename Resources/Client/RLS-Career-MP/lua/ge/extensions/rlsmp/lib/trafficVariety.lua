@@ -34,7 +34,7 @@ M.DEFAULTS = {
   -- Re-roll: a traffic car that RLS respawned out of everybody's sight becomes a different model with a different config.
   respawn = {enabled = true, mode = "async", perMinute = 2, chance = 0.25, repaintChance = 0.5, waitSeconds = 3, checkSeconds = 0.5},
   -- Parked cars: how many RLS keeps (its own game setting trafficParkingAmount). 0 = leave the game's own amount alone.
-  parked = {amount = 10, nightAmount = 16, fullPool = true, simplifiedShare = 0.5},
+  parked = {amount = 10, nightAmount = 16, fullPool = true, simplifiedShare = 0.5, nearCount = 6, nearNightCount = 10, nearRadius = 350, farRadius = 700, moveEverySeconds = 8},
   -- Rarity: everyday cars are the clear majority. Tier shares (of the picks), and what puts a config into a higher tier (words in the model or config
   -- name, the config's Config Type and Value when the game tells them).
   rarity = {enabled = true, common = 0.88, uncommon = 0.10, rare = 0.02,
@@ -175,7 +175,10 @@ local function parkedSettings(src)
   src = type(src) == "table" and src or {}
   local d = M.DEFAULTS.parked
   return {amount = math.floor(number(src.amount, d.amount, 0, 30)), nightAmount = math.floor(number(src.nightAmount, d.nightAmount, 0, 30)), fullPool = src.fullPool ~= false,
-    simplifiedShare = number(src.simplifiedShare, d.simplifiedShare, 0, 1)}
+    simplifiedShare = number(src.simplifiedShare, d.simplifiedShare, 0, 1),
+    nearCount = math.floor(number(src.nearCount, d.nearCount, 0, 30)), nearNightCount = math.floor(number(src.nearNightCount, d.nearNightCount, 0, 30)),
+    nearRadius = number(src.nearRadius, d.nearRadius, 150, 1500), farRadius = math.max(number(src.farRadius, d.farRadius, 200, 4000), number(src.nearRadius, d.nearRadius, 150, 1500) + 50),
+    moveEverySeconds = number(src.moveEverySeconds, d.moveEverySeconds, 2, 120)}
 end
 M.sanitizeParked = parkedSettings
 

@@ -48,6 +48,7 @@ check(m[1].data.pool.enabled == true and m[1].data.pool.avoidLast == 6 and m[1].
 check(m[1].data.respawn.enabled == true and m[1].data.respawn.perMinute == 2 and m[1].data.respawn.repaintChance == 0.5, "respawn re-roll settings are sent, on")
 check(m[1].data.parked.amount == 10, "parked amount is sent (default 10)")
 check(m[1].data.parked.fullPool == true and m[1].data.parked.simplifiedShare == 0.5, "parked fullPool (on) and simplifiedShare (0.5) are sent")
+check(m[1].data.parked.nearCount == 6 and m[1].data.parked.nearNightCount == 10 and m[1].data.parked.nearRadius == 350 and m[1].data.parked.farRadius == 700 and m[1].data.parked.moveEverySeconds == 8, "parked near settings are sent (6 / 10 / 350 / 700 / 8)")
 check(m[1].data.rarity.enabled == true and m[1].data.rarity.common == 0.88 and m[1].data.rarity.rare == 0.02 and #m[1].data.rarity.rareWords > 5, "rarity settings are sent")
 check(m[1].data.preload.enabled == true and m[1].data.respawn.mode == "async" and m[1].data.preload.reserve == nil and m[1].data.preload.slowFrameMs == 45, "preload settings are sent")
 check(m[1].data.simplified.enabled == false and m[1].data.simplified.parked == true and m[1].data.simplified.traffic == false and m[1].data.simplified.nearRadius == 250, "simplified settings are sent, off")

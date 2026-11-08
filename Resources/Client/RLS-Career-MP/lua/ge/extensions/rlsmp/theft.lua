@@ -1091,6 +1091,11 @@ function M.onExtensionLoaded()
   net.on("rlsmpFenceResult", onFenceResult)
 end
 
+-- True while this parked car is being stolen, inspected, looked at, or was converted: other code must not move it.
+function M.holdsCar(id)
+  return T.isConverted(id) or (action and action.id == id) or (inspectAct and inspectAct.id == id) or (target and target.id == id)
+    or (remoteWait and remoteWait.id == id) or false
+end
 M._target = function() return target end
 M._action = function() return action end
 M._inspect = function() return inspectAct end

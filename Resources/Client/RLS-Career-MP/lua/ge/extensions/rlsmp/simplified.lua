@@ -254,6 +254,9 @@ local function checkParked(cfg)
   return false
 end
 
+-- True while we swapped this parked car (it is a different object than RLS first spawned; leave it alone).
+function M.holdsCar(id) return back[id] ~= nil end
+
 -- Moving traffic -------------------------------------------------------------------------------------------------------------------------------
 function M.trafficActive()
   local cfg = settings()

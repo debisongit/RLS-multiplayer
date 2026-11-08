@@ -81,7 +81,9 @@ end
 
 function M.parked()
   local k = type(cfg.parked) == "table" and cfg.parked or {}
-  return {amount = tonumber(k.amount), nightAmount = tonumber(k.nightAmount), fullPool = k.fullPool ~= false, simplifiedShare = tonumber(k.simplifiedShare)}
+  return {amount = tonumber(k.amount), nightAmount = tonumber(k.nightAmount), fullPool = k.fullPool ~= false, simplifiedShare = tonumber(k.simplifiedShare),
+    nearCount = tonumber(k.nearCount), nearNightCount = tonumber(k.nearNightCount), nearRadius = tonumber(k.nearRadius), farRadius = tonumber(k.farRadius),
+    moveEverySeconds = tonumber(k.moveEverySeconds)}
 end
 
 local function wordList(src)

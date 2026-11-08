@@ -11,6 +11,10 @@
 --   4. give the old value back when the player leaves the server.
 -- Nothing is edited in RLS. If the player switched parked cars off (setting trafficParkedVehicles or RLS's noParkedMode) nothing happens.
 -- Every parked car is a car BeamMP syncs to the other players, and the server's per-player car limit counts them: keep the amount moderate.
+-- Near the player (docs/RESEARCH_PARKED_NEAR.md): RLS switches far parked cars off and then never moves them (its recycling only starts from an ACTIVE
+--   car), so all of them can stay where they were created. nearStep() keeps cfg.parked.nearCount cars within nearRadius: it moves ONE parked car that is
+--   farther than farRadius from every player to a free spot 120..nearRadius m from the player, out of view, with RLS's own findParkingSpots /
+--   filterParkingSpots / checkParkingSpot / moveToParkingSpot (a teleport; RLS switches the car on when it comes into view).
 -- Pure decision: lib/parked.lua (tests: tests/parked_client_test.lua).
 
 local M = {}
@@ -134,6 +138,109 @@ function M.check()
   return act
 end
 
+-- Near the player ---------------------------------------------------------------------------------------------------------------------------------
+local lastNear, lastCensus, nearFails = -1e9, -1e9, 0
+local function xy(p) return {x = p.x, y = p.y} end
+local function objOf(id) return getObjectByID and getObjectByID(id) or nil end
+
+local function held(id, data)
+  for _, name in ipairs({"theft", "simplified"}) do
+    local e = ext(name)
+    if e and e.holdsCar and e.holdsCar(id) then return true end
+  end
+  return data and data[id] and data[id].clearedForSpawn and true or false
+end
+
+-- The parked cars as lib/parked wants them: {id, pos, busy}.
+local function carList(pk)
+  local list, data = {}, pk.getParkedCarsData and pk.getParkedCarsData() or {}
+  for _, id in ipairs(pk.getParkedCarsList() or {}) do
+    local o = objOf(id)
+    local p = o and o:getPosition()
+    if p then list[#list + 1] = {id = id, pos = xy(p), busy = held(id, data)} end
+  end
+  return list
+end
+
+-- A free spot 120..radius m from `me` for car `id`: a random sample of RLS's spots, filtered and checked by RLS. Returns the spot or nil.
+local function findSpot(pk, id, me, radius, taken)
+  local entries = Pk.sample(pk.findParkingSpots(vec3(me.x, me.y, me.z or 0), Pk.MIN_SPOT, radius) or {}, 16)
+  entries = pk.filterParkingSpots(entries, {checkVehicles = true, standardSize = true, avoidVisible = true}) or {}   -- a table: nil would mean RLS's day/night odds
+  for _, e in ipairs(entries) do
+    local ps = e.ps
+    if ps and ps.pos and Pk.spaced(ps.pos, taken, 40) and pk.checkParkingSpot(id, ps) then return ps end
+  end
+  return nil
+end
+
+-- One look; returns a word (for tests): off | idle | fast | slow | enough | none | moved | failed.
+function M.nearStep()
+  if not (mp.isMPSession() and careerActive()) or noParked() then return "off" end
+  local v = ext("trafficVariety")
+  local cfg = v and v.getConfig and v.getConfig()
+  local pk = parking()
+  if not (cfg and pk and pk.getParkedCarsList and pk.findParkingSpots and pk.moveToParkingSpot and pk.filterParkingSpots and pk.checkParkingSpot) then return "off" end
+  local night = false
+  if v.contextNow then
+    local okc, ctx = pcall(v.contextNow)
+    night = okc and type(ctx) == "table" and ctx.night == true
+  end
+  local want = Pk.nearWanted(cfg.parked, night)
+  local pid = be and be.getPlayerVehicleID and be:getPlayerVehicleID(0)
+  local me = pid and pid ~= -1 and objOf(pid)
+  if want <= 0 or not me then return "off" end
+  local every = cfg.parked.moveEverySeconds or 8
+  if clock - lastNear < every then return "idle" end
+  local ok, vel = pcall(function() return me:getVelocity():length() end)
+  if ok and vel and vel > Pk.SLOW_SPEED then return "fast" end
+  local police, ts = ext("police"), ext("trafficSwap")
+  if slowFor > 2 or (police and police.isPursuit and police.isPursuit() == true) or (pk.isSpawnPending and pk.isSpawnPending())
+    or (ts and ((ts.isBusy and ts.isBusy()) or (ts.canBuild and not ts.canBuild()))) then return "slow" end
+  local mpos = me:getPosition()
+  local others = {}
+  local b = ext("bubble")
+  if b and b.otherPlayers then
+    local okp, list = pcall(b.otherPlayers)
+    if okp and type(list) == "table" then for _, q in ipairs(list) do others[#others + 1] = xy(q) end end
+  end
+  local cars = carList(pk)
+  local move, why, near, far = Pk.pickMove(cars, xy(mpos), others, want, cfg.parked.nearRadius, cfg.parked.farRadius)
+  if not move then
+    if clock - lastCensus >= 30 then
+      lastCensus = clock
+      p3.log("I", string.format("parked near: %s (%s of %s within %d m, %s cars farther than %d m from every player, %d parked cars)", tostring(why),
+        tostring(near), tostring(want), cfg.parked.nearRadius, tostring(far), cfg.parked.farRadius, #cars))
+    end
+    return why
+  end
+  lastNear = clock
+  local o = objOf(move.id)
+  local taken = {}
+  for _, c in ipairs(cars) do if c.id ~= move.id then taken[#taken + 1] = c.pos end end
+  local spot = findSpot(pk, move.id, mpos, cfg.parked.nearRadius, taken)
+  local moved = false
+  if spot and o then
+    local okm, res = pcall(pk.moveToParkingSpot, move.id, spot, o.isReady and not o:isReady() or false)
+    moved = okm and res == true
+    if not okm then p3.log("W", "parked near: moveToParkingSpot failed: " .. tostring(res)) end
+  end
+  if not moved then
+    nearFails = nearFails + 1
+    p3.count("parked near: not moved")
+    p3.log("I", string.format("parked near: car %s (%.0f m away) not moved, %s (fails=%d); near %d of %d", tostring(move.id), move.from,
+      spot and "RLS refused the spot" or "no free spot 120.." .. cfg.parked.nearRadius .. " m out of view", nearFails, move.near, want))
+    return "failed"
+  end
+  nearFails = 0
+  p3.count("parked near: moved")
+  local np = o:getPosition()
+  p3.log("I", string.format("parked near: moved car %s from %.0f m to %.0f m; near %d -> %d of %d, far %d, parked %d", tostring(move.id), move.from,
+    Pk.dist2(xy(np), xy(mpos)), move.near, move.near + 1, want, move.far - 1, #cars))
+  local th = ext("theft")
+  if th and th.reportParked then pcall(th.reportParked) end   -- the other games match this car by its reported spot
+  return "moved"
+end
+
 function M.onUpdate(dtReal)
   dtReal = dtReal or 0
   if dtReal > 0.045 then slowFor = slowFor + dtReal else slowFor = math.max(0, slowFor - dtReal * 2) end
@@ -141,6 +248,8 @@ function M.onUpdate(dtReal)
   if timer < CHECK_EVERY then return end
   timer = 0
   M.check()
+  local okn, err = pcall(M.nearStep)
+  if not okn then once("nearerr", "parked near: failed: " .. tostring(err)) end
 end
 
 -- Give the player's own setting back.
@@ -150,6 +259,7 @@ function M.onServerLeave()
     p3.log("I", string.format("parked: left the server, %s back to %s", KEY, tostring(original)))
   end
   original, applied, released, tries, lastSync, timer, clock, logged = nil, nil, nil, 0, -SYNC_EVERY, 0, 0, {}
+  lastNear, lastCensus, nearFails = -1e9, -1e9, 0
 end
 
 function M.report() return p3.report() end
