@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased: no more chat commands for stealing (all untested in-game)
+- Stealing and inspecting: walk up to a parked car and a small toast says "Press [Y]". The key opens a small popup: Inspect, the ways to steal it you have the tools for, Cancel. No typing. (Claude A)
+- Fence: the garage computer now has Strip, Sell, Resell and Gamble for a stolen car; the Black Market phone app has the same four buttons for the stolen car you stand next to at the drop spot. (Claude A)
+- Black Market phone app: your items, your stolen cars with prices, "Sell by meetup" and "Drop the meetup". Orders, items, invites and the scout tip were already there. (Claude A)
+- Packages are collected by themselves when you stop inside the drop circle; a small popup says what you got. (Claude A)
+- The chat commands `/steal /inspect /fence /market /meetup /items` still exist but only for developers: new setting `ui.chatCommands` (default false) switches them off, and no message names them any more. (Claude A)
+- Research and what is unverified: `docs/RESEARCH_THEFT_UI.md`. (Claude A)
+
 ## 0.4.38 (all untested in-game)
 - Theft hints for black market members: `/inspect` near a parked car (3 s) tells its weakness, tools and risk; a Scout tip in the black market app marks 2 to 3 stealable cars for about 10 minutes. (Claude A)
 - The big debug text labels on meetup and drop markers are gone. (Claude A)

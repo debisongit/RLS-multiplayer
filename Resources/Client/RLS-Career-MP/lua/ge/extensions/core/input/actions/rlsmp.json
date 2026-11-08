@@ -6,5 +6,13 @@
     "onDown": "if extensions.rlsmp_trafficMenu then extensions.rlsmp_trafficMenu.toggle() end",
     "title": "Traffic settings menu",
     "desc": "Open or close the server settings menu: AI traffic, car theft, fence, black market, police, weather (open to every player)"
+  },
+  "rlsmpInteract": {
+    "cat": "rlsmp",
+    "order": 2,
+    "ctx": "tlua",
+    "onDown": "if extensions.rlsmp_theft then extensions.rlsmp_theft.interact() end",
+    "title": "Parked car: inspect or steal",
+    "desc": "On foot next to a parked car: open the small popup with Inspect and the ways to steal it that you have the tools for (only while car theft is on)"
   }
 }

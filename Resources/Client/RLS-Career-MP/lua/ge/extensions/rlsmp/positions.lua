@@ -23,7 +23,7 @@ function M.enable(on)
 end
 
 -- Send a report on the next frame even when standing still (rlsmp_market calls this at a drop spot so the server's
--- copy of our position is fresh for /market pickup).
+-- copy of our position is fresh for the automatic pickup).
 function M.reportNow()
   if enabled then timer, last = EVERY, nil end
 end

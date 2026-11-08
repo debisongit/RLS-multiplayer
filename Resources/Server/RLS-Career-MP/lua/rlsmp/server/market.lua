@@ -2,7 +2,7 @@
 -- SPDX-License-Identifier: AGPL-3.0-only
 --
 -- Access is invite + reputation. The first member is made by the server owner (console: rlsmp market grant <player>).
--- A member invites with /market invite <player>; that player types /market accept. Each invite is reserved (and saved)
+-- A member invites from the phone app; that player accepts there. Each invite is reserved (and saved)
 -- when it is sent, so an offline inviter cannot be over-spent; an invite that expires while its inviter is still online
 -- is given back.
 --
@@ -10,7 +10,7 @@
 -- order = {id, item, n, price, at, readyAt, spot = {name, x, y, z}}  (the spot is copied in, so rotations or config
 -- edits never strand a paid order). Orders stay until picked up, also for a player who was thrown out.
 --
--- Money: /market buy takes it from the server wallet (ledger.money) and writes the order in the SAME profiles.persist,
+-- Money: buying takes it from the server wallet (ledger.money) and writes the order in the SAME profiles.persist,
 -- then pushes rlsmpWalletSet. The client applies that as a sync (not reported back), so it is plain spending.
 -- Pickup: the order is removed and the item given in the same persist (items.give saves the profile).
 -- A crash can never charge without an order, nor deliver twice.
@@ -187,14 +187,14 @@ local function help(pid)
   if not (m and m.member) then
     local inv = invites[pid]
     if inv and inv.s == s and inv.expires >= util.now() then
-      return say(pid, inv.byName .. " invited you. Type /market accept to join.")
+      return say(pid, inv.byName .. " invited you. Open the Black Market app on your phone to accept.")
     end
-    say(pid, "You are not in the black market. A member has to invite you, then you type /market accept.")
-    if open > 0 then say(pid, "You still have " .. open .. " paid package(s): /market orders, /market pickup.") end
+    say(pid, "You are not in the black market. A member has to invite you, then you accept in the Black Market app.")
+    if open > 0 then say(pid, "You still have " .. open .. " paid package(s): collect them at the drop spot.") end
     return
   end
   say(pid, string.format("Reputation %d. Invites left %d. Open orders %d.", m.rep, invitesLeft(m), open))
-  say(pid, "Commands: /market list | buy <item> [count] | orders | pickup | invite <player> | fence")
+  say(pid, "Use the Black Market app on your phone: orders, items, invites and your stolen cars.")
 end
 
 function cmds.list(pid)
@@ -223,7 +223,7 @@ function cmds.buy(pid, arg)
   if not m then return say(pid, "Members only.") end
   local name, count = tostring(arg or ""):lower():match("^(%S+)%s*(%d*)$")
   local o = M.offer(name)
-  if not o then return say(pid, "Usage: /market buy <item> [count]. See /market list.") end
+  if not o then return say(pid, "Pick the item in the Black Market app.") end
   if m.rep < o.minRep then return say(pid, o.label .. " needs reputation " .. o.minRep .. ".") end
   local n = tonumber(count ~= "" and count or "1")
   if o.durable and n ~= 1 then return say(pid, o.label .. " is a tool: one lasts forever.") end
@@ -231,7 +231,7 @@ function cmds.buy(pid, arg)
   if o.durable and (items.has(pid, name) or hasOnOrder(m, name)) then
     return say(pid, "You already have a " .. o.label .. " (or one on the way). Tools last forever.")
   end
-  if #m.orders >= c().maxOpenOrders then return say(pid, "Pick up your open orders first (/market orders).") end
+  if #m.orders >= c().maxOpenOrders then return say(pid, "Pick up your open orders first.") end
   local ledger = s.profile.ledger
   local total = o.price * n
   if not ledger.seeded then return say(pid, "Wait for your first save, then try again.") end
@@ -256,7 +256,7 @@ function cmds.buy(pid, arg)
   net.send(pid, "rlsmpWalletSet", {money = ledger.money, why = "market"})
   net.send(pid, "rlsmpMarketDrop", dropMessage(order, now))
   util.info(string.format("Market: %s bought %dx %s for %d, drop %s at +%ds", s.name, n, name, total, spot.name, readyAt - now))
-  say(pid, string.format("Paid %s for %s%s. The package will be at %s in about %d s. Drive there and type /market pickup.",
+  say(pid, string.format("Paid %s for %s%s. The package will be at %s in about %d s. Drive there; it is handed over when you stop in the circle.",
     dollars(total), o.label, n > 1 and (" x" .. n) or "", spot.name, readyAt - now))
 end
 
@@ -285,7 +285,7 @@ function cmds.pickup(pid)
   local now = util.now()
   local ready = 0
   for _, o in ipairs(m.orders) do if o.readyAt <= now then ready = ready + 1 end end
-  if ready == 0 then return say(pid, "Your package is not there yet (/market orders).") end
+  if ready == 0 then return say(pid, "Your package is not there yet.") end
   if positions.isChased(pid) then return say(pid, "Lose the police first.") end
   local pos = positions.get(pid)
   if not pos or now - pos.t > c().positionMaxAge then
@@ -320,7 +320,7 @@ function cmds.pickup(pid)
     parts[#parts + 1] = (items.CATALOG[o.item].label) .. (o.n > 1 and (" x" .. o.n) or "")
   end
   util.info(string.format("Market: %s picked up %d package(s)", s.name, #got))
-  say(pid, "Picked up: " .. table.concat(parts, ", ") .. ". See /items.")
+  say(pid, "Picked up: " .. table.concat(parts, ", ") .. ".")
 end
 
 function cmds.invite(pid, arg)
@@ -341,7 +341,7 @@ function cmds.invite(pid, arg)
   profiles.persist(s.profile)
   invites[targetPid] = {s = target, byPid = pid, bySession = s, byName = s.name, expires = util.now() + c().inviteSeconds}
   say(pid, string.format("Invited %s. Invites left %d.", target.name, invitesLeft(m)))
-  say(targetPid, s.name .. " invited you to the black market. Type /market accept within " .. c().inviteSeconds .. " s.")
+  say(targetPid, s.name .. " invited you to the black market. Accept it in the Black Market app within " .. c().inviteSeconds .. " s.")
 end
 
 function cmds.accept(pid)
@@ -359,12 +359,12 @@ function cmds.accept(pid)
   m.invitedBy = inv.byName
   m.joinedAt = util.now()
   profiles.persist(s.profile)
-  say(pid, "You are in. Your reputation is " .. m.rep .. ". See /market list.")
+  say(pid, "You are in. Your reputation is " .. m.rep .. ".")
   if sessions.get(inv.byPid) == inv.bySession then say(inv.byPid, s.name .. " accepted your invite.") end
 end
 
 function cmds.fence(pid)
-  say(pid, string.format("The fence buys stolen cars (about %d%% of their value) and parts (about %d%%). It works with car theft on: bring a stolen car to the drop spot and use /fence.",
+  say(pid, string.format("The fence buys stolen cars (about %d%% of their value) and parts (about %d%%). It works with car theft on: bring a stolen car to the drop spot and use the Black Market app, or sell it at the garage computer.",
     math.floor(c().fenceCarRate * 100 + 0.5), math.floor(c().fencePartRate * 100 + 0.5)))
 end
 
@@ -472,7 +472,7 @@ local function appState(pid)
   if inv and inv.s == s and inv.expires >= now then out.invite = {from = inv.byName, seconds = inv.expires - now} end
   local spot = M.spotAt(now)
   out.spot = spot and spot.name or nil
-  -- Paid orders stay a player's own, also after a bust threw them out (chat /market pickup still works), so everybody who has some sees them.
+  -- Paid orders stay a player's own, also after a bust threw them out (the pickup still works), so everybody who has some sees them.
   if m and #m.orders > 0 then
     out.orders = {}
     for _, o in ipairs(m.orders) do
@@ -481,6 +481,12 @@ local function appState(pid)
         readyIn = math.max(0, o.readyAt - now), ready = o.readyAt <= now}
     end
   end
+  out.owned = items.list(pid)
+  local fenceMod = package.loaded["rlsmp.server.fence"]
+  out.stolen = fenceMod and fenceMod.summary and fenceMod.summary(pid) or {}
+  local meetupMod = package.loaded["rlsmp.server.meetup"]
+  local mt = meetupMod and meetupMod.openOf and meetupMod.openOf(pid)
+  if mt then out.meetup = {spot = mt.spot.name, kind = mt.kind} end
   if not out.member then return out end
   out.rep, out.invitesLeft = m.rep, invitesLeft(m)
   out.items = {}
@@ -550,7 +556,7 @@ function M.addRep(pid, n, why)
   profiles.persist(s.profile)
   say(pid, string.format("Reputation %+d (%s). Now %d.", m.rep - old, tostring(why or "job"), m.rep))
   for _, o in ipairs(offers()) do
-    if o.minRep > old and o.minRep <= m.rep then say(pid, "New items unlocked: /market list") break end
+    if o.minRep > old and o.minRep <= m.rep then say(pid, "New items unlocked in the Black Market app.") break end
   end
   return m.rep
 end
@@ -634,7 +640,7 @@ function M.console(arg)
       m.invitedBy = m.invitedBy or "server"
       m.joinedAt = m.joinedAt or util.now()
       profiles.persist(s.profile)
-      say(pid, "You are in the black market. Reputation " .. m.rep .. ". Type /market for help.")
+      say(pid, "You are in the black market. Reputation " .. m.rep .. ". Open the Black Market app on your phone.")
       return string.format("RLS-Career-MP: %s is a black market member (rep %d)", tostring(s.name), m.rep)
     end
     m.member = false
@@ -665,7 +671,7 @@ local function tick()
       for _, o in ipairs(m.orders) do
         if o.readyAt <= now and not s.marketTold[o.id] then
           s.marketTold[o.id] = true
-          say(pid, "Your package is waiting at " .. o.spot.name .. ". Drive there and type /market pickup.")
+          say(pid, "Your package is waiting at " .. o.spot.name .. ". Drive there; it is handed over when you stop in the circle.")
         end
       end
     end
@@ -680,7 +686,7 @@ function M.init(config)
     if not items.known(name) then util.warn("market.tiers: '" .. tostring(name) .. "' is not an item, ignored") end
   end
   if #spots() == 0 then util.warn("market.dropSpots is empty: nobody can buy") end
-  net.onChat("market", onChat)
+  net.onChat("market", onChat, true)
   net.onClient("rlsmpMarketGet", onAppGet)
   net.onClient("rlsmpMarketAct", onAppAct)
   net.on("rlsmpMarketTick", tick)

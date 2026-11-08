@@ -13,6 +13,7 @@ RLSMP_PLUGIN_ROOT = tmp .. "/"
 dofile("Resources/Server/RLS-Career-MP/main.lua")
 require("rlsmp.server.util").setJsonCodec(json)
 onInit()
+RLSMP.config.ui.chatCommands = true   -- these tests drive the hidden chat fallbacks (the default is off)
 local sessions = require("rlsmp.server.sessions")
 local items = require("rlsmp.server.items")
 local function fire(ev, ...) return _G["rlsmp_handler_" .. ev](...) end

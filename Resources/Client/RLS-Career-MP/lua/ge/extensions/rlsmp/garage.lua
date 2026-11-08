@@ -7,6 +7,7 @@
 --   * general:         rlsmpStolen  "Stolen car: PLATE" (only when one of our stolen cars stands near the player; stolen cars are not in the
 --                      RLS inventory on purpose, RLS's own Sell button would pay full price and skip the fence)
 --   * general:         rlsmpItems   "Black market items" (the server's item list; RLS has no item inventory we could safely write to)
+-- Stolen cars get Strip, Sell, Resell and Gamble here (prices from the server; resell and gamble are greyed out without the papers).
 -- A button asks the server (rlsmpGarageQuote), the answer (rlsmpGarageMenu) opens a dialog (vanilla guihook showConfirmationDialog, same
 -- one RLS's own debug menu uses), a dialog button calls M.choose(action) -> rlsmpGarageDo -> rlsmpGarageResult.
 -- All rules and money live in server/fence.lua. This side only removes the car after the server paid. Untested in game. Log tag RLSMP-GARAGE.
@@ -111,9 +112,9 @@ local function itemLine(items)
   return #parts > 0 and table.concat(parts, ", ") or "none"
 end
 
-local function button(label, action)
+local function button(label, action, on)
   -- `action` is one of our own fixed words (checked again in M.choose), so building Lua text from it is safe.
-  return {label = label, luaCallback = string.format("rlsmp_garage.choose(%q)", action), enabled = true}
+  return {label = label, luaCallback = string.format("rlsmp_garage.choose(%q)", action), enabled = on ~= false}
 end
 
 local function onMenu(d)
@@ -125,6 +126,13 @@ local function onMenu(d)
     text = string.format("%s %s (%s)\n%s", tostring(d.model or "Car"), tostring(d.plate or ""), tostring(d.kind), text)
     if d.kind == "stolen" and #(d.fitted or {}) > 0 then text = text .. "\nFitted: " .. table.concat(d.fitted, ", ") end
     buttons[#buttons + 1] = button(string.format("Strip for $%d (the car is removed)", math.floor(tonumber(d.strip) or 0)), "strip")
+    if d.kind == "stolen" then
+      buttons[#buttons + 1] = button(string.format("Sell as it is for $%d", math.floor(tonumber(d.sell) or 0)), "sell")
+      buttons[#buttons + 1] = tonumber(d.resell) and button(string.format("Resell with new papers for $%d", math.floor(d.resell)), "resell")
+        or button("Resell (needs fake plate, VIN plate and part number)", "resell", false)
+      buttons[#buttons + 1] = tonumber(d.gamble) and button(string.format("Gamble for $%d (%s%% chance of a trap)", math.floor(d.gamble), tostring(d.trap or "?")), "gamble")
+        or button("Gamble (needs at least one illegal part)", "gamble", false)
+    end
     for _, f in ipairs(d.fit or {}) do
       if type(f.name) == "string" and f.name:match("^[%a_]+$") then
         buttons[#buttons + 1] = button("Fit " .. tostring(f.label or f.name), "fit:" .. f.name)
@@ -140,7 +148,9 @@ end
 function M.choose(action)
   local t = target
   if not (enabled and t and type(action) == "string") then return end
-  if not (action == "strip" or action:match("^fit:[%a_]+$")) then return end
+  local stolenWays = action == "sell" or action == "resell" or action == "gamble"
+  if stolenWays and t.kind ~= "stolen" then return end
+  if not (action == "strip" or stolenWays or action:match("^fit:[%a_]+$")) then return end
   if action == "strip" and t.kind == "owned" then
     local why = blockedReason(t.inventoryId)
     if why then return toast("warning", why) end
@@ -166,8 +176,15 @@ end
 local function onResult(d)
   if not enabled or type(d) ~= "table" then return end
   local t = target
-  if d.ok ~= true then return toast("warning", tostring(d.err or "No."), 6000) end
-  if d.action == "strip" then
+  local ways = d.action == "strip" or d.action == "sell" or d.action == "resell" or d.action == "gamble"
+  if d.ok ~= true then
+    if ways and d.takeCar and t and t.kind == "stolen" then     -- a gamble that went wrong: the car is gone from the server's list
+      if rlsmp_theft and rlsmp_theft.removeStolenByPlate then rlsmp_theft.removeStolenByPlate(t.plate) end
+      target = nil
+    end
+    return toast(d.takeCar and "error" or "warning", tostring(d.err or "No."), 8000)
+  end
+  if ways then
     local removedOk = true
     if d.takeCar and t then
       if t.kind == "stolen" then
@@ -177,7 +194,7 @@ local function onResult(d)
       end
     end
     target = nil
-    if removedOk then toast("success", string.format("Stripped: $%d.", math.floor(tonumber(d.pay) or 0))) end
+    if removedOk then toast("success", string.format("Sold (%s): $%d.", tostring(d.action), math.floor(tonumber(d.pay) or 0))) end
   else
     toast("success", tostring(d.fitted or "Part") .. " fitted.")
     if t then M.openFor(t) end            -- show the dialog again with the new state

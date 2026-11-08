@@ -114,7 +114,22 @@ check(lastSent("rlsmpGarageQuote").plate == "STL 1", "stolen quote")
 server("rlsmpGarageMenu", {ok = true, kind = "stolen", plate = "STL 1", model = "etk800", strip = 6000, items = {},
   fit = {{name = "fake_plate", label = "Fake plate"}, {name = "x; y", label = "bad"}}, fitted = {"VIN plate"}})
 dlg = dialogs[#dialogs]
-check(#dlg.buttons == 3 and dlg.buttons[2].luaCallback == 'rlsmp_garage.choose("fit:fake_plate")' and dlg.text:find("Fitted: VIN plate"), "stolen dialog: strip, fit, close; bad names dropped")
+check(#dlg.buttons == 6 and dlg.buttons[5].luaCallback == 'rlsmp_garage.choose("fit:fake_plate")' and dlg.text:find("Fitted: VIN plate"), "stolen dialog: strip, sell, resell, gamble, fit, close; bad names dropped")
+check(dlg.buttons[3].enabled == false and dlg.buttons[4].enabled == false and dlg.buttons[2].enabled == true, "resell and gamble greyed out without papers")
+server("rlsmpGarageMenu", {ok = true, kind = "stolen", plate = "STL 1", model = "etk800", strip = 6000, sell = 7000, resell = 12000, gamble = 9000, trap = 30,
+  items = {}, fit = {}, fitted = {}})
+dlg = dialogs[#dialogs]
+check(dlg.buttons[3].enabled == true and dlg.buttons[3].luaCallback == 'rlsmp_garage.choose("resell")' and dlg.buttons[4].label:find("30%%") and dlg.buttons[4].label:find("9000"),
+  "with papers: resell and gamble are buttons with prices and the trap chance")
+garage.choose("gamble")
+check(lastSent("rlsmpGarageDo").action == "gamble", "gamble request")
+server("rlsmpGarageResult", {ok = false, action = "gamble", takeCar = true, busted = true, err = "The buyer was a trap."})
+check(goneByPlate[#goneByPlate] == "STL 1" and toasts[#toasts]:find("trap"), "a trap still takes the car away and tells the player")
+server("rlsmpGarageMenu", {ok = true, kind = "stolen", plate = "STL 1", model = "etk800", strip = 6000, items = {}, fit = {{name = "fake_plate", label = "Fake plate"}}, fitted = {}})
+f.general.rlsmpStolen.callback()
+server("rlsmpGarageMenu", {ok = true, kind = "stolen", plate = "STL 1", model = "etk800", strip = 6000, items = {},
+  fit = {{name = "fake_plate", label = "Fake plate"}, {name = "x; y", label = "bad"}}, fitted = {"VIN plate"}})
+dlg = dialogs[#dialogs]
 garage.choose("fit:fake_plate")
 check(lastSent("rlsmpGarageDo").action == "fit:fake_plate", "fit request")
 local nq = #sent

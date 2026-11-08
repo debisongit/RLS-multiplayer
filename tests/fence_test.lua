@@ -17,6 +17,7 @@ util.setJsonCodec(json)
 local now = 1800 * 1000
 util.setClock(function() return now end)
 onInit()
+RLSMP.config.ui.chatCommands = true   -- these tests drive the hidden chat fallbacks (the default is off)
 local cfg = RLSMP.config
 -- theft must be on for the fence: switch it on and re-init it (modules read their config at init)
 cfg.theft.enabled = true
@@ -234,6 +235,22 @@ local before = profile(1).ledger.money
 local sd = gdo(1, {action = "strip", plate = "GAR 003"})
 check(sd.ok and sd.pay == 3000 and sd.takeCar and profile(1).ledger.money == before + 3000 and theft.records()["GAR 003"] == nil, "garage strip of a stolen car pays 30%, no drop spot needed")
 check(lastSent(1, "rlsmpWalletSet").money == before + 3000, "wallet pushed")
+-- sell / resell / gamble from the garage too (no drop spot)
+rec("GAR 006", accountOf(1), 10000)
+now = now + 5
+m = gquote(1, {plate = "GAR 006"})
+check(m.sell == 3500 and m.resell == nil and m.gamble == nil and m.trap == 30, "menu: sell price, no resell or gamble without papers")
+check(not gdo(1, {action = "resell", plate = "GAR 006"}).ok and not gdo(1, {action = "gamble", plate = "GAR 006"}).ok and theft.records()["GAR 006"],
+  "garage resell and gamble refused without papers, car kept")
+check(not gdo(1, {action = "sell", plate = "MYCAR 1", value = 5000}).ok, "garage sell is for stolen cars only")
+items.give(1, "fake_plate", 1)
+now = now + 5
+m = gquote(1, {plate = "GAR 006"})
+check(m.gamble == 4500 and m.resell == nil, "menu: gamble appears with one paper")
+before = profile(1).ledger.money
+local gs = gdo(1, {action = "sell", plate = "GAR 006"})
+check(gs.ok and gs.action == "sell" and gs.pay == 3500 and gs.takeCar and profile(1).ledger.money == before + 3500 and theft.records()["GAR 006"] == nil,
+  "garage sell pays the fence rate and takes the car")
 -- chased players cannot strip a stolen car
 rec("GAR 004", accountOf(1), 10000)
 standAt(1, spot.x + 900, spot.y + 900, true)

@@ -17,6 +17,7 @@ util.setJsonCodec(json)
 local now = 1800 * 1000
 util.setClock(function() return now end)
 onInit()
+RLSMP.config.ui.chatCommands = true   -- these tests drive the hidden chat fallbacks (the default is off)
 local cfg = RLSMP.config
 cfg.theft.enabled = true
 local sessions = require("rlsmp.server.sessions")

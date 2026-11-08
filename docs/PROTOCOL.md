@@ -231,9 +231,9 @@ Chat: `/duel <player>`, `/duel accept`, `/duel cancel`, `/duel claim` (re-send a
 
 ## Black market (server `market.lua`, client `market.lua`)
 
-Custom (RLS has none). Chat commands, hidden from other players; the server owns membership, reputation, orders and money.
+Custom (RLS has none). Players use the Black Market phone app (and the automatic pickup in the drop circle); the server owns membership, reputation, orders and money.
 
-`/market` (help, your rep, invites left) · `list` (items your rep allows, with prices) · `buy <item> [count]` · `orders` · `pickup` · `invite <player>` · `accept` · `fence` (short explanation; the real fence is `/fence`, below)
+Hidden developer fallback, only while `ui.chatCommands` is true (below): `/market` (help) · `list` · `buy <item> [count]` · `orders` · `pickup` · `invite <player>` · `accept` · `fence`.
 Console: `rlsmp market grant <player>` (online player becomes a member with `market.founderRep`) · `rlsmp market revoke <player>`.
 
 - Profile: `market = {member, rep, invites (used), invitedBy, joinedAt, nextOrder, orders = [{id, item, n, price, at, readyAt, spot = {name, x, y, z}}]}`. Items go to `profile.items` (`items.lua`).
@@ -247,7 +247,7 @@ Console: `rlsmp market grant <player>` (online player becomes a member with `mar
 
 | Direction | Event | Body |
 |---|---|---|
-| S→C | `rlsmpMarketDrop` | `{id, item, label, n, spot, x, y, z, readyIn}` a paid package; sent on buy and again once after each join for every open order. The client toasts, draws a marker at a ready spot within 300 m and, inside 15 m, says "type /market pickup" and asks `rlsmp_positions.reportNow()` |
+| S→C | `rlsmpMarketDrop` | `{id, item, label, n, spot, x, y, z, readyIn}` a paid package; sent on buy and again once after each join for every open order. The client toasts, draws a marker at a ready spot within 300 m and, inside 15 m, asks `rlsmp_positions.reportNow()` and sends the pickup by itself (retry every 10 s while inside); a successful answer opens a small OK popup |
 | S→C | `rlsmpMarketClear` | `{id}` package collected |
 
 ### Phone app (RLS phone, "Black Market")
@@ -259,8 +259,8 @@ The screen has no rules: it shows what the server last sent and relays taps. Not
 | Direction | Event | Body |
 |---|---|---|
 | C→S | `rlsmpMarketGet` | `{}` at most one answer per player per second |
-| S→C | `rlsmpMarketState` | `{ready, member, money, spot, invite = {from, seconds}?}` plus, for members, `{rep, invitesLeft, items = [{name, label, price, minRep, durable, locked, have, onOrder}], orders = [{id, item, label, n, spot, readyIn, ready}] (orders also for players who were thrown out but still have paid orders)}` |
-| C→S | `rlsmpMarketAct` | `{a = "buy" \| "pickup" \| "invite" \| "accept" \| "scout", item?, n?, who?, cars?}`; at most one per player per second (a separate limit from Get). Runs the same command as the chat (`scout` has no chat form; `cars` = `[{x, y, z}]`, at most 8 stealable parked cars the game sees near the player) |
+| S→C | `rlsmpMarketState` | `{ready, member, money, spot, owned = [{name, label, count}], stolen = [{plate, model, strip, sell, resell?, gamble?}], meetup = {spot, kind}?, invite = {from, seconds}?}` plus, for members, `{rep, invitesLeft, items = [{name, label, price, minRep, durable, locked, have, onOrder}], orders = [{id, item, label, n, spot, readyIn, ready}] (orders also for players who were thrown out but still have paid orders)}` |
+| C→S | `rlsmpMarketAct` | `{a = "buy" \| "pickup" \| "invite" \| "accept" \| "scout", item?, n?, who?, cars?}`; at most one per player per second (a separate limit from Get). Runs the same command as the chat (the buttons `fence`, `meetup` and `meetupCancel` never reach the server, the client extension runs them: `rlsmp_theft.fence(mode)` with mode strip|sell|resell|gamble, `rlsmp_meetup.startBlack()`, `rlsmp_meetup.cancel()`; `scout` has no chat form; `cars` = `[{x, y, z}]`, at most 8 stealable parked cars the game sees near the player) |
 | S→C | `rlsmpMarketResult` | `{text}` what the command would have said in chat (collected instead of sent to chat), then a fresh `rlsmpMarketState` |
 | S→C | `rlsmpMarketScout` | `{marks = [{x, y, z}], seconds}` after a bought scout tip: 2 to 3 stealable parked cars, shown as small spheres (no text) for `seconds` |
 
@@ -345,8 +345,8 @@ Weights are `{name = number >= 0}` (at most 64 entries, names up to 64 character
 |---|---|---|
 | S→C | `rlsmpTheftConfig` | `{enabled, seed, period, perMille, periodSeconds, radius}` sent when a player is loaded and again when the period changes |
 | C→S | `rlsmpTheftCheck` | `{id, value, year}` the player stands within `radius` m of a stealable parked car (`id` = local game id, only echoed back) |
-| S→C | `rlsmpTheftCan` | `{ok, id, method, label, seconds, noise}` or `{ok = false, id, err}`; the prompt is shown only on `ok` (at most one answer per second per player) |
-| S→C | `rlsmpTheftSteal` | `{method?}` from chat `/steal [method]`; `{stop = true}` from `/steal stop` |
+| S→C | `rlsmpTheftCan` | `{ok, id, method, label, seconds, noise, methods = [{method, label, seconds}]}` or `{ok = false, id, err}`; `methods` = every method the player has the tools for (the popup buttons); the key toast is shown only on `ok` (at most one answer per second per player) |
+| S→C | `rlsmpTheftSteal` | `{method?}` from the hidden chat fallback `/steal [method]`; `{stop = true}` from `/steal stop`. The popup does not use it: its button calls `rlsmp_theft.choose("steal:<method>")`, which sends `rlsmpTheftStart` |
 | C→S | `rlsmpTheftStart` | `{method?, value, year}` |
 | S→C | `rlsmpTheftGo` | `{ok, method, label, seconds, noise}` or `{ok = false, err}` |
 | C→S | `rlsmpTheftCancel` | `{}` the player walked away |
@@ -361,13 +361,13 @@ Weights are `{name = number >= 0}` (at most 64 entries, names up to 64 character
 |---|---|---|
 | C→S | `rlsmpTheftHint` | `{id, x, y}` the player is within `inspect.range` of a stealable parked car (the game asks again every 15 s while it stands there and nothing came back) |
 | S→C | `rlsmpTheftHint` | `{id, ok = true}` ONLY for a black market member whose server-side position is within range (+5 m) of x/y at a car `theft.stealableAt` picks. Everybody else gets no answer at all |
-| S→C | `rlsmpTheftInspectAsk` | `{}` from chat `/inspect`; the game picks the nearest parked car of ANY kind within range |
+| S→C | `rlsmpTheftInspectAsk` | `{}` from the hidden chat fallback `/inspect`; the game picks the nearest parked car of ANY kind within range. The popup's Inspect button does the same for the car it was opened for |
 | C→S | `rlsmpTheftInspect` | `{id, x, y, z, value, year}` |
 | S→C | `rlsmpTheftInspectGo` | `{ok, seconds}` the same for every player and car (`inspect.seconds`, 3) |
 | C→S | `rlsmpTheftInspectFinish` | `{}` the timer ran out (earlier than `seconds - 1` is ignored) |
 | S→C | `rlsmpTheftInspected` | `{id, found, text}` a member in range at a stealable car: tier, ways in with missing tools named, risk (alarm, GPS tracker, loud). Anyone else: `found = false` and the same "Just a parked car" text |
 
-The game shows the hint as a small toast ("type /inspect"), never a text label. One start per `inspect.cooldown` s. `rlsmpTheftConfig` also carries `inspect = {enabled, range}`.
+The game shows the hint as a small toast ("Press [key] to look closer", the key read from the player's bindings), never a text label. The key is the input action `rlsmpInteract` (default Y) and opens a small popup: Inspect, one button per steal method the player has tools for, Cancel. One start per `inspect.cooldown` s. `rlsmpTheftConfig` also carries `inspect = {enabled, range}`.
 Honest limit: the seed is still sent to every game (the prompt at 3 m works for everybody), so a modified client can work out the stealable cars itself; the server only never confirms it.
 
 - Stealable pick: every client hashes (`seed`, `period`, x and y of the parked car rounded down to a 4 m grid) with FNV-1a and takes the car when
@@ -386,7 +386,7 @@ Honest limit: the seed is still sent to every game (the prompt at 3 m works for 
 
 ## The fence (server `fence.lua`; client part is in `rlsmp/theft.lua`; needs `theft.enabled`)
 
-Chat (members only): `/fence` lists your stolen cars with prices; `/fence strip | sell | resell | gamble` sells the stolen car you stand next to.
+Players use the garage computer buttons ("Garage flow" below) or the Black Market app (stolen cars section, buttons Strip, Sell, Resell, Gamble for the stolen car they stand next to at the drop spot). Hidden developer fallback (only with `ui.chatCommands`): `/fence` lists the stolen cars, `/fence strip | sell | resell | gamble`.
 - Prices are shares of the car's value (from the theft record, capped at `fence.maxValue`): `strip` `stripRate` (0.30), `sell` `market.fenceCarRate` (0.35), `resell` `resellRate` (0.60, needs fake_plate + vin_plate + part_number, all used up), `gamble` `gambleBase` (0.45) + `gamblePerPaper` (0.075) per extra paper, using the papers the player has up to `gambleMaxPapers` (2), used up; `gambleBust` (0.30) chance of a trap: no money, car taken, `market.bust`. Good sales give `fence.rep[mode]` reputation.
 - The server checks: fence enabled and theft on, loaded player, black market member, the plate is in the player's OWN theft record, the latest `rlsmpPos` report is fresh and within `market.pickupRadius` of the active drop spot (`market.spotAt(now)`), not chased, wallet seeded, one sale at a time. The record leaves memory, money and papers change in ONE profile save, then `stolen.json` is written; a failed save undoes everything.
 
@@ -399,7 +399,7 @@ Chat (members only): `/fence` lists your stolen cars with prices; `/fence strip 
 
 ## Meetup selling (server `meetup.lua`, client `rlsmp/meetup.lua`; research in `docs/RESEARCH_MEETUP_SALE.md`)
 
-A Marketplace sale (and a black market car sale) is finished at a spot the SERVER picks. Chat: `/meetup` (sell the garage car you sit in), `/meetup black` (stolen car), `/meetup cancel`, `/meetup status`.
+A Marketplace sale (and a black market car sale) is finished at a spot the SERVER picks. A Marketplace sale starts from the RLS Marketplace app (hook on `sellVehicle`); a stolen car from the Black Market app button "Sell by meetup" (`rlsmp_meetup.startBlack()`), "Drop the meetup" cancels. Hidden developer fallback (only with `ui.chatCommands`): `/meetup`, `/meetup black`, `/meetup cancel`, `/meetup status`.
 - Server rules: spot from `meetup.spots` (empty = `market.dropSpots`), never the player's last spot, at least `minDistance` from them when possible; one open meetup per player; `cooldownSeconds` after a meetup, `cancelCooldownSeconds` after a cancel; expires after `expireMinutes`; arrival needs a fresh `rlsmpPos` within `serverRadius` and no chase.
 - Setup roll (made at creation, secret until arrival): a fully legal car never rolls (0). A plate in the theft records or flagged by `plateRecords`, and every black market car, rolls `illegalChance` / `blackChance` clamped to `minChance..maxChance`. A setup is `copsMin..copsMax` (1 to 2) police, no roadblocks; the sale does not happen and the player keeps the car (cooldown applies).
 - Money: `market` kind is paid by RLS locally with its own offer value (the server cannot check that number). `black` kind is paid by the server (`market.fenceQuote`, one profile save, record removed).
@@ -422,11 +422,11 @@ Config `fence.garage` (true) and `fence.garageCooldown` (20 s). No drop spot nee
 | Direction | Event | Body |
 |---|---|---|
 | C→S | `rlsmpGarageQuote` | `{plate?, model?, value?, year?}`; without a car it only asks for the item list. At most one per second |
-| S→C | `rlsmpGarageMenu` | `{ok, err?, items = [{name, label, count}], kind = "stolen" or "owned", plate, model, strip, fit = [{name, label}], fitted = [label]}`; `strip` is what stripping pays; `fit` lists papers the player owns and has not fitted |
-| C→S | `rlsmpGarageDo` | `{action = "strip", "fit:fake_plate", "fit:vin_plate" or "fit:part_number", plate, model, value, year, inventoryId?}` |
-| S→C | `rlsmpGarageResult` | `{ok, action, err?, pay?, takeCar?, inventoryId?, fitted?}`; on a paid strip the client removes the car (RLS `removeVehicle` for an owned car, `rlsmp_theft.removeStolenByPlate` for a stolen one). Followed by `rlsmpWalletSet` |
+| S→C | `rlsmpGarageMenu` | `{ok, err?, items = [{name, label, count}], kind = "stolen" or "owned", plate, model, strip, fit = [{name, label}], fitted = [label]}`; `strip` is what stripping pays; for stolen cars also `sell`, `resell` (null without all three papers), `gamble` (null without a paper) and `trap` (percent); `fit` lists papers the player owns and has not fitted |
+| C→S | `rlsmpGarageDo` | `{action = "strip", "sell", "resell", "gamble" (the last three for stolen cars only), "fit:fake_plate", "fit:vin_plate" or "fit:part_number", plate, model, value, year, inventoryId?}` |
+| S→C | `rlsmpGarageResult` | `{ok, action, err?, pay?, takeCar?, inventoryId?, fitted?}`; on a paid sale (or a gamble that ended in a trap, `takeCar` true with `ok` false) the client removes the car (RLS `removeVehicle` for an owned car, `rlsmp_theft.removeStolenByPlate` for a stolen one). Followed by `rlsmpWalletSet` |
 
-A plate that is in somebody else's theft record is refused. A stolen car's value comes from the server's record; an ordinary car's value is the client's, capped by `fence.maxValue`. Fitting uses the item up at once and sets `papers[name]` on the stolen record; `/fence resell` and `gamble` count fitted papers first.
+A plate that is in somebody else's theft record is refused. A stolen car's value comes from the server's record; an ordinary car's value is the client's, capped by `fence.maxValue`. Fitting uses the item up at once and sets `papers[name]` on the stolen record; resell and gamble count fitted papers first.
 
 ## Reserved prefixes for later phases
 
@@ -434,3 +434,9 @@ A plate that is in somebody else's theft record is refused. A stolen car's value
 - `rlsmpTraffic*`, `rlsmpPolice*` – Phase 3 (Claude B)
 - `rlsmpWorld*` – Phase 4
 - `rlsmpMarket*` – black market
+
+## Chat commands are hidden fallbacks (config `ui.chatCommands`, default false)
+
+`/steal`, `/inspect`, `/fence`, `/market`, `/meetup` and `/items` only work while `ui.chatCommands` is true (set it in `config.json`; nobody needs it). With it off the server answers one plain line ("That is done in the game menus now") and does nothing else. Registered with `net.onChat(name, fn, true)`. No toast, hint or text names them any more; `tests/no_chat_hints_test.lua` scans for that.
+
+Client input action `rlsmpInteract` (`core/input/actions/rlsmp.json`, default key Y in `settings/inputmaps/keyboard_rlsmp.json`) calls `rlsmp_theft.interact()`. See `docs/RESEARCH_THEFT_UI.md`.

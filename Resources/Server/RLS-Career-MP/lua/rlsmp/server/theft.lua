@@ -14,9 +14,9 @@
 --   * the witness roll, the report time (30-120 s if seen, ~10 min if not, faster with a GPS tracker), stolen[plate] records
 --     in stolen.json, and the plate flag when a car is reported (plateRecords.flag through M.reportHook).
 --
--- Flow (all documented in docs/PROTOCOL.md "Car theft"):
---   client rlsmpTheftCheck {value, year}            -> rlsmpTheftCan {ok, method, label, seconds, noise} (used for the prompt)
---   chat /steal [method]                            -> rlsmpTheftSteal {method} (the client starts at the car it stands at)
+-- Flow (all documented in docs/PROTOCOL.md "Car theft"). Players use the popup on the interact key (client rlsmp/theft.lua), never chat:
+--   client rlsmpTheftCheck {value, year}            -> rlsmpTheftCan {ok, method, label, seconds, noise, methods = [{method, label, seconds}]} (the popup choices)
+--   (developer fallback, only with ui.chatCommands) chat /steal [method] -> rlsmpTheftSteal {method}
 --   client rlsmpTheftStart {method, value, year}    -> rlsmpTheftGo {ok, method, seconds, noise} or {ok = false, err}
 --   client rlsmpTheftFinish {}  (timer ran out)     -> rlsmpTheftResult {ok} or {ok = false, err} (failure roll, items used)
 --   client rlsmpTheftDone {plate, model, color, value, year, x, y, z, witnesses}   (after the car was converted)
@@ -24,7 +24,7 @@
 --   server rlsmpTheftReported {plate}                (the car was reported stolen; nothing else to do on the client)
 -- Inspect hint (black market members only, config theft.inspect; the server answers only inside the real distance):
 --   client rlsmpTheftHint {id, x, y}                -> rlsmpTheftHint {id, ok = true} ONLY for a member in range at a stealable car (else silence)
---   chat /inspect                                   -> rlsmpTheftInspectAsk {} (the client picks the nearest parked car)
+--   (developer fallback, only with ui.chatCommands) chat /inspect -> rlsmpTheftInspectAsk {}; the popup's Inspect does the same on the client
 --   client rlsmpTheftInspect {id, x, y, value, year}-> rlsmpTheftInspectGo {ok, seconds}  (same for everybody)
 --   client rlsmpTheftInspectFinish {}               -> rlsmpTheftInspected {id, found, text}  (non-members and boring cars get the same text)
 
@@ -189,6 +189,19 @@ function M.choose(pid, value, year, wanted)
   return nil, "You need: " .. table.concat(labels, ", ")
 end
 
+-- Every method that works on this car and whose tools the player has, in order: list of {method, label, seconds}.
+function M.usable(pid, value, year)
+  local tier = M.tierFor(value, year)
+  local out = {}
+  for _, name in ipairs(M.methodsFor(tier)) do
+    if #M.missing(pid, name) == 0 then
+      local info = methodInfo(name, pid)
+      out[#out + 1] = {method = info.method, label = info.label, seconds = info.seconds}
+    end
+  end
+  return out
+end
+
 -- Witness roll: chance grows with nearby witnesses and noise. Returns seen (bool), chance.
 function M.witnessChance(witnesses, noise)
   local w = clamp(math.floor(n(witnesses, 0)), 0, math.max(0, math.floor(n(cfg.witnessCap, 5))))
@@ -301,7 +314,8 @@ local function onCheck(pid, d)
   lastCheck[pid] = now
   local info, err = M.choose(pid, d.value, d.year, nil)
   if info then
-    net.send(pid, "rlsmpTheftCan", {ok = true, id = n(d.id, nil), method = info.method, label = info.label, seconds = info.seconds, noise = info.noise})
+    net.send(pid, "rlsmpTheftCan", {ok = true, id = n(d.id, nil), method = info.method, label = info.label, seconds = info.seconds,
+      noise = info.noise, methods = M.usable(pid, d.value, d.year)})
   else
     net.send(pid, "rlsmpTheftCan", {ok = false, id = n(d.id, nil), err = err})
   end
@@ -547,8 +561,8 @@ function M.init(config, pluginRoot)
   net.onClient("rlsmpTheftHint", onHint)
   net.onClient("rlsmpTheftInspect", onInspect)
   net.onClient("rlsmpTheftInspectFinish", onInspectFinish)
-  net.onChat("steal", onSteal)
-  net.onChat("inspect", onInspectChat)
+  net.onChat("steal", onSteal, true)
+  net.onChat("inspect", onInspectChat, true)
   net.on("rlsmpTheftTick", M.tick)
   MP.CreateEventTimer("rlsmpTheftTick", 1000)
   util.info(enabled() and string.format("Car theft on: %d per mille of parked cars, new pick every %d min", M.payload().perMille, M.periodSeconds() // 60)

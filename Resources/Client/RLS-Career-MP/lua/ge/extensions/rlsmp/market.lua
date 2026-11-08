@@ -3,8 +3,9 @@
 --
 -- The server says where a paid package will be (rlsmpMarketDrop) and when it was collected (rlsmpMarketClear).
 -- This side only: a toast when an order is placed and when it is ready, a marker drawn at a ready spot when it is
--- near, and a "type /market pickup" toast inside 15 m (it also asks rlsmp_positions to report right away, so the
--- server's copy of our position is fresh). Pickup itself is the chat command; the server checks the position.
+-- near. Standing inside the 15 m circle collects the package by itself: we ask rlsmp_positions to report right away (fresh position for
+-- the server), send the pickup (same server action as the phone app's button), and the answer opens a small popup (vanilla guihook
+-- showConfirmationDialog, like rlsmp/garage.lua). The server checks the position and everything else. Retried every 10 s while inside.
 -- The phone app (ui/ui-vue/mods/rls_career_mp/phone/PhoneBlackMarket.vue) calls M.uiGet() about every 1.5 s and M.uiAct(...) on a tap; both
 -- only relay to the server (rlsmpMarketGet / rlsmpMarketAct) and hand back what the server last said. No rules here.
 -- Scout tip: the server answers rlsmpMarketScout {marks = [{x, y, z}], seconds}; each mark is a small sphere (no text) over the car until
@@ -16,6 +17,7 @@ local M = {}
 local net = require("rlsmp/lib/net")
 
 local NEAR = 15        -- meters (horizontal): "you are at the drop"
+local RETRY = 10       -- seconds between automatic pickup tries while inside
 local DRAW = 300       -- meters: draw the marker when closer than this
 local CHECK = 1        -- seconds between checks
 
@@ -23,6 +25,7 @@ local enabled = false
 local drops = {}       -- id -> {label, spot, x, y, z, readyAt, told, near}
 local clock, checkTimer = 0, 0
 local marks = {}       -- scout tip: {x, y, z, till}
+local autoPending = false  -- an automatic pickup was sent and its answer has not come yet
 
 local function toast(kind, msg)
   if guihooks then guihooks.trigger("toastrMsg", {type = kind, title = "Black market", msg = msg, config = {timeOut = 8000}}) end
@@ -116,9 +119,11 @@ function M.onUpdate(dtReal)
         toast("info", d.label .. " is waiting at " .. d.spot .. ".")
       end
       local inside = p ~= nil and dist2d(p, d) <= NEAR
-      if inside and not d.near then
-        toast("info", "You are at the drop. Type /market pickup in chat.")
-        if rlsmp_positions and rlsmp_positions.reportNow then rlsmp_positions.reportNow() end
+      if inside and (not d.near or clock - (d.tried or -RETRY) >= RETRY) then
+        if not d.near then toast("info", "You are at the drop. Collecting the package...") end
+        d.tried = clock
+        autoPending = true
+        M.uiAct("pickup")
       end
       d.near = inside
     end
@@ -136,10 +141,20 @@ local function onState(d)
   if type(d) == "table" then appState = d end
 end
 
+local function popup(text)
+  if guihooks then
+    guihooks.trigger("showConfirmationDialog", {text = text, buttons = {{label = "OK", luaCallback = "", enabled = true}}, class = "recoveryPrompt"})
+  end
+end
+
 local function onResult(d)
   if type(d) ~= "table" then return end
   appResultSeq = appResultSeq + 1
   appResult = {text = tostring(d.text or ""):sub(1, 300), seq = appResultSeq}
+  if autoPending then            -- the answer to an automatic pickup: a popup when it worked, one small toast when not
+    autoPending = false
+    if appResult.text:find("^Picked up") then popup(appResult.text) else toast("warning", appResult.text) end
+  end
 end
 
 -- What the app shows: {state = last rlsmpMarketState or nil, result = {text, seq} or nil, enabled}. Asks the server when the answer is stale.
@@ -157,10 +172,21 @@ function M.uiGet()
   return {enabled = true, state = appState, result = appResult}
 end
 
--- action: "buy" (item, n) | "pickup" | "invite" (who) | "accept" | "scout" (sends the stealable parked cars this game sees near us). The answer arrives as a result and a new state.
+-- action: "buy" (item, n) | "pickup" | "invite" (who) | "accept" | "scout" (sends the stealable parked cars this game sees near us) go to the server;
+-- "fence" (mode) | "meetup" (stolen car) | "meetupCancel" are done by the other client extensions. The answer arrives as a result and a new state.
 function M.uiAct(action, a, b)
   if not enabled then return false end
   if type(action) ~= "string" then return false end
+  if action == "fence" then
+    if rlsmp_theft and rlsmp_theft.fence then rlsmp_theft.fence(a) end
+    return true
+  elseif action == "meetup" then
+    if rlsmp_meetup and rlsmp_meetup.startBlack then rlsmp_meetup.startBlack() end
+    return true
+  elseif action == "meetupCancel" then
+    if rlsmp_meetup and rlsmp_meetup.cancel then rlsmp_meetup.cancel() end
+    return true
+  end
   local body = {a = action}
   if action == "buy" then body.item, body.n = tostring(a or ""), tonumber(b) or 1
   elseif action == "invite" then body.who = tostring(a or "")
@@ -174,7 +200,7 @@ function M.uiAct(action, a, b)
   return true
 end
 
-function M.onServerLeave() appState, appResult, askedAt, marks = nil, nil, -math.huge, {} end
+function M.onServerLeave() appState, appResult, askedAt, marks, autoPending = nil, nil, -math.huge, {}, false end
 
 function M.onExtensionLoaded()
   net.on("rlsmpMarketDrop", onDrop)

@@ -23,7 +23,15 @@
           <span class="tag" :class="{ ready: o.ready }">{{ o.ready ? 'Ready' : 'On the way' }}</span>
         </article>
         <button type="button" class="primary" bng-nav-item :disabled="busy || !anyReady" @click="act('pickup')">Collect here</button>
-        <small class="hint">You have to stand within about 20 m of the drop spot (marked in the world) and not be chased.</small>
+        <small class="hint">Packages are collected by themselves when you stop inside the marked circle at the drop spot (not while the police chase you). This button is only a backup.</small>
+      </section>
+
+      <section v-if="!problem && ownedList.length" class="card">
+        <h2>Your items</h2>
+        <article v-for="it in ownedList" :key="it.name" class="row">
+          <strong>{{ it.label }}</strong>
+          <span class="tag">{{ it.count > 1 ? '× ' + it.count : 'owned' }}</span>
+        </article>
       </section>
 
       <section v-if="problem" class="card center">
@@ -92,7 +100,24 @@
 
         <section class="card">
           <h2>Stolen cars</h2>
-          <p>Drive the car to {{ state.spot || 'the drop spot' }}, get out, stand next to it and type <strong>/fence</strong> in chat for the prices.</p>
+          <p v-if="!stolenList.length">You have no stolen car right now.</p>
+          <template v-else>
+            <article v-for="c in stolenList" :key="c.plate" class="row">
+              <div>
+                <strong>{{ c.model }} {{ c.plate }}</strong>
+                <small>Strip {{ money(c.strip) }} · Sell {{ money(c.sell) }} · Resell {{ c.resell ? money(c.resell) : 'needs 3 papers' }} · Gamble {{ c.gamble ? money(c.gamble) : 'needs a paper' }}</small>
+              </div>
+            </article>
+            <p class="hint">Drive to {{ state.spot || 'the drop spot' }}, get out and stand next to the car, then pick how to sell it. The garage computer offers the same without the drive. Gambling can end in a police trap.</p>
+            <div class="fence">
+              <button v-for="m in FENCE_MODES" :key="m.mode" type="button" class="primary" bng-nav-item :disabled="busy" @click="act('fence', m.mode)">{{ m.label }}</button>
+            </div>
+            <template v-if="state.meetup">
+              <p class="hint">A buyer waits at {{ state.meetup.spot }}.</p>
+              <button type="button" bng-nav-item :disabled="busy" @click="act('meetupCancel')">Drop the meetup</button>
+            </template>
+            <button v-else type="button" bng-nav-item :disabled="busy" @click="act('meetup')">Sell by meetup (sit in the car or stand next to it)</button>
+          </template>
         </section>
       </template>
 
@@ -134,6 +159,9 @@ const problem = computed(() => {
 const asList = v => (Array.isArray(v) ? v : [])
 const items = computed(() => asList(state.value && state.value.items))
 const orderList = computed(() => asList(state.value && state.value.orders))
+const ownedList = computed(() => asList(state.value && state.value.owned))
+const stolenList = computed(() => asList(state.value && state.value.stolen))
+const FENCE_MODES = [{ mode: 'strip', label: 'Strip' }, { mode: 'sell', label: 'Sell' }, { mode: 'resell', label: 'Resell' }, { mode: 'gamble', label: 'Gamble' }]
 const available = computed(() => items.value.filter(it => !it.locked))
 const locked = computed(() => items.value.filter(it => it.locked))
 const scoutLabel = computed(() => {
@@ -300,6 +328,8 @@ p { margin: 0 0 8px; font-size: 12px; line-height: 1.5; color: #cbd5e1; }
 .tag { font-size: 10px; padding: 3px 8px; border-radius: 999px; background: #2c2e3a; color: #cbd5e1; white-space: nowrap; }
 .tag.ready { background: #14532d; color: #bbf7d0; }
 .invite { display: flex; gap: 8px; }
+.fence { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.card > button { margin-top: 6px; }
 input { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 8px; border: 1px solid #3b3e4e; background: #0f1016; color: #f1f5f9; font: inherit; font-size: 12px; }
 button { min-height: 34px; padding: 7px 11px; border-radius: 9px; border: 1px solid #3b3e4e; background: #23252f; color: #f1f5f9; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
 button.primary { background: #f97316; border-color: #f97316; color: #1a0e02; }

@@ -10,7 +10,8 @@
 --      ok (market)  -> we run the held sale with RLS's own sellVehicle (the money flows through RLS and the wallet as for any sale)
 --      ok (black)   -> the server paid; we delete the stolen car
 --      setup        -> 1 or 2 police chase us (RLS setPursuitMode on the nearest units); the sale does not happen
--- Entry points without the hook: chat /meetup (current garage car) and /meetup black (stolen car you drive or stand next to).
+-- Entry points: the Marketplace app (the hook above) for garage cars, and the Black Market phone app button for a stolen car you drive or stand
+-- next to (rlsmp_market.uiAct "meetup" -> M.startBlack, "meetupCancel" -> M.cancel). Hidden developer chat /meetup [black] does the same.
 
 local M = {}
 
@@ -101,7 +102,7 @@ end
 local function wrapper(inventoryId, price, ...)
   if not enabled or bypass or not L.fromMarketplace(stackSources()) then return original(inventoryId, price, ...) end
   if meetup or held then
-    toast("warning", "You already have a meetup open. Finish it or type /meetup cancel.")
+    toast("warning", "You already have a meetup open. Finish it or drop it in the Black Market app.")
     return false
   end
   if not holdSale(inventoryId, price) then return original(inventoryId, price, ...) end   -- unknown car: do not get in the way
@@ -238,6 +239,8 @@ local function onAsk(d)
   if not ok or id == nil then return toast("warning", "Sit in the garage car you want to sell.") end
   if not holdSale(id, nil) then toast("warning", "RLS does not know that car.") end
 end
+
+function M.startBlack() onAsk({kind = "black"}) end
 
 function M.cancel() net.send("rlsmpMeetupCancel", {}) end
 

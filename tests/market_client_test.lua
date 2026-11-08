@@ -8,7 +8,8 @@ local handlers, toasts, drawn, reports = {}, {}, 0, 0
 local scoutAsked
 TriggerServerEvent = function() end
 AddEventHandler = function(name, fn) handlers[name] = fn end
-guihooks = {trigger = function(_, t) toasts[#toasts + 1] = t.msg end}
+local dialogs = {}
+guihooks = {trigger = function(name, t) if name == "showConfirmationDialog" then dialogs[#dialogs + 1] = t else toasts[#toasts + 1] = t.msg end end}
 vec3 = function(x, y, z) return {x = x, y = y, z = z} end
 ColorF = function() return {} end
 ColorI = function() return {} end
@@ -55,14 +56,14 @@ run(1)
 check(drawn > 0 and #toasts == n and reports == 0, "near (under 300 m): marker drawn, no pickup hint yet")
 at = {x = 20, y = 25, z = 9}
 run(1.1)
-check(lastToast():find("/market pickup") and reports == 1, "inside 15 m: pickup hint and a fresh position report")
+check(lastToast():find("Collecting") and reports == 1, "inside 15 m: collecting toast and a fresh position report")
 run(5)
-check(#toasts == n + 1 and reports == 1, "hint once while staying")
+check(#toasts == n + 1 and reports == 1, "toast once while staying")
 at = {x = 100, y = 120, z = 5}
 run(1.1)
 at = {x = 12, y = 20, z = 5}
 run(1.1)
-check(#toasts == n + 2 and reports == 2, "hint again after leaving and coming back")
+check(#toasts == n + 2 and reports == 2, "toast again after leaving and coming back")
 
 hasCar = false
 run(3)
@@ -124,6 +125,30 @@ market.uiAct("pickup")
 check(sentApp[#sentApp].data.a == "pickup" and reports == reportsBefore + 1, "app: pickup asks for a fresh position report")
 market.uiAct("accept")
 check(sentApp[#sentApp].data.a == "accept", "app: accept")
+
+-- Automatic pickup: the answer to it opens a popup (not a chat line); the phone app's own pickup does not
+local nd = #dialogs
+server("rlsmpMarketResult", {text = "Picked up: Screwdriver."})
+check(#dialogs == nd, "app pickup answer: no popup")
+server("rlsmpMarketDrop", {id = "o9", label = "Plate", spot = "Yard", x = 5000, y = 5000, z = 0, readyIn = 0})
+at = {x = 5000, y = 5000, z = 0}
+market.onUpdate(0.1) market.onUpdate(1.1)
+check(sentApp[#sentApp].data.a == "pickup", "inside the circle: pickup sent by itself")
+server("rlsmpMarketResult", {text = "Picked up: Fake plate."})
+check(#dialogs == nd + 1 and dialogs[#dialogs].text:find("Picked up"), "automatic pickup answer: a small popup")
+check(#dialogs[#dialogs].buttons == 1 and dialogs[#dialogs].buttons[1].label == "OK", "popup has one OK button")
+server("rlsmpMarketClear", {id = "o9"})
+
+-- Buttons done by other extensions
+local fenced, meetupAct
+rlsmp_theft = {fence = function(m) fenced = m end}
+rlsmp_meetup = {startBlack = function() meetupAct = "black" end, cancel = function() meetupAct = "cancel" end}
+local nsent = #sentApp
+market.uiAct("fence", "resell")
+market.uiAct("meetup")
+check(fenced == "resell" and meetupAct == "black" and #sentApp == nsent, "app: fence and meetup go to the other extensions, nothing to the server")
+market.uiAct("meetupCancel")
+check(meetupAct == "cancel", "app: meetup can be dropped")
 check(market.uiAct(42) == false and market.uiAct(nil) == false, "app: a non-text action is refused here")
 server("rlsmpMarketState", "garbage")
 check(market.uiGet().state.rep == 12, "app: a bad state message changes nothing")

@@ -3,21 +3,24 @@
 --
 -- 1. The server sends a seed per period. A parked car of THIS game is stealable when lib/theft.stealable(seed, period, perMille,
 --    position) says so (the same in every game for the same spot).
--- 2. Walking up to a stealable car (within `radius` m) asks the server whether we own a method that works on it
---    (rlsmpTheftCheck {id, value, year}); only a yes shows the prompt ("type /steal").
--- 3. /steal (chat; the server sends rlsmpTheftSteal) asks to start (rlsmpTheftStart). rlsmpTheftGo gives the time and noise.
---    A toast shows progress every second; walking away cancels (rlsmpTheftCancel). Noise raises a local flag (M.noise()).
+-- 2. Walking up to a stealable car (within `radius` m) asks the server which methods we have the tools for
+--    (rlsmpTheftCheck {id, value, year} -> rlsmpTheftCan {methods}); a yes shows one small toast "Press [key] ...".
+-- 3. The key is our input action rlsmpInteract (core/input/actions/rlsmp.json, M.interact). It opens a small popup (vanilla guihook
+--    showConfirmationDialog, the same one rlsmp/garage.lua uses) with: Inspect, one button per steal method we have tools for, Cancel.
+--    A button calls M.choose("inspect") or M.choose("steal:<method>"), which asks to start (rlsmpTheftStart). rlsmpTheftGo gives the
+--    time and noise. A toast shows progress every second; walking away cancels (rlsmpTheftCancel). Noise raises a local flag (M.noise()).
+--    Nothing needs chat. The server's chat /steal is only a hidden developer fallback (same code path).
 -- 4. When the time is up we ask for the result (rlsmpTheftFinish): the server rolls the failure chance and uses up papers.
 -- 5. Success: the parked car is turned into a normal driveable car the way docs/RESEARCH_PLATES_THEFT.md describes (snapshot,
 --    delete the parked object, core_vehicles.spawnNewVehicle with RLS's own parked-car spawn options, ignoreParking, never
 --    isParked, simple_traffic mapped to the real model, off the walk blacklist), vehicleGuard is told this id is ours to enter,
 --    the player gets in, and the server hears about it (rlsmpTheftDone) and decides when it is reported.
--- The car is NOT put in the garage inventory: selling and stripping go through the fence (/fence, server/fence.lua) using M.stolenCars().
+-- The car is NOT put in the garage inventory: selling and stripping go through the fence (garage computer or Black Market app, server/fence.lua) using M.stolenCars().
 -- rlsmpTheftReported needs nothing here: the police find the car by its plate (plate reading).
 -- 6. Inspect hint (black market members only, decided by the SERVER): within cfg.inspect.range of a stealable parked car we ask
---    (rlsmpTheftHint); only a member in range gets an answer, then one small toast says "type /inspect". /inspect (rlsmpTheftInspectAsk)
---    works on the nearest parked car of ANY kind, takes a few seconds and the server answers with text; boring cars and non-members
---    get the same wait and the plain "nothing stands out" text, so the answer never tells who is a member.
+--    (rlsmpTheftHint); only a member in range gets an answer, then one small toast says "Press [key] to look closer". The popup's Inspect
+--    works on the nearest parked car of ANY kind (the popup opens for any parked car in range, so it never tells who is a member), takes
+--    a few seconds and the server answers with text; boring cars and non-members get the same wait and the plain "nothing stands out" text.
 -- Untested in-game. Log tag RLSMP-THEFT.
 
 local M = {}
@@ -43,6 +46,8 @@ local action                   -- {id, info, method, seconds, elapsed, startPos,
 local inspectAct              -- {id, seconds, elapsed, startPos, lastShown, finishing}
 local hintAsked, hinted = {}, {}   -- parked car id -> time we asked / spot key we got a hint for
 local pendingEnter             -- {id, at}
+local popupCar                 -- parked car id the open popup is about
+local toldKey = {}             -- parked car id -> spot key we showed the key toast for
 local stolen = {}              -- new vehicle id -> {vehId, plate, model, config, color, value, year, t, reported}
 local noiseLevel, noiseUntil = 0, -1
 
@@ -50,6 +55,20 @@ local function toast(kind, msg, ms)
   if guihooks then guihooks.trigger("toastrMsg", {type = kind, title = "Car theft", msg = msg, config = {timeOut = ms or 4000}}) end
 end
 local function say(level, msg) log(level, TAG, msg) end
+
+-- Name of the key bound to our interact action, read the way RLS's guide.lua reads the phone key (core_input_bindings.bindings).
+local ACTION = "rlsmpInteract"
+local function keyName()
+  local devices = core_input_bindings and core_input_bindings.bindings
+  for _, device in ipairs(type(devices) == "table" and devices or {}) do
+    local list = device.contents and device.contents.bindings
+    for _, b in ipairs(type(list) == "table" and list or {}) do
+      if b.action == ACTION and type(b.control) == "string" and b.control ~= "" then return b.control:upper() end
+    end
+  end
+  return "Y"
+end
+M.keyName = keyName
 
 function M.enable(on)
   enabled = on == true
@@ -361,7 +380,7 @@ local function onConfig(d)
   cfg = {enabled = d.enabled == true, seed = tonumber(d.seed) or 0, period = tonumber(d.period) or 0,
     perMille = tonumber(d.perMille) or 0, periodSeconds = tonumber(d.periodSeconds) or 3600, radius = tonumber(d.radius) or 3,
     inspect = type(d.inspect) == "table" and {enabled = d.inspect.enabled == true, range = tonumber(d.inspect.range) or 15} or nil}
-  if was ~= cfg.period then spots, target, hintAsked, hinted = {}, nil, {}, {} end
+  if was ~= cfg.period then spots, target, hintAsked, hinted, toldKey = {}, nil, {}, {}, {} end
   if not cfg.enabled then
     -- switched off from the menu: drop the prompt, and stop a steal that is running (the server refuses the finish anyway)
     if action then net.send("rlsmpTheftCancel", {}) toast("warning", "Car theft was switched off.") end
@@ -375,7 +394,11 @@ local function onCan(d)
   target.can = d.ok == true
   if not target.can then return end
   target.method, target.label, target.seconds = d.method, d.label, d.seconds
-  toast("info", string.format("This car could be yours. Type /steal (%s, %s s).", tostring(d.label), tostring(d.seconds)), 6000)
+  target.methods = type(d.methods) == "table" and d.methods or {{method = d.method, label = d.label, seconds = d.seconds}}
+  local c = spots[target.id]
+  if c and toldKey[target.id] == c.key then return end
+  if c then toldKey[target.id] = c.key end
+  toast("info", string.format("This car could be yours. Press [%s] to steal or look it over.", keyName()), 6000)
 end
 
 local function onHint(d)
@@ -383,23 +406,28 @@ local function onHint(d)
   local c = spots[d.id]
   if not c or hinted[d.id] == c.key then return end
   hinted[d.id] = c.key
-  toast("info", "A parked car nearby may be an easy mark. Type /inspect to look closer.", 5000)
+  toast("info", string.format("A parked car nearby may be an easy mark. Press [%s] to look closer.", keyName()), 5000)
 end
 
--- /inspect: the nearest parked car within range, whatever it is.
-local function onInspectAsk()
+-- Inspect: the parked car the popup was opened for (or the nearest one within range), whatever it is.
+local function startInspect(carId)
   local I = active() and cfg.inspect
   if not (I and I.enabled) then return end
   if action or inspectAct then return toast("warning", "You are already busy.", 2500) end
   local o, pos = walker()
   if not pos then return toast("warning", "Get out of your car first.", 3000) end
-  local c = parkedNear(pos, I.range)[1]
+  local c
+  for _, k in ipairs(parkedNear(pos, I.range)) do
+    if carId == nil or k.id == carId then c = k break end
+  end
   if not c then return toast("info", "No parked car close enough to look at.", 3000) end
   local info = M.carInfo(objOf(c.id)) or {}
   if rlsmp_positions and rlsmp_positions.reportNow then rlsmp_positions.reportNow() end
   inspectAct = {id = c.id, seconds = 0, elapsed = 0, startPos = pos, lastShown = -1, finishing = false, waiting = true}
   net.send("rlsmpTheftInspect", {id = c.id, x = c.pos.x, y = c.pos.y, z = c.pos.z, value = info.value or 0, year = info.year})
 end
+
+local function onInspectAsk() startInspect(nil) end   -- the server's developer chat fallback
 
 local function onInspectGo(d)
   if not inspectAct then return end
@@ -412,20 +440,67 @@ local function onInspected(d)
   toast(d.found and "warning" or "info", tostring(d.text or ""):sub(1, 400), d.found and 14000 or 4000)
 end
 
-local function onSteal(d)
+local function startSteal(method)
   if not active() then return end
-  if d.stop then
-    if action then action = nil toast("info", "Stopped.") end
-    return
-  end
   if action then return toast("warning", "You are already at it.") end
+  if inspectAct then return toast("warning", "You are already busy.", 2500) end
   local _, pos = walker()
   if not pos then return toast("warning", "Get out of your car first.") end
   if not (target and target.can and objOf(target.id) and T.dist(pos, posOf(objOf(target.id))) <= radius() + 0.5) then
     return toast("warning", "There is no car you can steal right here.")
   end
   target.startPos = pos
-  net.send("rlsmpTheftStart", {method = d.method or target.method, value = target.info.value, year = target.info.year})
+  net.send("rlsmpTheftStart", {method = method or target.method, value = target.info.value, year = target.info.year})
+end
+
+local function onSteal(d)   -- the server's developer chat fallback
+  if d.stop then
+    if action then action = nil toast("info", "Stopped.") end
+    return
+  end
+  startSteal(d.method)
+end
+
+-- The interact key (input action rlsmpInteract) ----------------------------------------------------------
+local function button(label, act)
+  -- `act` is checked again in M.choose, so building Lua text from it is safe.
+  return {label = label, luaCallback = string.format("rlsmp_theft.choose(%q)", act), enabled = true}
+end
+
+function M.interact()
+  if not active() then return end
+  if action or inspectAct then return toast("warning", "You are already busy.", 2500) end
+  local _, pos = walker()
+  if not pos then return toast("warning", "Get out of your car first.", 3000) end
+  local I = cfg.inspect
+  local c = parkedNear(pos, (I and I.range) or radius())[1]
+  if not c then return toast("info", "No parked car close enough.", 3000) end
+  local buttons = {}
+  if I and I.enabled then buttons[#buttons + 1] = button("Inspect", "inspect") end
+  local t = target
+  if t and t.id == c.id and t.can and t.methods and T.dist(pos, c.pos) <= radius() + 0.5 then
+    for _, m in ipairs(t.methods) do
+      if type(m.method) == "string" and m.method:match("^[%a_]+$") then
+        buttons[#buttons + 1] = button(string.format("Steal: %s (%s s)", tostring(m.label or m.method), tostring(m.seconds or "?")), "steal:" .. m.method)
+      end
+    end
+  end
+  if #buttons == 0 then return toast("info", "Nothing to do with this car.", 3000) end
+  buttons[#buttons + 1] = {label = "Cancel", luaCallback = "", enabled = true}
+  popupCar = c.id
+  local info = M.carInfo(objOf(c.id))
+  if guihooks then
+    guihooks.trigger("showConfirmationDialog", {text = "Parked car" .. (info and info.model and (": " .. tostring(info.model)) or ""), buttons = buttons, class = "recoveryPrompt"})
+  end
+  say("I", "popup for car " .. tostring(c.id) .. " with " .. #buttons .. " buttons")
+end
+
+-- Called by a popup button. Only our own fixed words are accepted.
+function M.choose(act)
+  if type(act) ~= "string" or not active() then return end
+  if act == "inspect" then return startInspect(popupCar) end
+  local method = act:match("^steal:([%a_]+)$")
+  if method then return startSteal(method) end
 end
 
 local function onGo(d)
@@ -456,7 +531,7 @@ local function onReported(d)
 end
 
 -- The fence (server/fence.lua) ------------------------------------------------------------------------
--- /fence <mode> makes the server send rlsmpFenceAsk. The player must be on foot next to one of the stolen cars; we name it by its plate.
+-- The Black Market app (M.fence) or the server (developer chat) starts a sale: rlsmpFenceAsk. The player must be on foot next to one of the stolen cars; we name it by its plate.
 -- The server checks everything (spot, papers, ownership, money). Only when its answer says takeCar do we delete the car.
 local FENCE_REACH = 8       -- metres from the player to the car
 local fenceCarId
@@ -492,6 +567,7 @@ end
 
 local function onFenceAsk(d)
   if not active() then return end
+  if type(d) ~= "table" or type(d.mode) ~= "string" then return end
   local _, pos = walker()
   if not pos then return toast("warning", "Get out of the car and stand next to it first.", 5000) end
   local rec = M.nearestStolen(pos, FENCE_REACH)
@@ -500,6 +576,11 @@ local function onFenceAsk(d)
   if rlsmp_positions and rlsmp_positions.reportNow then rlsmp_positions.reportNow() end   -- the server wants a fresh position for the drop spot check
   say("I", string.format("fence %s: car %s plate %s", tostring(d.mode), tostring(rec.vehId), tostring(rec.plate)))
   net.send("rlsmpFenceSell", {plate = rec.plate, mode = d.mode})
+end
+
+-- The Black Market phone app button (rlsmp_market.uiAct "fence"): same as the server's ask, started here. Mode is one of our fixed words.
+function M.fence(mode)
+  if mode == "strip" or mode == "sell" or mode == "resell" or mode == "gamble" then onFenceAsk({mode = mode}) end
 end
 
 local function onFenceResult(d)
@@ -529,7 +610,7 @@ end
 
 function M.onServerLeave()
   cfg, target, action, inspectAct, pendingEnter = nil, nil, nil, nil, nil
-  spots, stolen, hintAsked, hinted = {}, {}, {}, {}
+  spots, stolen, hintAsked, hinted, toldKey, popupCar = {}, {}, {}, {}, {}, nil
   T.clearConverted()
 end
 

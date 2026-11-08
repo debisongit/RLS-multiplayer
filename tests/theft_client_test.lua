@@ -8,7 +8,8 @@ function setExtensionUnloadMode() end
 local sent, handlers, toasts = {}, {}, {}
 TriggerServerEvent = function(name, data) sent[#sent + 1] = {name = name, data = json.decode(data)} end
 AddEventHandler = function(name, fn) handlers[name] = fn end
-guihooks = {trigger = function(_, t) toasts[#toasts + 1] = t.msg end}
+local dialogs = {}
+guihooks = {trigger = function(name, t) if name == "showConfirmationDialog" then dialogs[#dialogs + 1] = t else toasts[#toasts + 1] = t.msg end end}
 vec3 = function(x, y, z) if type(x) == "table" then return x end return {x = x, y = y, z = z} end
 quatFromDir = function() return {x = 0, y = 0, z = 0, w = 1} end
 createVehiclePaint = function(c) return {baseColor = c} end
@@ -140,7 +141,7 @@ server("rlsmpTheftConfig", {enabled = true, seed = seed, period = 3, perMille = 
 walkerObj.pos = {x = 1.5, y = 0, z = 0}
 step(2)
 server("rlsmpTheftCan", {ok = true, id = 10, method = "window_screwdriver", label = "Smash", seconds = 3})
-check(toasts[#toasts]:find("/steal"), "tools owned: prompt shown")
+check(toasts[#toasts]:find("Press %[Y%]") and not toasts[#toasts]:find("/"), "tools owned: key toast shown (no chat command)")
 playerId = 10   -- (in a car: no prompt or check)
 local before = count("rlsmpTheftCheck")
 theft.onServerLeave() theft.enable(true)
@@ -154,8 +155,19 @@ server("rlsmpTheftCan", {ok = true, id = 10, method = "window_screwdriver", labe
 -- 3. The guard refuses the parked car before conversion
 check(guard.isBlocked(10) == true, "parked car still blocked")
 
--- 4. /steal, progress, walk away cancels
-server("rlsmpTheftSteal", {})
+-- 4. the key opens a popup, a steal button starts it, progress, walk away cancels
+server("rlsmpTheftCan", {ok = true, id = 10, method = "window_screwdriver", label = "Smash", seconds = 3,
+  methods = {{method = "window_screwdriver", label = "Smash", seconds = 3}, {method = "other_way", label = "Quiet way", seconds = 9}}})
+local nd = #dialogs
+theft.interact()
+local dlg = dialogs[#dialogs]
+check(#dialogs == nd + 1 and #dlg.buttons == 3 and dlg.buttons[3].label == "Cancel",
+  "interact: popup with one button per method and Cancel (inspect is off in this config)")
+check(dlg.buttons[1].label:find("Smash") and dlg.buttons[1].label:find("3 s") and dlg.buttons[2].label:find("Quiet"), "interact: steal buttons name method and time")
+check(dlg.buttons[1].luaCallback == 'rlsmp_theft.choose("steal:window_screwdriver")' and dlg.buttons[3].luaCallback == "", "interact: callbacks are our fixed words, Cancel does nothing")
+theft.choose("steal:bad name;os.exit()")
+check(count("rlsmpTheftStart") == 0, "choose: a bad word is ignored")
+theft.choose("steal:window_screwdriver")
 local st = last("rlsmpTheftStart")
 check(st and st.method == "window_screwdriver" and st.value == 6000 and st.year == 1988, "start asked")
 server("rlsmpTheftGo", {ok = true, method = "window_screwdriver", label = "Smash", seconds = 3, noise = 0.9})
@@ -166,7 +178,7 @@ walkerObj.pos = {x = 6, y = 0, z = 0}
 step(1)
 check(last("rlsmpTheftCancel") and theft._action() == nil, "walked away: cancelled")
 walkerObj.pos = {x = 1.5, y = 0, z = 0}
-server("rlsmpTheftSteal", {})
+server("rlsmpTheftSteal", {})   -- the server's hidden developer fallback still works
 server("rlsmpTheftGo", {ok = true, method = "window_screwdriver", label = "Smash", seconds = 3, noise = 0.9})
 step(5, 0.5)
 check(count("rlsmpTheftFinish") == 0, "not done before the time")
@@ -293,10 +305,13 @@ check(count("rlsmpTheftHint") == 1, "hint: not asked again within 15 s")
 local nt9 = #toasts
 check(nt9 == #toasts, "hint: silence until the server answers")
 server("rlsmpTheftHint", {ok = true, id = 20})
-check(toasts[#toasts]:find("/inspect") and #toasts == nt9 + 1, "hint: the server said yes, one small toast")
+check(toasts[#toasts]:find("Press %[Y%]") and not toasts[#toasts]:find("/") and #toasts == nt9 + 1, "hint: the server said yes, one small toast")
 server("rlsmpTheftHint", {ok = true, id = 20})
 check(#toasts == nt9 + 1, "hint: shown once per car")
-server("rlsmpTheftInspectAsk", {})
+theft.interact()
+dlg = dialogs[#dialogs]
+check(#dlg.buttons == 2 and dlg.buttons[1].label == "Inspect" and dlg.buttons[2].label == "Cancel", "interact near a boring-for-us parked car: Inspect and Cancel only")
+theft.choose("inspect")
 local iq = last("rlsmpTheftInspect")
 check(count("rlsmpTheftInspect") == 1 and iq.id == 20 and iq.value == 6000 and iq.year == 1988 and iq.x == spotA.x, "inspect: asks about the nearest parked car with value and year")
 step(8, 0.5)
@@ -324,4 +339,10 @@ local hc = count("rlsmpTheftHint")
 step(3)
 server("rlsmpTheftInspectAsk", {})
 check(count("rlsmpTheftHint") == hc and count("rlsmpTheftInspect") == ic, "inspect: switched off, nothing asked")
+-- The fence from the phone app: only our fixed words
+theft.onServerLeave() theft.enable(true)
+server("rlsmpTheftConfig", {enabled = true, seed = seed, period = 3, perMille = 150, periodSeconds = 3600, radius = 3})
+local fq = count("rlsmpFenceSell")
+theft.fence("rm -rf")
+check(count("rlsmpFenceSell") == fq, "fence: unknown mode ignored")
 print("theft_client_test: " .. passed .. " checks passed")

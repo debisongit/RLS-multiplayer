@@ -17,6 +17,7 @@ util.setJsonCodec(json)
 local now = 1800 * 1000
 util.setClock(function() return now end)
 onInit()
+RLSMP.config.ui.chatCommands = true   -- these tests drive the hidden chat fallbacks (the default is off)
 local cfg = RLSMP.config
 local sessions = require("rlsmp.server.sessions")
 local items = require("rlsmp.server.items")
@@ -67,7 +68,7 @@ check(fire("onConsoleInput", "rlsmp market grant ann"):find("member"), "grant an
 check(market.isMember(1) and market.rep(1) == cfg.market.founderRep, "founder rep")
 check(disk(1).market.member == true, "grant saved")
 say(1, "/market")
-check(last(1):find("Commands"), "member help")
+check(last(1):find("Black Market app"), "member help")
 check(chat[#chat - 1][2]:find("Reputation 10%. Invites left 3"), "help shows rep and invites (2 + 1 per 10 rep)")
 
 -- Invites ------------------------------------------------------------------------------------------
@@ -146,12 +147,12 @@ check(last(2):find("next at 10"), "list hints at the next tier")
 say(2, "/market buy key_programmer")
 check(last(2):find("needs reputation 10") and profile(2).ledger.money == 100000, "rep gate")
 say(2, "/market buy")
-check(last(2):find("Usage"), "buy without item")
+check(last(2):find("Pick the item"), "buy without item")
 say(2, "/market buy magic_wand")
-check(last(2):find("Usage"), "unknown item")
+check(last(2):find("Pick the item"), "unknown item")
 cfg.market.tiers.magic_wand = {price = 1, minRep = 0}
 say(2, "/market buy magic_wand")
-check(last(2):find("Usage") and market.offer("magic_wand") == nil, "a tier entry that is not in items.CATALOG is never sold")
+check(last(2):find("Pick the item") and market.offer("magic_wand") == nil, "a tier entry that is not in items.CATALOG is never sold")
 cfg.market.tiers.magic_wand = nil
 say(2, "/market buy screwdriver 2")
 check(last(2):find("one lasts forever"), "tools: one only")
@@ -160,10 +161,10 @@ check(last(2):find("1 to 10"), "count limit")
 say(2, "/market buy fake_plate 0")
 check(last(2):find("1 to 10"), "count zero")
 say(2, "/market buy fake_plate -1")
-check(last(2):find("Usage"), "negative count")
+check(last(2):find("Pick the item"), "negative count")
 cfg.market.tiers.window_punch.off = true
 say(2, "/market buy window_punch")
-check(last(2):find("Usage"), "switched-off item")
+check(last(2):find("Pick the item"), "switched-off item")
 cfg.market.tiers.window_punch.off = nil
 profile(3).ledger.money = 100
 say(3, "/market buy screwdriver")
@@ -338,6 +339,14 @@ check(screw and screw.price == 400 and screw.locked == false and screw.durable =
 local lockedRow
 for _, it in ipairs(st.items) do if it.name == "jammer" then lockedRow = it end end
 check(lockedRow and lockedRow.locked == true and lockedRow.minRep == 50, "app: a high tier item shows as locked")
+check(type(st.owned) == "table" and st.stolen ~= nil and st.meetup == nil, "app: state carries the player's items, stolen cars and no meetup")
+package.loaded["rlsmp.server.fence"] = {summary = function() return {{plate = "AB 1", model = "covet", strip = 1, sell = 2}} end}
+package.loaded["rlsmp.server.meetup"] = {openOf = function() return {spot = {name = "Yard"}, kind = "black"} end}
+app(5, "rlsmpMarketGet")
+st = lastSent(5, "rlsmpMarketState")
+check(st.stolen[1].plate == "AB 1" and st.meetup.spot == "Yard", "app: stolen cars and an open meetup are shown")
+package.loaded["rlsmp.server.fence"] = nil
+package.loaded["rlsmp.server.meetup"] = nil
 -- buying through the app: same rules, same money, the text comes back instead of chat
 local chats = chatCount()
 app(5, "rlsmpMarketAct", {a = "buy", item = "screwdriver", n = 1})
@@ -351,7 +360,7 @@ check(lastSent(5, "rlsmpMarketResult").text:find("already have"), "app: refusals
 app(5, "rlsmpMarketAct", {a = "buy", item = "jammer", n = 1})
 check(lastSent(5, "rlsmpMarketResult").text:find("reputation"), "app: the rep gate holds")
 app(5, "rlsmpMarketAct", {a = "buy", item = "nonsense", n = 99999})
-check(lastSent(5, "rlsmpMarketResult").text:find("Usage"), "app: junk item is refused")
+check(lastSent(5, "rlsmpMarketResult").text:find("Pick the item"), "app: junk item is refused")
 check(profile(5).ledger.money == 99600, "app: junk charged nothing")
 app(5, "rlsmpMarketAct", {a = "teleport"})
 local before = lastSent(5, "rlsmpMarketResult")

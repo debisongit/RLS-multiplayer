@@ -17,6 +17,7 @@ util.setJsonCodec(json)
 local now = 1000000
 util.setClock(function() return now end)
 onInit()
+RLSMP.config.ui.chatCommands = true   -- these tests drive the hidden chat fallbacks (the default is off)
 local passed = 0
 local function check(c, m) if not c then error("FAIL: " .. m, 2) end passed = passed + 1 end
 
@@ -108,6 +109,7 @@ now = now + 1
 client(1, "rlsmpTheftCheck", {id = 5, value = 4000, year = 1988})
 local can = last(1, "rlsmpTheftCan")
 check(can.ok and can.method == "window_screwdriver" and can.seconds == 8, "tools owned: prompt with method and time")
+check(#can.methods == 1 and can.methods[1].method == "window_screwdriver" and can.methods[1].seconds == 8, "the popup list holds the methods the player has tools for")
 client(1, "rlsmpTheftStart", {method = "signal_cloner", value = 4000, year = 1988})
 check(last(1, "rlsmpTheftGo").ok == false and last(1, "rlsmpTheftGo").err:find("does not work"), "a method of another tier is refused")
 client(1, "rlsmpTheftStart", {method = "teleport", value = 4000, year = 1988})
@@ -336,6 +338,16 @@ hint(1, yes)
 fire("onChatMessage", 1, "ann", "/inspect")
 check(got(1, "rlsmpTheftInspectAsk") == 1, "inspect: switched off, no ask")
 cfg.theft.inspect.enabled = true
+
+-- The chat commands are hidden developer fallbacks: off unless config ui.chatCommands
+RLSMP.config.ui.chatCommands = false
+local askedBefore = got(1, "rlsmpTheftInspectAsk")
+local chatBefore = #chat
+fire("onChatMessage", 1, "ann", "/inspect")
+fire("onChatMessage", 1, "ann", "/steal")
+check(got(1, "rlsmpTheftInspectAsk") == askedBefore and got(1, "rlsmpTheftSteal") == 0 and #chat == chatBefore + 2, "ui.chatCommands off: /inspect and /steal do nothing")
+check(not chat[#chat][2]:find("/"), "the refusal text names no command")
+RLSMP.config.ui.chatCommands = true
 
 -- No plateRecords: the hook is quiet
 package.loaded["rlsmp.server.plateRecords"] = nil
