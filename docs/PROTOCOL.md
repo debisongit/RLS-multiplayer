@@ -446,6 +446,24 @@ Config `fence.garage` (true) and `fence.garageCooldown` (20 s). No drop spot nee
 
 A plate that is in somebody else's theft record is refused. A stolen car's value comes from the server's record; an ordinary car's value is the client's, capped by `fence.maxValue`. Fitting uses the item up at once and sets `papers[name]` on the stolen record; resell and gamble count fitted papers first.
 
+## Fake plates on your own cars (server `fakePlates.lua`, client `rlsmp/fakePlate.lua` + `lib/fakePlate.lua`; config `fakePlates`)
+
+The garage computer shows a per-car tile "Fit fake plate" / "Fake plate (fitted)" (UI only). It uses up one `fake_plate` item (Black Market) and changes the plate text on the car for real. Research and what is verified: `docs/RESEARCH_FAKE_PLATES.md`. Config `fakePlates`: `enabled` (true), `maxPerPlayer` (16), `cooldown` (1 s between requests).
+
+| Direction | Event | Body |
+|---|---|---|
+| C→S | `rlsmpFakeAsk` | `{}` the tile was pressed. Answer: `rlsmpFakeState` with `choices` |
+| S→C | `rlsmpFakeState` | `{list = [{fake, real, inv, model}], have, enabled, choices?}`. `have` = fake_plate items. `choices` = 3 random plate texts (digit + 3 letters + 3 digits, no I O Q) the next `rlsmpFakeFit` may pick from. Also sent once per session after loading (the client puts the markers back) and after every fit, restore and drop |
+| C→S | `rlsmpFakeFit` | `{inv, idx, real, model}` `idx` = 1..3 of the last `choices`; `real` = the car's plate now (RLS `config.licenseName`), `inv` = RLS inventory id. Refused when chased, no item, the car or real plate already has a fake plate, too many, choice stale |
+| S→C | `rlsmpFakeResult` | `{ok, action = "fit" or "restore", fake?, real?, inv?, have?, err?}`. Only on `ok` the client changes the plate |
+| C→S | `rlsmpFakeRestore` | `{fake, failed?}` put the real plate back; the item is NOT returned. `failed = true`: the game could not apply the plate, the item comes back (only within 60 s of the fit) |
+| C→S | `rlsmpFakeDrop` | `{fake}` the car is gone or the plate was changed another way (RLS plate shop): forget the record |
+
+- The server keeps `profile.fakePlates[FAKE] = {fake, real, inv, model, t}` in the player's profile (saved with it). The fit takes the item and saves the record in the same profile write.
+- Police records are keyed by the plate on the car: the fake plate has its own clean record; the real plate keeps its flag but is not read while it is off the car. `rlsmpPlateChanged` with the real or fake plate of a record is ignored by `plateRecords` (the swap must not clear the real flag). The remembered model + colour (20 min, per player) still matches, so a cop who reads the fake plate can still chase a car that matches a recent chase (repaint clears it). Restoring clears the fake plate's own record.
+- Client: `rlsmp_fakePlate.isFake(vehId)` (live plate is one of our fake plates) feeds `rlsmp_theft.hasFakePlate(vehId)`. `police.lua` then refuses radar and red-light fines (`noRadarFineIllegal`) and the chase citation / arrest fine (`noFineInStolenCar`, message "no fine, the plate on this car is not yours.").
+- Marketplace meetup (`meetup.lua`): a car whose plate is one of the seller's fake plates counts as illegal papers for the setup roll (`illegalChance`); a fully legal car stays at 0.
+
 ## Reserved prefixes for later phases
 
 - `rlsmpBiz*` – Phase 2 business / syndicate (Claude A)
@@ -467,7 +485,7 @@ Client input action `rlsmpInteract` (`core/input/actions/rlsmp.json`, default ke
 
 ## No radar fine in a stolen car or with a fake plate (client `rlsmp/police.lua`, server setting `police.noRadarFineIllegal`)
 
-`rlsmpPoliceConfig` also carries `noRadarFineIllegal` (default true). RLS speed and red-light cameras (`overhaul/career/police/speedTraps.lua`) call `overhaul_career_economy_payment.pay(fine, reason)` with `reason.label` `ui.career.attributeLog.fineSpeeding` or `fineRedLight`, then `ui_message` ("Traffic Violation ..." / `ui.career.speedTrap.redLightMessage`) and `overhaul_career_garage_inventory.addTicket`. When the player's car is converted/recalled (`lib/theft` converted set) or `rlsmp_theft.hasFakePlate(vehId)` (set from a successful `fit:fake_plate` in garage.lua), the client skips the payment, the ticket and rewrites the message within 2 s, and logs `RLSMP-FINE refused (radar) id=<vehId> reason=stolen|fakeplate`. Wrappers are re-checked every 0.5 s with the other police wrappers.
+`rlsmpPoliceConfig` also carries `noRadarFineIllegal` (default true). RLS speed and red-light cameras (`overhaul/career/police/speedTraps.lua`) call `overhaul_career_economy_payment.pay(fine, reason)` with `reason.label` `ui.career.attributeLog.fineSpeeding` or `fineRedLight`, then `ui_message` ("Traffic Violation ..." / `ui.career.speedTrap.redLightMessage`) and `overhaul_career_garage_inventory.addTicket`. When the player's car is converted/recalled (`lib/theft` converted set) or `rlsmp_theft.hasFakePlate(vehId)` (a successful `fit:fake_plate` on a stolen car in garage.lua, or a fake plate on an own car: see "Fake plates on your own cars"), the client skips the payment, the ticket and rewrites the message within 2 s, and logs `RLSMP-FINE refused (radar) id=<vehId> reason=stolen|fakeplate`. Wrappers are re-checked every 0.5 s with the other police wrappers.
 
 ## Police cars come back behind the player (client `rlsmp/policeRespawn.lua`, server `police.respawnBehind|respawnPerMinute|respawnGap`)
 ## Re-placed police cars are moved far away (client `rlsmp/policeRespawn.lua`, `rlsmp/spawnSpot.lua`, server `police.respawnBehind|respawnPerMinute|spawnMinDistance|chaseSpawnMinDistance|spawnPreferRight`)

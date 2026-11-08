@@ -33,6 +33,7 @@ return {
   "rlsmp.server.theft",
   "rlsmp.server.fence",
   "rlsmp.server.recall",
+  "rlsmp.server.fakePlates",
   "rlsmp.server.meetup",
   "rlsmp.server.shop",
 }

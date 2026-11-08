@@ -500,6 +500,13 @@ M.defaults = {
     copsMax = 2,
   },
 
+  -- Fake plates on the player's own cars (garage computer, uses up one fake_plate item; server/fakePlates.lua).
+  fakePlates = {
+    enabled = true,
+    maxPerPlayer = 16,        -- fake plates in use at the same time
+    cooldown = 1,             -- seconds between two requests of one player
+  },
+
   -- ui.chatCommands: the old chat commands for theft, fence, market, meetup and items (/steal, /inspect, /fence, /market, /meetup, /items) are
   -- hidden developer fallbacks. Players use the popup, the phone app, the garage computer and the Marketplace app instead. Off unless an admin turns it on.
   ui = {

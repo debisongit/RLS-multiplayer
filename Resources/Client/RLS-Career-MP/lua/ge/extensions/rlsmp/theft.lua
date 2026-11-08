@@ -372,6 +372,7 @@ end
 local fakePlates = {}
 function M.markFakePlate(plate) local p = T.cleanPlate(plate) if p then fakePlates[p] = true end end
 function M.hasFakePlate(vehId)
+  if rlsmp_fakePlate and rlsmp_fakePlate.isFake and rlsmp_fakePlate.isFake(vehId) then return true end   -- own car with a fake plate (fakePlate.lua)
   local rec = stolen[vehId]
   return rec ~= nil and (rec.fakePlate == true or fakePlates[rec.plate] == true)
 end

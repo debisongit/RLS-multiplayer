@@ -334,7 +334,15 @@ theftLib.forget(playerId)
 playerId = 7
 flash(SP, "Traffic Violation (Speeding): x")
 check(#paid == 0 and saw("reason=fakeplate"), "fake plate: no radar fine")
+-- own car with a fake plate: the chase citation / arrest fine is not charged either (the chase itself is untouched)
+paid, messages = {}, {}
+local pr = overhaul_career_economy_payment.pay({money = {amount = 300}}, {label = "Police fine", tags = {"fine"}})
+ui_message("Arrest fine: $900 (3 violations, pursuit score 200)")
+check(#paid == 0 and pr == true and messages[1] == "Arrest: no fine, the plate on this car is not yours.", "fake plate: no chase fine, message says so: " .. tostring(messages[1]))
 playerId = 1
+paid = {}
+overhaul_career_economy_payment.pay({money = {amount = 300}}, {label = "Police fine", tags = {"fine"}})
+check(#paid == 1, "own car with the real plate: the chase fine is charged")
 flash(SP, "Traffic Violation (Speeding): x")
 check(#paid == 1, "back in an own car: charged")
 

@@ -281,10 +281,17 @@ end
 -- registered to the player (it is not in their RLS garage), so that one payment is skipped and the message says so. The chase itself, the arrest and
 -- the plate flag are untouched. (The payment function is called by name each time, so replacing it works; a hook function would not be safe to replace.)
 local fineSkipped = nil        -- os.time() of the last skipped fine (the message that follows within 2 s is rewritten); nil = none
+local fineFake = false         -- that skipped fine was because of a fake plate (not a stolen car)
+
+-- The player's own car wears a fake plate (rlsmp/fakePlate.lua, theft.hasFakePlate): the police cannot match it to the owner, so no fine either.
+local function fakePlateCar(id)
+  local t = rawget(_G, "rlsmp_theft")
+  return t ~= nil and t.hasFakePlate ~= nil and t.hasFakePlate(id) == true
+end
 
 local function inStolenCar()
   return settings.noFineInStolenCar and isMP() and overhaul_career_career ~= nil and overhaul_career_career.isActive()
-    and be ~= nil and theftLib.isConverted(be:getPlayerVehicleID(0))
+    and be ~= nil and (theftLib.isConverted(be:getPlayerVehicleID(0)) or fakePlateCar(be:getPlayerVehicleID(0)))
 end
 
 -- Speed cameras are another RLS system (career/police/speedTraps.lua onSpeedTrapTriggered / onRedLightCamTriggered): they call
@@ -329,8 +336,9 @@ local function patchFines()
   wrapAround(overhaul_career_economy_payment, "pay", "finePay", function(original, price, reason, ...)
     if isPoliceFine(reason) and inStolenCar() then
       fineSkipped = os.time()
-      p3.count("police fine skipped (stolen car)")
-      p3.log("I", "police fine NOT charged: the car is not registered to the player (stolen)")
+      fineFake = not theftLib.isConverted(be:getPlayerVehicleID(0))
+      p3.count("police fine skipped (" .. (fineFake and "fake plate" or "stolen car") .. ")")
+      p3.log("I", "police fine NOT charged: " .. (fineFake and "the car wears a fake plate" or "the car is not registered to the player (stolen)"))
       return true
     end
     if isRadarFine(reason) then
@@ -355,7 +363,8 @@ local function patchFines()
     end
     if type(msg) == "string" and fineSkipped ~= nil and os.time() - fineSkipped <= 2 and (msg:find("^Citation fine") or msg:find("^Arrest fine")) then
       fineSkipped = nil
-      msg = (msg:find("^Citation") and "Citation" or "Arrest") .. ": no fine, this car is not registered to you."
+      msg = (msg:find("^Citation") and "Citation" or "Arrest") .. (fineFake and ": no fine, the plate on this car is not yours."
+        or ": no fine, this car is not registered to you.")
     end
     return original(msg, ...)
   end)

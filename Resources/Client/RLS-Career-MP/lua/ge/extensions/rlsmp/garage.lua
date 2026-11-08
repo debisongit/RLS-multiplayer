@@ -86,6 +86,7 @@ local function addButtons(menuData, computerFunctions)
       local why = blockedReason(inventoryId)
       if why then entry.disabled, entry.reason = true, {type = "text", label = why} end
       slot.rlsmpStrip = entry
+      if rlsmp_fakePlate and rlsmp_fakePlate.tile then slot.rlsmpFakePlate = rlsmp_fakePlate.tile(inventoryId) end   -- own tile, own popup (fakePlate.lua)
     end
   end
   local rec = rlsmp_theft and rlsmp_theft.nearestStolenToPlayer and rlsmp_theft.nearestStolenToPlayer(STOLEN_REACH)

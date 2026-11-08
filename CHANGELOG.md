@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased (no build bump, untested in-game)
+- Fake plates on your OWN cars: the garage computer has a new tile on every owned car, "Fit fake plate" (and "Fake plate (fitted)" when one is on). A popup shows 3 random plates to pick from, "Other plates" for 3 new ones, and "Restore real plate". Fitting uses up one `fake_plate` item from the Black Market (the server takes it) and the plate text really changes on the car and in RLS's garage record, so it should survive saves, respawns and the part shop. A check puts it back if RLS restores the real plate. New files: `rlsmp/fakePlate.lua`, `lib/fakePlate.lua`, `server/fakePlates.lua`. See `docs/RESEARCH_FAKE_PLATES.md` (what is verified and what is guessed). (Claude A)
+- With a fake plate fitted: no radar or red-light fine and no chase citation or arrest fine (`rlsmp_theft.hasFakePlate` is true for the own car, also after a rejoin because the server keeps the record in the player's profile). The chase itself still happens. (Claude A)
+- Police plate reading: the fake plate is a clean plate with its own record. A flag on the real plate does not apply while the fake plate is on and is kept; a flag raised with the fake plate on goes to the fake plate. The plate swap no longer clears the real plate's flag. A remembered model + colour from a recent chase (20 min) still gets the car chased; repainting clears it. (Claude A)
+- Marketplace meetup: selling a car that wears a fake plate counts as illegal papers for the police setup roll; fully legal cars stay at 0. (Claude A)
+- New events `rlsmpFakeAsk`, `rlsmpFakeState`, `rlsmpFakeFit`, `rlsmpFakeResult`, `rlsmpFakeRestore`, `rlsmpFakeDrop` (see `docs/PROTOCOL.md`), config `fakePlates`, tests `fake_plates_test` and `fake_plate_client_test`. (Claude A)
+
 ## 0.4.59 (untested in-game)
 - No radar fines in a stolen car or a car with a fake plate: speed cameras and red light cameras take no money and add no ticket (`police.noRadarFineIllegal`, default on). The message says the radar flashed a car that is not yours. (Claude A)
 

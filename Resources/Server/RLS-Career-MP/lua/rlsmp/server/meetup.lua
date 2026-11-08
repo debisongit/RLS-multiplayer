@@ -76,9 +76,11 @@ function M.setupChance(kind, illegal)
   return clamp(base, clamp(num(c().minChance, 0.05), 0.01, 0.99), clamp(num(c().maxChance, 0.85), 0.01, 0.99))
 end
 
--- Stolen (any theft record on the plate) or flagged by the police.
-local function isIllegal(plate, model)
+-- Stolen (any theft record on the plate), wearing a fake plate (illegal papers, server/fakePlates.lua) or flagged by the police.
+local function isIllegal(plate, model, pid)
   if plate and theft.records()[plate] then return true end
+  local okF, fp = pcall(require, "rlsmp.server.fakePlates")
+  if okF and type(fp) == "table" and pid and plate and fp.wears(pid, plate) then return true end
   local ok, pr = pcall(require, "rlsmp.server.plateRecords")
   if ok and type(pr) == "table" and pr.lookup and plate and model then
     local r = pr.lookup(plate, model, nil, false)
@@ -131,7 +133,7 @@ function M.request(pid, d)
     local rec = plate and theft.records()[plate]
     if not theft.isEnabled() or not rec or rec.by ~= s.accountId then return deny(pid, "That car is not on your stolen list.") end
   end
-  local illegal = kind == "black" or isIllegal(plate, model)
+  local illegal = kind == "black" or isIllegal(plate, model, pid)
   m.setup = random() < M.setupChance(kind, illegal)
   local lo, hi = clamp(math.floor(num(c().copsMin, 1)), 1, 2), clamp(math.floor(num(c().copsMax, 2)), 1, 2)
   m.cops = clamp(lo + math.floor(random() * (math.max(lo, hi) - lo + 1)), 1, 2)
