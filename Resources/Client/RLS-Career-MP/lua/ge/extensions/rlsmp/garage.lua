@@ -94,6 +94,10 @@ local function addButtons(menuData, computerFunctions)
         M.openFor({kind = "stolen", plate = rec.plate, model = rec.model, value = rec.value, year = rec.year})
       end}
   end
+  if rlsmp_recall and rlsmp_recall.bringHere then   -- put a stolen car beside the player (the server checks owner, record, cooldown, fee)
+    computerFunctions.general.rlsmpRecall = {id = "rlsmpRecall", label = "Bring my stolen car here", order = 43,
+      callback = function() rlsmp_recall.bringHere() end}
+  end
   computerFunctions.general.rlsmpItems = {id = "rlsmpItems", label = "Black market items", order = 42, callback = openItems}
 end
 

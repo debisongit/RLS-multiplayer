@@ -390,6 +390,17 @@ Honest limit: the seed is still sent to every game (the prompt at 3 m works for 
 - The stolen car is not added to the garage inventory. The client keeps it in `rlsmp_theft.stolenCars()`; `vehicleGuard` lets the player into exactly
   the converted vehicle ids (`lib/theft` converted set, removed when the car is destroyed). Log tag `RLSMP-THEFT`.
 
+### Stolen car restore (server `recall.lua`, client `rlsmp/recall.lua` + `lib/recall.lua`; needs `theft.enabled`)
+
+A stolen car is only a local car of its thief and vanishes when they leave. `rlsmpTheftDone` also carries `config`, `look` (three paints `{x, y, z, w, m = {metallic...}}`) and `rot` `{x, y, z, w}`; the record keeps them (`rec.car`, `rec.last`, `rec.ownerPos`). Only records still in the list are restored: the fence takes sold, stripped and trapped cars out.
+
+| Direction | Event | Body |
+|---|---|---|
+| C→S | `rlsmpStolenPos` | `{cars = [{plate, x, y, z, rot}]}` where the game's stolen cars stand (about every 30 s, only if moved; owner only; the server accepts one report per plate per `theft.recallReportEvery`, 20 s) |
+| S→C | `rlsmpStolenRestore` | `{auto, cars = [{plate, model, config, look, value, year, color, x, y, z, rot}], spots = [{x, y, z, name}]}`. `auto = true`: once per session after the career loaded, put each car at its place (free spot, no car with that plate, within 5 km of the player, else the nearest drop spot, else beside the player; 3 tries). `auto = false`: answer to the button, beside the player |
+| C→S | `rlsmpStolenRecall` | `{plate?}` the button "Bring my stolen car here" (garage computer, Black Market app); no plate = all of the player's stolen cars |
+| S→C | `rlsmpStolenRecallResult` | `{ok = false, err}` refused: not in career, theft off, no such stolen car of yours, cooldown (`theft.recallCooldown`, 120 s), fee (`theft.recallFee`, 0) not affordable |
+
 ## The fence (server `fence.lua`; client part is in `rlsmp/theft.lua`; needs `theft.enabled`)
 
 Players use the garage computer buttons ("Garage flow" below) or the Black Market app (stolen cars section, buttons Strip, Sell, Resell, Gamble for the stolen car they stand next to at the drop spot). Hidden developer fallback (only with `ui.chatCommands`): `/fence` lists the stolen cars, `/fence strip | sell | resell | gamble`.

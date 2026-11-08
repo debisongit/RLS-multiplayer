@@ -114,6 +114,7 @@
             <div class="fence">
               <button v-for="m in FENCE_MODES" :key="m.mode" type="button" class="primary" bng-nav-item :disabled="busy" @click="act('fence', m.mode)">{{ m.label }}</button>
             </div>
+            <button type="button" bng-nav-item :disabled="busy" @click="act('recall')">Bring my stolen car here</button>
             <template v-if="state.meetup">
               <p class="hint">A buyer waits at {{ state.meetup.spot }}.</p>
               <button type="button" bng-nav-item :disabled="busy" @click="act('meetupCancel')">Drop the meetup</button>
