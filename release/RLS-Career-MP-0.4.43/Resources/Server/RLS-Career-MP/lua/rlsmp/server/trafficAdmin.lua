@@ -67,6 +67,7 @@ local STATIC = {
   ["trafficVariety.pool.configsPerModel"] = {"number", 1, 12, true},
   ["trafficVariety.pool.popPower"] = {"number", 0, 1},
   ["trafficVariety.respawn.enabled"] = {"bool"},
+  ["trafficVariety.respawn.mode"] = {"enum", values = {async = true, inplace = true, off = true}},
   ["trafficVariety.respawn.perMinute"] = {"number", 0, 12, true},
   ["trafficVariety.respawn.chance"] = {"number", 0, 1},
   ["trafficVariety.respawn.repaintChance"] = {"number", 0, 1},
@@ -79,8 +80,6 @@ local STATIC = {
   ["trafficVariety.rarity.uncommonValue"] = {"number", 0, 100000000, true},
   ["trafficVariety.rarity.rareValue"] = {"number", 0, 100000000, true},
   ["trafficVariety.preload.enabled"] = {"bool"},
-  ["trafficVariety.preload.reserve"] = {"number", 0, 8, true},
-  ["trafficVariety.preload.prepareSeconds"] = {"number", 1, 60},
   ["trafficVariety.preload.minGapSeconds"] = {"number", 0, 120},
   ["trafficVariety.preload.slowFrameMs"] = {"number", 10, 2000},
   ["trafficVariety.preload.settleSeconds"] = {"number", 0, 60},
@@ -105,6 +104,10 @@ local STATIC = {
   ["police.plateReading.afterEscapeChance"] = {"number", 0, 1},
   ["police.plateReading.skipChance"] = {"number", 0, 1},
 }
+STATIC["modPrice.enabled"] = {"bool"}
+STATIC["modPrice.max"] = {"number", 1000, 100000000, true}
+STATIC["modPrice.min"] = {"number", 100, 100000, true}
+STATIC["modPrice.tolerance"] = {"number", 0, 2}
 for _, name in ipairs(PERSONALITIES) do STATIC["smartTraffic.mix." .. name] = {"number", 0, 100} end
 for _, name in ipairs(CONDITIONS) do STATIC["weather.mix." .. name] = {"number", 0, 100} end
 
@@ -320,6 +323,7 @@ function M.snapshot()
   local ra = type(v.rarity) == "table" and v.rarity or {}
   local pl = type(v.preload) == "table" and v.preload or {}
   local sm = type(v.simplified) == "table" and v.simplified or {}
+  local mpr = type(config.modPrice) == "table" and config.modPrice or {}
   local extra = copyRuled({theft = true, fence = true, market = true})
   -- A method without an "enabled" key is ON (theft.lua: enabled ~= false); show it that way, or the menu would list every method as off.
   for name, m in pairs(type(extra.theft) == "table" and type(extra.theft.methods) == "table" and extra.theft.methods or {}) do
@@ -328,6 +332,7 @@ function M.snapshot()
   end
   return {
     theft = extra.theft, fence = extra.fence, market = extra.market,
+    modPrice = {enabled = mpr.enabled, max = mpr.max, min = mpr.min, tolerance = mpr.tolerance},
     traffic = {enabled = t.enabled, totalBudget = t.totalBudget, baseBudget = t.baseBudget, perPlayerBudget = t.perPlayerBudget,
       minPerPlayer = t.minPerPlayer, maxPerPlayer = t.maxPerPlayer,
       respawnRange = t.respawnRange, respawnDelay = t.respawnDelay, unjam = copyMap(t.unjam)},
@@ -342,10 +347,10 @@ function M.snapshot()
         minRatio = swap.minRatio, maxFailures = swap.maxFailures},
       pool = {enabled = pool.enabled, avoidLast = pool.avoidLast, brandWindow = pool.brandWindow, brandMax = pool.brandMax, streetMax = pool.streetMax,
         configsPerModel = pool.configsPerModel, popPower = pool.popPower},
-      respawn = {enabled = rs.enabled, perMinute = rs.perMinute, chance = rs.chance, repaintChance = rs.repaintChance, waitSeconds = rs.waitSeconds},
+      respawn = {enabled = rs.enabled, mode = rs.mode, perMinute = rs.perMinute, chance = rs.chance, repaintChance = rs.repaintChance, waitSeconds = rs.waitSeconds},
       parked = {amount = pk.amount},
       rarity = {enabled = ra.enabled, common = ra.common, uncommon = ra.uncommon, rare = ra.rare, uncommonValue = ra.uncommonValue, rareValue = ra.rareValue},
-      preload = {enabled = pl.enabled, reserve = pl.reserve, prepareSeconds = pl.prepareSeconds, minGapSeconds = pl.minGapSeconds,
+      preload = {enabled = pl.enabled, minGapSeconds = pl.minGapSeconds,
         slowFrameMs = pl.slowFrameMs, settleSeconds = pl.settleSeconds, warmShare = pl.warmShare},
       simplified = {enabled = sm.enabled, parked = sm.parked, traffic = sm.traffic, nearRadius = sm.nearRadius, perMinute = sm.perMinute}},
     weather = {enabled = w.enabled, force = w.force, mix = copyMap(w.mix), periodMinutes = w.periodMinutes},
@@ -376,7 +381,7 @@ local function tooFast(pid)
 end
 
 local function modulesResend()
-  for _, name in ipairs({"smartTraffic", "trafficVariety", "trafficPolice", "theft", "plateRecords"}) do
+  for _, name in ipairs({"smartTraffic", "trafficVariety", "trafficPolice", "theft", "plateRecords", "modPrice"}) do
     local ok, mod = pcall(require, "rlsmp.server." .. name)
     if ok and type(mod) == "table" and mod.resend then mod.resend() end
   end

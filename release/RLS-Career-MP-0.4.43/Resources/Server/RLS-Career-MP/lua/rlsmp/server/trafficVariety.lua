@@ -74,7 +74,7 @@ end
 
 function M.respawn()
   local r = type(cfg.respawn) == "table" and cfg.respawn or {}
-  return {enabled = r.enabled ~= false, perMinute = tonumber(r.perMinute), chance = tonumber(r.chance), repaintChance = tonumber(r.repaintChance),
+  return {enabled = r.enabled ~= false, mode = r.mode, perMinute = tonumber(r.perMinute), chance = tonumber(r.chance), repaintChance = tonumber(r.repaintChance),
     waitSeconds = tonumber(r.waitSeconds), checkSeconds = tonumber(r.checkSeconds)}
 end
 
@@ -101,9 +101,8 @@ end
 
 function M.preload()
   local p = type(cfg.preload) == "table" and cfg.preload or {}
-  return {enabled = p.enabled ~= false, reserve = tonumber(p.reserve), prepareSeconds = tonumber(p.prepareSeconds), minGapSeconds = tonumber(p.minGapSeconds),
-    slowFrameMs = tonumber(p.slowFrameMs), calmFrames = tonumber(p.calmFrames), settleSeconds = tonumber(p.settleSeconds), warmShare = tonumber(p.warmShare),
-    ageMax = tonumber(p.ageMax)}
+  return {enabled = p.enabled ~= false, minGapSeconds = tonumber(p.minGapSeconds),
+    slowFrameMs = tonumber(p.slowFrameMs), calmFrames = tonumber(p.calmFrames), settleSeconds = tonumber(p.settleSeconds), warmShare = tonumber(p.warmShare)}
 end
 
 function M.simplified()

@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.4.43 (all untested in-game)
+- Car changes without the freeze: the new car is built through the game's own group spawn queue, then the old one is removed (`trafficVariety.respawn.mode`: async, inplace, off). The useless preload reserve is gone. (Claude A)
+- Fair prices for modded cars in the dealership, estimated from power, weight, year and class (`modPrice`). Selling will follow. (Claude A)
+
+## 0.4.42 (stopgap, untested)
+- Lag fix, first step: the owner's log showed every car model change freezes the game for 0.5 to 2.3 s (29 times in 1000 s). Changes now happen for only about a quarter of respawns, 2 a minute at most. The real fix (changing cars without a freeze) is being built. (Claude A)
+
+## Unreleased: fair car shop prices for modded cars (all untested in-game)
+- New server setting `modPrice` (`enabled`, `max` 2,000,000, `min` 800, `tolerance` 0.35, `overrides`): the RLS car shop price of a MODDED car is estimated from power, weight, top speed, drivetrain and class instead of the mod author's value. If the author's value is within 35 percent of the estimate it is kept. Never below 800 or above `max`. (Claude A)
+- Only models listed in `trafficVariety.mods` (or whose files came from this server's download folder) are touched. Vanilla cars, selling cars, the auction and repo jobs keep the game's prices. Fixed prices: `overrides = {mycar = 45000, ["mycar/sport"] = 60000}` in config.json. (Claude A)
+- A few controls are in the `[` menu under Market. Log lines start with `modprice:` (model/config, author value, estimate, used); send them to tune the numbers. Research and what is verified or guessed: `docs/RESEARCH_MOD_PRICES.md`. (Claude A)
+- Known gap: a mod car bought at the new price is still SOLD at the game's value, so an author value that is too high can be sold for profit. See the research doc. (Claude A)
+## Unreleased: hitch-free car variety (all untested in-game)
+- A re-rolled traffic car no longer freezes the game: new setting `trafficVariety.respawn.mode` = `async` (default) | `inplace` | `off`. Async builds the new car through the game's own group spawn queue (`core_multiSpawn.spawnGroup`, a one-car group), gives it to RLS traffic, and only then removes the old car (the view rules are checked again first; if somebody can see the spot by then, the new car is deleted instead). `inplace` is the old freeze-in-place way (0.5 to 2 s per re-roll). If the game has no group spawn, nothing is re-rolled (logged). (Claude A)
+- The "reserve" of picks made ahead is gone (it only picked, it loaded nothing): `preload.reserve`, `prepareSeconds`, `ageMax` removed; the frame guard and the loaded-model bias stay. (Claude A)
+- New log lines `build: <model>/<config> mode=async|inplace ...` with the call time, the total time and the worst frame meanwhile, to measure it. What is verified or guessed: `docs/RESEARCH_ASYNC_SWAP.md`. (Claude A)
+
 ## 0.4.41 (all untested in-game)
 - Traffic respawn range: `traffic.respawnRange` (1.0 = the game's own, up to 3) and `traffic.respawnDelay`, both on the [ menu Amount page. Live swapping is now OFF by default (it replaced cars the game never recycled). Stuck-car cleanup now waits 120 s and only acts on cars 400 m from every player, one at a time. (Claude A)
 

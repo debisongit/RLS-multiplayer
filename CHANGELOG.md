@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.43 (all untested in-game)
+- Car changes without the freeze: the new car is built through the game's own group spawn queue, then the old one is removed (`trafficVariety.respawn.mode`: async, inplace, off). The useless preload reserve is gone. (Claude A)
+- Fair prices for modded cars in the dealership, estimated from power, weight, year and class (`modPrice`). Selling will follow. (Claude A)
+
 ## 0.4.42 (stopgap, untested)
 - Lag fix, first step: the owner's log showed every car model change freezes the game for 0.5 to 2.3 s (29 times in 1000 s). Changes now happen for only about a quarter of respawns, 2 a minute at most. The real fix (changing cars without a freeze) is being built. (Claude A)
 

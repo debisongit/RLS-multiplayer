@@ -173,7 +173,9 @@ M.defaults = {
     -- Respawn re-roll: when RLS respawns a traffic car out of everybody's sight, it comes back as another model with another config
     -- (needs pool.enabled). perMinute = most re-rolls per minute in one game (BeamMP sends every one to every player: keep it low). chance = share of respawns re-rolled.
     -- repaintChance = share of re-rolled cars that also get random paint. Never police, taxis, chased, crashed, job or player cars.
-    respawn = {enabled = true, perMinute = 3, chance = 1, repaintChance = 0.5, waitSeconds = 3},
+    -- mode: "async" (default) = the new car is built through the game's own group spawn queue (no freeze), then the old one is removed;
+    -- "inplace" = the game's replaceVehicle on the same car (one freeze of 0.5 to 2 s per re-roll); "off" = no re-rolling.
+    respawn = {enabled = true, mode = "async", perMinute = 2, chance = 0.25, repaintChance = 0.5, waitSeconds = 3},
     -- Parked cars: RLS keeps as many as its game setting trafficParkingAmount says (a real log: 2). Each game raises that setting to this amount after the
     -- career starts (never lowers a higher one, gives the old value back on leaving). 0 = leave it alone. Every parked car is a car BeamMP syncs to the others
     -- and counts for the server's per-player car limit (MaxCars in ServerConfig.toml), so raise that too. Car theft needs parked cars to steal.
@@ -186,9 +188,9 @@ M.defaults = {
       uncommonWords = {"rally", "offroad", "tuner", "pro", "workpackage", "sport", "taxi", "police", "dune", "turbo"},
       rareModels = {"scintilla", "bolide"}, uncommonValue = 45000, rareValue = 120000},
     -- Preload (lag): no car is built while the frames are slow (slowFrameMs, then settleSeconds of calm), not within minGapSeconds of the last build, not in a
-    -- chase. `reserve` picks are made ahead and their data read ahead (one per prepareSeconds, only in calm moments); warmShare of the picks come from models
+    -- chase. warmShare of the picks come from models
     -- that are already loaded (on the street or built this session). No spare car is ever built or hidden: BeamMP would send it to everybody.
-    preload = {enabled = true, reserve = 3, prepareSeconds = 4, minGapSeconds = 6, slowFrameMs = 45, calmFrames = 45, settleSeconds = 3, warmShare = 0.7, ageMax = 240},
+    preload = {enabled = true, minGapSeconds = 6, slowFrameMs = 45, calmFrames = 45, settleSeconds = 3, warmShare = 0.7},
     -- Simplified (cheap "simple_traffic" stand-in) cars, see docs/RESEARCH_SIMPLIFIED.md. OFF by default and never tried in the game.
     -- parked: a stand-in parked car at a stealable spot becomes a real car when a player is within nearRadius (m, at least 120); traffic: a respawned
     -- traffic car farther than nearRadius from every player may come back as a stand-in, and a stand-in that comes within nearRadius is made real.
@@ -334,6 +336,12 @@ M.defaults = {
     -- Used when a game could not measure its damage: dollars per (m/s)^2 of closing speed.
     fallbackDamagePerSpeedSq = 15,
   },
+
+  -- Fair car shop prices for MODDED cars (client rlsmp_modPrice, lib/modPrice.lua): the price is estimated from power, weight, top speed, drivetrain
+  -- and class; the mod author's value is kept when it is within +-tolerance of the estimate. Only models in trafficVariety.mods (or whose files were
+  -- downloaded from this server) are touched; the car shop only, not selling. overrides = fixed catalog price per "model" or "model/config".
+  -- Example: overrides = {mycar = 45000, ["mycar/sport"] = 60000}
+  modPrice = {enabled = true, max = 2000000, min = 800, tolerance = 0.35, overrides = {}},
 
   -- Shared dealership stock: everyone sees the same cars for sale (the first player's listings, kept in shop.json).
   -- OFF until tested in-game. Only listings that exist when a player joins are shared; RLS still adds new ones per PC.
