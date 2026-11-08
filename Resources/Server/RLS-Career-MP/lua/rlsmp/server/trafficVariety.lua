@@ -130,6 +130,7 @@ function M.payload()
     oversample = tonumber(cfg.oversample),
     maxShare = tonumber(cfg.maxShare),
     maxCandidates = tonumber(cfg.maxCandidates),
+    excludeWords = type(cfg.excludeWords) == "table" and wordList(cfg.excludeWords) or nil,
     applyToTraffic = cfg.applyToTraffic ~= false,
     applyToParked = cfg.applyToParked ~= false,
     zoneSpeedLimits = {city = tonumber(limits.city), main = tonumber(limits.main)},

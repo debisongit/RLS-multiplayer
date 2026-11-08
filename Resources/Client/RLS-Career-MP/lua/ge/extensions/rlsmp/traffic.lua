@@ -15,6 +15,8 @@ local quota               -- nil until the server sends one
 local wantMin = 0         -- the server's wished lowest traffic amount (traffic.minAmount), 0 = leave the player's own
 local original, setByUs   -- the player's own traffic amount before we lowered it, and the value we set (to tell our change from RLS's)
 local timer = 0
+local HOLD_EVERY = 10   -- seconds between re-applications of the minimum amount
+local clock, lastHold = 0, -HOLD_EVERY
 
 local function isMP()
   return MPCoreNetwork ~= nil and MPCoreNetwork.isMPSession ~= nil and MPCoreNetwork.isMPSession()
@@ -67,9 +69,40 @@ function M.raiseToMin()
   local target = math.min(quota, wantMin)
   if not current or current < 1 or current >= target then return false end
   original = original or current
+  lastHold = clock
   gameplay_traffic.setActiveAmount(target)
   setByUs = target
-  p3.log("I", string.format("TRAFFIC amount raised %s -> %s (server minimum)", tostring(current), tostring(target)))
+  local after = gameplay_traffic.getTrafficVars()
+  p3.log("I", string.format("TRAFFIC amount raised %s -> %s (server minimum), read back %s", tostring(current), tostring(target), tostring(after and after.activeAmount)))
+  return true
+end
+
+-- RLS resets the active amount to the player's own game setting whenever it recomputes it (settings change, our parked-cars top-up calls
+-- onSettingsChanged, traffic restarts). The log showed 4 again 5 s after we raised it to 10. So every few seconds: if the amount is back at that
+-- RLS value (not lowered by an event, which sets 0 or other numbers) and below our target, set it again and log the value READ BACK.
+local function carCount()
+  local n = 0
+  for _ in pairs(gameplay_traffic.getTrafficData and gameplay_traffic.getTrafficData() or {}) do n = n + 1 end
+  return n
+end
+function M.holdMin()
+  if not quota or wantMin <= 0 or not isMP() or not careerActive() or chased() then return false end
+  if not gameplay_traffic or not gameplay_traffic.setActiveAmount or not gameplay_traffic.getTrafficVars then return false end
+  local target = math.min(quota, wantMin)
+  local vars = gameplay_traffic.getTrafficVars()
+  local current = vars and tonumber(vars.activeAmount)
+  if not current or current < 1 or current >= target or clock - lastHold < HOLD_EVERY then return false end
+  local own = settings and settings.getValue and tonumber(settings.getValue("trafficAmount"))
+  if not own or own < 1 or (current ~= own and current ~= own - 1) then return false end   -- not RLS's own default: an event lowered it, leave it
+  lastHold = clock
+  original = original or current
+  gameplay_traffic.setActiveAmount(target)
+  setByUs = target
+  local after = gameplay_traffic.getTrafficVars()
+  local cars = carCount()
+  p3.count("traffic amount held")
+  p3.log("I", string.format("TRAFFIC amount was reset by the game to %s, set to %s again, read back %s, cars in traffic %d%s", tostring(current), tostring(target),
+    tostring(after and after.activeAmount), cars, cars < target and " (the game made only that many cars at start: more cars need a traffic restart)" or ""))
   return true
 end
 
@@ -88,9 +121,10 @@ function M.getQuota() return quota end
 function M.onUpdate(dtReal)
   if not quota then return end
   timer = timer + (dtReal or 0)
+  clock = clock + (dtReal or 0)
   if timer >= CHECK_EVERY then
     timer = 0
-    enforce()
+    if not enforce() then M.holdMin() end
   end
 end
 
@@ -114,6 +148,7 @@ end
 
 M._onQuota = onQuota
 M._enforce = enforce
+M._resetClock = function() clock, lastHold = 0, -HOLD_EVERY end
 M.onInit = function() setExtensionUnloadMode(M, "manual") end
 
 return M

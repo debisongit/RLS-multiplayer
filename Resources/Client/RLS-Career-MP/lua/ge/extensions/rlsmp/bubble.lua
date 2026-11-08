@@ -44,8 +44,8 @@ function M.setRange(src)
   local new = R.sanitize(src)
   local change = R.describe(range, new)
   range = new
-  p3.log("I", "range: " .. (change and ("changed " .. change) or "unchanged") .. string.format(" (now range=%s delay=%s unjam=%s/%ss/%sm)",
-    tostring(new.respawnRange), tostring(new.respawnDelay), tostring(new.unjam.enabled), tostring(new.unjam.seconds), tostring(new.unjam.distance)))
+  p3.log("I", "range: " .. (change and ("changed " .. change) or "unchanged") .. string.format(" (now range=%s distance=%sm delay=%s unjam=%s/%ss/%sm)",
+    tostring(new.respawnRange), tostring(new.respawnDistance), tostring(new.respawnDelay), tostring(new.unjam.enabled), tostring(new.unjam.seconds), tostring(new.unjam.distance)))
 end
 function M.getRange() return range end
 
@@ -144,7 +144,7 @@ local function anyTrafficClass()
   end
 end
 
--- updateActiveRadius: RLS computes finalRadius every tick; we multiply the result by respawnRange (police and held units are left alone).
+-- updateActiveRadius: RLS computes finalRadius every tick; we multiply the result by respawnRange and raise it to at least respawnDistance (police and held units are left alone).
 -- If RLS returned early (finalRadius not recomputed) the value is still our scaled one: `rlsmpScaled` stops it from being scaled twice.
 local function installRadius(class)
   local original = class.updateActiveRadius
@@ -152,11 +152,15 @@ local function installRadius(class)
   if radiusWrappers[class] and class.updateActiveRadius == radiusWrappers[class] then return end
   local wrapper = function(self, ...)
     local res = original(self, ...)
-    if enabled and range.respawnRange ~= 1 and type(self.respawn) == "table" and not self.rlsmpHold and not (type(self.role) == "table" and self.role.name == "police") then
+    if enabled and (range.respawnRange ~= 1 or range.respawnDistance > 0) and type(self.respawn) == "table" and not self.rlsmpHold and not (type(self.role) == "table" and self.role.name == "police") then
       local fr = tonumber(self.respawn.finalRadius)
-      if fr and fr ~= self.rlsmpScaled and fr < 1e5 then
-        self.respawn.finalRadius = R.scale(fr, range.respawnRange)
-        self.rlsmpScaled = self.respawn.finalRadius
+      -- not recomputed by the game (still our value): start again from the game's own radius, so a changed setting applies and nothing is scaled twice
+      local fresh = fr ~= self.rlsmpScaled
+      if not fresh and self.rlsmpGameRadius then fr = self.rlsmpGameRadius end
+      if fr and fr < 1e5 and (fresh or self.rlsmpScaledFor ~= range) then
+        self.rlsmpGameRadius = fr
+        self.respawn.finalRadius = R.effective(fr, range.respawnRange, range.respawnDistance)
+        self.rlsmpScaled, self.rlsmpScaledFor = self.respawn.finalRadius, range
       end
     end
     return res
@@ -215,7 +219,7 @@ function M.onUpdate(dtReal)
     local ok2, f = pcall(core_camera.getForward)
     cam, fwd = ok1 and xyz(c) or nil, ok2 and xyz(f) or nil
   end
-  local alive, amount, radius = {}, 0, nil
+  local alive, amount, radius, beyond = {}, 0, nil, 0
   for id, veh in pairs(data) do
     alive[id] = true
     local rec = placed[veh]
@@ -225,6 +229,7 @@ function M.onUpdate(dtReal)
     local dist = vp and fp and math.sqrt((vp.x - fp.x) ^ 2 + (vp.y - fp.y) ^ 2 + (vp.z - fp.z) ^ 2) or nil
     local fr = type(veh.respawn) == "table" and tonumber(veh.respawn.finalRadius) or nil
     if fr and fr < 1e5 and (not radius or fr > radius) then radius = fr end
+    if dist and veh.rlsmpGameRadius and dist > veh.rlsmpGameRadius and veh.state ~= "queued" then beyond = beyond + 1 end
     local ev = W.observe(watch, id, veh.respawnCount, veh.state, dist, clock)
     if ev then
       local why = vp and fp and G.reason(vp, fp, cam, fwd, nil)
@@ -239,9 +244,10 @@ function M.onUpdate(dtReal)
     logTimer = 0
     local vars = gameplay_traffic.getTrafficVars and gameplay_traffic.getTrafficVars() or {}
     local n, nearest = W.summary(watch, clock)
-    if range.respawnRange ~= 1 or range.respawnDelay > 0 then
-      p3.log("I", string.format("range: respawnRange=%s respawnDelay=%s biggest finalRadius=%s held by delay so far=%s", tostring(range.respawnRange), tostring(range.respawnDelay),
-        radius and string.format("%.0f", radius) or "?", tostring(p3.get("range: held by delay"))))
+    if range.respawnRange ~= 1 or range.respawnDistance > 0 or range.respawnDelay > 0 then
+      p3.log("I", string.format("range: effective respawn distance=%sm (respawnRange=%s respawnDelay=%s) biggest finalRadius=%s cars past the game's own radius=%d held by delay so far=%s",
+        tostring(range.respawnDistance), tostring(range.respawnRange), tostring(range.respawnDelay),
+        radius and string.format("%.0f", radius) or "?", beyond, tostring(p3.get("range: held by delay"))))
     end
     p3.log("I", string.format("distance: walking=%s radius=%s activeAmount=%s cars=%d respawns/min=%d nearestRespawn=%s spawnValue=%s bubble=%s",
       tostring(gameplay_walk ~= nil and gameplay_walk.isWalking and gameplay_walk.isWalking() or false), radius and string.format("%.0f", radius) or "?",

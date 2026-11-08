@@ -21,6 +21,8 @@ M.DEFAULTS = {
   oversample = 2,
   maxShare = 0.25,
   maxCandidates = 80,
+  -- Broken / junkyard / wreck cars are never traffic: a model or config name (or Config Type) containing one of these words is skipped everywhere we pick cars.
+  excludeWords = {"junk", "wreck", "derby", "crash", "rolling", "shell", "undriveable", "parts"},
   applyToTraffic = true,
   applyToParked = true,
   zoneSpeedLimits = {city = 17, main = 27},   -- m/s: slower than city = "city", slower than main = "main", else "highway"
@@ -198,6 +200,7 @@ function M.sanitize(src)
     oversample = number(src.oversample, d.oversample, 1, 4),
     maxShare = number(src.maxShare, d.maxShare, 0.05, 1),
     maxCandidates = math.floor(number(src.maxCandidates, d.maxCandidates, 10, 300)),
+    excludeWords = wordList(src.excludeWords, d.excludeWords, 40),
     applyToTraffic = src.applyToTraffic ~= false,
     applyToParked = src.applyToParked ~= false,
     zoneSpeedLimits = {city = city, main = main},
@@ -339,6 +342,25 @@ function M.popFactor(pop, power)
   return f
 end
 
+-- Is this entry a junk / wreck / non-drivable car? Any word in the model, the config or its Config Type; entry.drivable == false counts too.
+function M.isExcluded(entry, words)
+  if type(entry) ~= "table" then return false end
+  if entry.drivable == false then return true end
+  local name = string.lower(tostring(entry.model) .. "/" .. tostring(entry.config) .. "/" .. tostring(entry.ctype or ""))
+  for _, w in ipairs(words or {}) do
+    if w ~= "" and name:find(w, 1, true) then return true end
+  end
+  return false
+end
+
+-- The list without excluded entries (the same table when nothing was removed).
+function M.dropExcluded(list, words)
+  if type(list) ~= "table" or not words or #words == 0 then return list end
+  local out = {}
+  for _, e in ipairs(list) do if not M.isExcluded(e, words) then out[#out + 1] = e end end
+  return #out == #list and list or out
+end
+
 -- Picks `amount` entries from `candidates` (a list of {model, config, ...}).
 --   infoOf(entry) -> {type =, mod =}   rnd() -> [0,1)
 -- Returns the group (a list) and how many entries came from relaxing the per-model cap or from repeats.
@@ -347,6 +369,7 @@ function M.select(candidates, amount, infoOf, ctx, cfg, rnd, mem)
   amount = math.floor(tonumber(amount) or 0)
   local out, relaxed = {}, 0
   if amount < 1 or type(candidates) ~= "table" or #candidates == 0 then return out, 0 end
+  candidates = M.dropExcluded(candidates, cfg and cfg.excludeWords)
 
   -- unique candidates with their weights
   local pool, seen = {}, {}
@@ -445,6 +468,7 @@ end
 function M.pickOne(mem, candidates, infoOf, ctx, cfg, rnd, current, census)
   rnd = rnd or math.random
   current = current or {}
+  candidates = M.dropExcluded(candidates, cfg and cfg.excludeWords)
   local plan = M.rarityPlan(type(candidates) == "table" and candidates or {}, infoOf, ctx, cfg)
   local function rf(e) return plan and plan(e) * 1000 or 1 end
   local groups, order = {}, {}

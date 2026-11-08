@@ -2,11 +2,11 @@
 -- SPDX-License-Identifier: AGPL-3.0-only
 --
 -- The game recycles a traffic car when its `respawn.finalRadius` is smaller than the car's distance to the player (RLS trafficVehicle.lua).
--- respawnRange multiplies that radius, respawnDelay keeps a car at least that many seconds after the game placed it. 1 and 0 = the game's original.
+-- respawnRange multiplies that radius, respawnDistance is a floor for it (a car is recycled only farther than that), respawnDelay keeps a car at least that many seconds after the game placed it. 1 and 0 = the game's original.
 
 local M = {}
 
-M.DEFAULTS = {respawnRange = 1, respawnDelay = 0, unjam = {enabled = true, seconds = 120, distance = 400}}
+M.DEFAULTS = {respawnRange = 1, respawnDistance = 4000, respawnDelay = 0, unjam = {enabled = true, seconds = 120, distance = 400}}
 
 local function num(v, lo, hi, d)
   v = tonumber(v)
@@ -20,6 +20,7 @@ function M.sanitize(src)
   local d = M.DEFAULTS
   return {
     respawnRange = num(src.respawnRange, 0.5, 3, d.respawnRange),
+    respawnDistance = num(src.respawnDistance, 0, 6000, d.respawnDistance),
     respawnDelay = num(src.respawnDelay, 0, 600, d.respawnDelay),
     unjam = {enabled = u.enabled ~= false, seconds = num(u.seconds, 30, 1800, d.unjam.seconds), distance = num(u.distance, 150, 5000, d.unjam.distance)},
   }
@@ -32,6 +33,13 @@ function M.scale(radius, range)
   return radius * range
 end
 
+-- The radius we give the game: the scaled one, but never below `distance` meters (0 = no floor).
+function M.effective(radius, range, distance)
+  radius = tonumber(radius)
+  if not radius or radius >= 1e5 then return radius end
+  return math.max(M.scale(radius, range), tonumber(distance) or 0)
+end
+
 -- Is the car still inside its minimum stay? `placedAt` = clock when its respawn count last changed (nil = unknown: no hold).
 function M.holdByDelay(placedAt, now, delay)
   return delay > 0 and placedAt ~= nil and now - placedAt < delay
@@ -42,6 +50,7 @@ function M.describe(old, new)
   local parts = {}
   local function diff(name, a, b) if a ~= b then parts[#parts + 1] = string.format("%s %s -> %s", name, tostring(a), tostring(b)) end end
   diff("respawnRange", old.respawnRange, new.respawnRange)
+  diff("respawnDistance", old.respawnDistance, new.respawnDistance)
   diff("respawnDelay", old.respawnDelay, new.respawnDelay)
   diff("unjam.enabled", old.unjam.enabled, new.unjam.enabled)
   diff("unjam.seconds", old.unjam.seconds, new.unjam.seconds)

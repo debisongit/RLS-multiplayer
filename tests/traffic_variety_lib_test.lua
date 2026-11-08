@@ -183,4 +183,25 @@ local perModel = {}
 for _, e in ipairs(big) do perModel[e.model] = (perModel[e.model] or 0) + 1 end
 check(#big == 4 and (perModel.bastion or 0) <= 1 and (perModel.fullsize or 0) <= 1, "per-model share cap holds while other cars exist")
 
+-- junk / wreck cars are never picked --------------------------------------------------------------------------
+local dc = V.sanitize(nil)
+check(#dc.excludeWords == 8 and dc.excludeWords[1] == "junk", "default exclude words")
+check(#V.sanitize({excludeWords = {"abc", "", 5}}).excludeWords == 1, "exclude words sanitized")
+check(V.isExcluded({model = "midsize", config = "joesjunk_career_midsize_2"}, dc.excludeWords), "joesjunk config excluded")
+check(V.isExcluded({model = "pickup", config = "Wrecked_01"}, dc.excludeWords), "case-insensitive wreck")
+check(V.isExcluded({model = "a", config = "b", drivable = false}, {}), "drivable == false excluded without words")
+check(V.isExcluded({model = "a", config = "b", ctype = "Derby"}, dc.excludeWords), "Config Type counts")
+check(not V.isExcluded({model = "etk800", config = "base"}, dc.excludeWords), "normal car stays")
+local junkList = {{model = "midsize", config = "joesjunk_career_midsize_2"}, {model = "lansdale", config = "joesjunk_career_lansdale"}, {model = "etk800", config = "a"}, {model = "van", config = "b"}}
+local sel = V.select(junkList, 4, function() return {} end, {}, dc, lcg(3))
+local bad = 0
+for _, e in ipairs(sel) do if e.config:find("junk") then bad = bad + 1 end end
+check(#sel > 0 and bad == 0, "select never returns a junk config")
+local memJ = V.newPool()
+for i = 1, 60 do
+  local e = V.pickOne(memJ, junkList, function() return {} end, {}, dc, lcg(i), nil)
+  check(e == nil or not e.config:find("junk"), "pickOne never returns a junk config")
+end
+check(#V.select({junkList[1], junkList[2]}, 2, function() return {} end, {}, dc, lcg(1)) == 0, "only junk: nothing picked")
+
 print(string.format("traffic_variety_lib_test: %d checks passed", passed))

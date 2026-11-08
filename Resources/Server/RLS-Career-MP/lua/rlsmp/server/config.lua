@@ -84,6 +84,8 @@ M.defaults = {
     -- respawnRange: multiplier on the game's own radius (1 = the game's original, up to 3 = cars stay about three times as far out).
     -- respawnDelay: seconds a car stays at least after the game placed it, before it may be recycled (0 = off, the game's original).
     respawnRange = 1.0,
+    -- respawnDistance: meters. A traffic car is recycled only when it is farther than this from EVERY player (never below the game's own radius). 0 = the game's original.
+    respawnDistance = 4000,
     respawnDelay = 0,
     -- Our own removal of stuck cars (client unjam.lua): only a car that stood still `seconds` and is `distance` m or more from EVERY player; one at a time.
     unjam = {enabled = true, seconds = 120, distance = 400},
@@ -157,6 +159,8 @@ M.defaults = {
     oversample = 2,
     maxShare = 0.25,
     maxCandidates = 80,
+    -- Broken / junkyard / wreck cars are never traffic: a model or config name containing one of these words is skipped (client picks and re-rolls).
+    excludeWords = {"junk", "wreck", "derby", "crash", "rolling", "shell", "undriveable", "parts"},
     -- Moving traffic and/or parked cars.
     applyToTraffic = true,
     applyToParked = true,

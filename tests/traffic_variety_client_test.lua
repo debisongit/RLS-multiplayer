@@ -201,6 +201,18 @@ T.install()
 g = core_multiSpawn.createGroup(6, TRAFFIC)
 check(#g == 6 and saw("variety failed, the game's own group is used"), "an error inside: logged, the game's own group is used")
 
+-- junk cars in the game's own group (ours failed): re-picked away, never kept
+local function junky(amount, params)
+  if amount > 6 then error("boom") end
+  return {{model = "midsize", config = "joesjunk_career_midsize_2"}, {model = "etk800", config = "c1"}, {model = "lansdale", config = "wrecked_a"}}
+end
+core_multiSpawn = {createGroup = junky}
+T.install()
+g = core_multiSpawn.createGroup(4, TRAFFIC)
+local junkLeft = 0
+for _, e in ipairs(g) do if e.config:find("junk") or e.config:find("wreck") then junkLeft = junkLeft + 1 end end
+check(#g >= 1 and junkLeft == 0 and saw("junk car(s) in the game's own group re-picked"), "the game's own group: junk cars replaced or dropped")
+
 -- 9. RLS wraps over us, like it does in a real career start. Its wrapper is NOT registered as a forwarder of what it wraps
 --    (trafficConfigFilter's makeWrapper does not register it), so we are no longer "intact" and wrap again: only ONE layer may be active.
 local function rlsPlainWrap(orig) return function(amount, params) return orig(amount, params) end end

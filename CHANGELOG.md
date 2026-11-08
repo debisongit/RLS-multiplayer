@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased (untested in-game)
+- Junk cars are gone from traffic: the owner's log showed the re-roll picking `joesjunk_career_*` configs (RLS's broken junkyard cars that do not drive). New server setting `trafficVariety.excludeWords` (default junk, wreck, derby, crash, rolling, shell, undriveable, parts): a model, config or Config Type containing one of these is never picked by group building, the pool, the re-roll or live swapping. A junk car in the game's own group is re-picked away too. (Claude A)
+- Traffic cars are recycled only when they are farther than `traffic.respawnDistance` meters (default 4000, 0 = the game's own radius, slider in the `[` menu) from every player; police in a chase are untouched. Cars are still placed back 100 to 300 m from the player like the game does. The game's old radius of 130 to 450 m made 5 to 12 cars a minute pop out and in. Warning: with only a few cars in traffic, they now drive away and few stay near you; raise the amount. (Claude A)
+- The raised traffic amount now holds: RLS put the player's own number (4) back after our parked-cars top-up, 5 s after we set 10. Every 10 s the amount is set again if it is back at the game's own setting, and the log shows the value read back (`TRAFFIC amount was reset by the game ...`). Raising the amount does not create cars: the log says how many cars exist. (Claude A)
+- New log line `range: effective respawn distance=...` every 30 s. (Claude A)
+
 ## 0.4.45 (untested in-game)
 - Same few cars again and again: the owner's log showed the game's own traffic amount was only 4, so 4 cars kept respawning around the player every few seconds. The server now lifts a lower amount to `traffic.minAmount` (default 10, never above the quota, 0 = leave the player's own). Costs some frame rate on weak PCs: lower it if it lags. (Claude A)
 

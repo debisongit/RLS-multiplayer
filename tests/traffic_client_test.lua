@@ -88,4 +88,29 @@ traffic.onServerLeave()
 traffic.onUpdate(5)
 check(active == 30 and traffic.getQuota() == nil, "quota forgotten after leaving the server")
 
+-- the amount is held: RLS resets it to the player's own setting (parked top-up, settings change)
+local own = 4
+settings = {getValue = function(k) if k == "trafficAmount" then return own end end}
+traffic.onServerLeave()
+traffic._resetClock()
+active = 4
+server({active = 15, min = 10})
+check(active == 10 and saw("TRAFFIC amount raised 4 -> 10 (server minimum), read back 10"), "minimum raised, value read back is logged")
+active = 4                      -- RLS onSettingsChanged put the player's own amount back
+traffic.onUpdate(3)
+check(active == 4, "held only after the hold interval")
+traffic.onUpdate(8)
+check(active == 10 and saw("TRAFFIC amount was reset by the game to 4, set to 10 again, read back 10"), "reset by the game: set again and read back")
+active = 0                      -- an RLS event (race) cut traffic: left alone
+traffic.onUpdate(11)
+check(active == 0, "an event's amount is not overridden")
+active = 7                      -- not RLS's default either
+traffic.onUpdate(11)
+check(active == 7, "other amounts are left alone")
+rlsmp_police = {isPursuit = function() return true end}
+active = 4 traffic.onUpdate(11)
+check(active == 4, "not during a pursuit")
+rlsmp_police = nil
+settings = nil
+
 print(string.format("traffic_client_test: %d checks passed", passed))

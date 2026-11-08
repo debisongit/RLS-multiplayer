@@ -412,9 +412,15 @@ local function stepPremade()
           if good and eligible then
             local info = data.configs[c]
             local known = type(info) == "table"
-            j.out[#j.out + 1] = {model = name, config = c, pop = known and tonumber(info.Population) or nil,
+            local e = {model = name, config = c, pop = known and tonumber(info.Population) or nil,
               ctype = known and type(info["Config Type"]) == "string" and info["Config Type"] or nil, value = known and tonumber(info.Value) or nil}
-            taken = taken + 1
+            if known and (info.isDrivable == false or info.drivable == false) then e.drivable = false end
+            if V.isExcluded(e, (config or V.DEFAULTS).excludeWords) then
+              p3.count("variety: junk config skipped")
+            else
+              j.out[#j.out + 1] = e
+              taken = taken + 1
+            end
           end
         end
       end
@@ -455,6 +461,26 @@ local function hook(key, lib, make)
   p3.log("I", "wrapped core_multiSpawn." .. key .. " (variety)")
 end
 
+-- The game's own group (used when ours failed or found nothing) may hold a junk car: swap each for a pool pick, or drop it.
+local function cleanOwn(group)
+  if type(group) ~= "table" or not config then return group end
+  local words = config.excludeWords
+  local out, changed = {}, 0
+  for _, e in ipairs(group) do
+    if V.isExcluded(e, words) then
+      changed = changed + 1
+      local ok, pick = pcall(M.pickReplacement, e, nil)
+      if ok and pick and pick.model then out[#out + 1] = {model = pick.model, config = pick.config} end
+    else
+      out[#out + 1] = e
+    end
+  end
+  if changed == 0 then return group end
+  p3.count("variety: junk car replaced in the game's own group")
+  p3.log("I", string.format("variety: %d junk car(s) in the game's own group re-picked (%d entries left)", changed, #out))
+  return out
+end
+
 local function makeCreateGroup(mine, original)
   return function(amount, params)
     if not mine.active or building > 0 or not active() or tonumber(amount) == nil or amount < 1 then
@@ -470,7 +496,9 @@ local function makeCreateGroup(mine, original)
     building = building - 1
     if ok2 and type(result) == "table" and #result > 0 then return result end
     if not ok2 then p3.log("W", "variety failed, the game's own group is used: " .. tostring(result)) end
-    return original(amount, params)
+    local own = original(amount, params)
+    if police then return own end
+    return cleanOwn(own)
   end
 end
 
@@ -525,7 +553,7 @@ end
 
 function M.getConfig() return config end
 -- For live swapping (rlsmp_trafficSwap): the entries seen recently, the current day/night and road class, and a model's Type/mod info.
-function M.candidates() local out = {} for i, e in ipairs(recent) do out[i] = e end return out end
+function M.candidates() local out = {} for i, e in ipairs(recent) do out[i] = e end return V.dropExcluded(out, config and config.excludeWords) end
 function M.contextNow() return context() end
 function M.infoOf(e) return {type = typeOfModel(e.model), mod = config ~= nil and config.mods[e.model] ~= nil, brand = brandOfModel(e.model)} end
 function M.brandOf(model) return brandOfModel(model) end
@@ -558,7 +586,7 @@ end
 -- A real (full) car entry of `model` from the premade pool, or nil (rlsmp_simplified upgrades a stand-in with it).
 function M.fullEntryFor(model)
   local list = {}
-  for _, e in ipairs(premadeList or {}) do if e.model == model then list[#list + 1] = e end end
+  for _, e in ipairs(premadeList or {}) do if e.model == model and not V.isExcluded(e, config and config.excludeWords) then list[#list + 1] = e end end
   if #list == 0 then return nil end
   return list[math.random(#list)]
 end

@@ -308,4 +308,17 @@ local pc = require("rlsmp.server.trafficPolice").payload()
 check(pc.range.respawnRange == 2.5 and pc.range.respawnDelay == 45 and pc.range.unjam.enabled == true, "range: the payload follows the edit")
 cfg.traffic.respawnRange, cfg.traffic.respawnDelay = 1.0, 0
 
+-- respawnDistance: default 4000 m, 0 to 6000, sent with the range
+check(cfg.traffic.respawnDistance == 4000, "range: default recycle distance 4000 m")
+check(require("rlsmp.server.trafficPolice").payload().range.respawnDistance == 4000, "range: the distance is in the payload")
+set(0, {{p = {"traffic", "respawnDistance"}, v = 2500}, {p = {"traffic", "respawnDistance"}, v = 7000}, {p = {"traffic", "respawnDistance"}, v = -1}})
+r = lastResult()
+check(r.applied == 1 and #r.rejected == 2 and cfg.traffic.respawnDistance == 2500, "range: distance edited, above 6000 and below 0 refused")
+check(admin.snapshot().traffic.respawnDistance == 2500 and require("rlsmp.server.trafficPolice").payload().range.respawnDistance == 2500, "range: distance in snapshot and payload")
+set(0, {{p = {"traffic", "respawnDistance"}, v = 0}})
+check(cfg.traffic.respawnDistance == 0, "range: 0 = the game's own radius")
+cfg.traffic.respawnDistance = 4000
+check(type(cfg.trafficVariety.excludeWords) == "table" and cfg.trafficVariety.excludeWords[1] == "junk", "variety: default exclude words in the server config")
+check(require("rlsmp.server.trafficVariety").payload().excludeWords[1] == "junk", "variety: exclude words sent to the clients")
+
 print(string.format("traffic_admin_test: %d checks passed", passed))
