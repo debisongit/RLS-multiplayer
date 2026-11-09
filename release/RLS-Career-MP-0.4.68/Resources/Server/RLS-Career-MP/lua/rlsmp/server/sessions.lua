@@ -160,6 +160,13 @@ local function onHello(pid, data)
 
   runHooks(downloadHooks, pid, s, profile)
   s.isNew = isNew
+  -- the biggest files of the save: a smaller save means fewer chunks on a link that is known to lose a packet now and then
+  local sizes = {}
+  for name, text in pairs(profile.save.files) do sizes[#sizes + 1] = {name = name, n = #tostring(text)} end
+  table.sort(sizes, function(a, b) return a.n > b.n end)
+  local top = {}
+  for i = 1, math.min(5, #sizes) do top[#top + 1] = string.format("%s %d", sizes[i].name, sizes[i].n) end
+  util.info(string.format("[rlsmp-timing] %s's save has %d files, biggest: %s", tostring(s.name), #sizes, table.concat(top, ", ")))
   local payload = profiles.encodeForDownload(profile)
   util.info(string.format("[rlsmp-timing] loaded and encoded %s's profile: %d bytes, %.2fs", tostring(s.name), #payload, os.clock() - t0))
   sendProfile(pid, s, payload)
