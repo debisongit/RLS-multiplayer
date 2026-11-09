@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.4.65 (untested in-game)
+- Fit fake plate: "This car has no plate text yet" is fixed. RLS had no saved plate for the car (the plate was only on the live car), so the tile found nothing to replace. The tile now reads the plate from the live car when RLS's record is empty. (Claude A)
+
 ## 0.4.64 (untested in-game)
 - A save download that stops is asked for again (handoff open problem 2 and the owner's log `88e86ae6`: 29 of 191 pieces, then nothing, and the game ended up in plain BeamMP): after 12 s without a new piece the game asks the server to send the whole save again, up to three times; the server sends it with smaller chunks and fewer per tick each time (8000 B x 3, 4000 B x 1, 2000 B x 1). No answer to the hello for 20 s: the hello is sent again (twice), and the server treats that as a retry. New event `rlsmpRetry {attempt}`; hello may carry `again`. The server logs `save download stalled: sending it again`. Needs the new build on BOTH server and client. (Claude B)
 - Lag (handoff open problem 1): frame-time counters. Every extension's `onUpdate` is timed; once a minute the log has one line `RLSMP-P3 perf: ours X ms/frame over N frames, cars in the game N; per module ms/call: ...`. If "ours" is small the lag is not our per-frame code. Not covered: time inside our wrappers around RLS functions and in event handlers. (Claude B)

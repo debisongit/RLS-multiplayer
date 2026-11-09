@@ -97,9 +97,18 @@ local function applyPlate(inv, text)
   return true
 end
 
+-- The plate a garage car has now: RLS's record (config.licenseName) or, when RLS never stored one (a car bought or loaded without a saved plate,
+-- seen in a real game: the plate is on the car but the record is empty), the plate text of the live car.
+local function plateOfCar(inv, v)
+  local plate = v and v.config and L.clean(v.config.licenseName)
+  if plate then return plate end
+  local obj = liveObject(inv)
+  return obj and plateOfObject(obj) or nil
+end
+
 local function recordFor(inv)
   local v = vehicles()[inv]
-  local plate = v and v.config and L.clean(v.config.licenseName)
+  local plate = plateOfCar(inv, v)
   return plate and records[plate] or nil
 end
 
@@ -174,7 +183,7 @@ function M.choose(action, index)
   if action == "fit" then
     index = math.floor(tonumber(index) or 0)
     if index < 1 or index > #(t.choices or {}) then return end
-    local real = L.clean(v.config and v.config.licenseName)
+    local real = plateOfCar(t.inv, v)
     if not real then return toast("warning", "This car has no plate text yet. Try again in a moment.") end
     say("I", string.format("fit request: car %s, choice %d", tostring(t.inv), index))
     net.send("rlsmpFakeFit", {inv = t.inv, idx = index, real = real, model = v.model})
