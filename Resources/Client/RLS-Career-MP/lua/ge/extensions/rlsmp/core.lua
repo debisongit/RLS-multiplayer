@@ -29,6 +29,17 @@ end
 local START_TIMEOUT = 180     -- seconds to wait for RLS to report the career as active
 local RLS_WAIT_TIMEOUT = 60   -- seconds to wait for RLS itself to finish loading
 
+-- The save is asked for only when the game has calmed down after loading the other players' cars. Both logs of a stalled join show the same
+-- thing: the other player's ~25 synced cars were still loading when the save started to come, and a packet of the BeamMP launcher link came
+-- out cut in two (`jsonDecode: {"ignLvl":0,"ICE":\5\1\0\0E:rlsmpChunkBegin:...`): our header was swallowed. So: no hello while cars were built in the last CALM_SECONDS (at most CALM_MAX).
+local CALM_SECONDS, CALM_MAX = 6, 90
+local lastCarBuilt = nil      -- stateClock when a vehicle was last spawned
+local stateClock = 0
+local function calmNow()
+  return lastCarBuilt == nil or stateClock - lastCarBuilt >= CALM_SECONDS
+end
+function M.onVehicleSpawned() lastCarBuilt = stateClock end
+
 local state = "idle"          -- idle | waiting_rls | hello_sent | downloading | starting | active | failed
 local stateTime = 0
 local pending                 -- {profile, isNew, slot, opts}
@@ -165,7 +176,7 @@ local started = false   -- a join attempt was made since we last left a server
 
 local function begin()
   started = true
-  if rlsReady() then sendHello() else setState("waiting_rls") end
+  if rlsReady() and calmNow() then sendHello() else setState("waiting_rls") end
 end
 
 -- Any state but "a join is running or done" restarts on a fresh world: a failed or stuck earlier attempt must not block the next join.
@@ -187,6 +198,7 @@ function M.onUpdate(dtReal)
   mapGate.install()
   removeGuard.install()
   stateTime = stateTime + (dtReal or 0)
+  stateClock = stateClock + (dtReal or 0)
   -- Any download in progress (the save, or a fleet / duel car later): keep the server's send window open.
   heartbeatTimer = heartbeatTimer + (dtReal or 0)
   if heartbeatTimer >= HEARTBEAT_EVERY then
@@ -195,7 +207,10 @@ function M.onUpdate(dtReal)
   end
   if state == "waiting_rls" then
     if rlsReady() then
-      sendHello()
+      if calmNow() or stateTime > CALM_MAX then
+        if not calmNow() then timing("cars are still being built, but the join waited long enough: saying hello") end
+        sendHello()
+      end
     elseif stateTime > RLS_WAIT_TIMEOUT then
       fail("rls_missing", "RLS Career Overhaul is not installed or failed to load.")
     end

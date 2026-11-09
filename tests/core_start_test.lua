@@ -143,4 +143,23 @@ check(repeats >= 2, "silence after the hello: it is sent again (repeats so far "
 local again
 for k = #sentData, 1, -1 do if sentData[k].name == "rlsmpHello" then again = sentData[k].data break end end
 check(again.again == 2, "...marked as a repeat")
+
+-- 0.4.65: no hello while the game is still building cars (other players' cars); it goes out once calm, or after 90 s
+core.onServerLeave()
+local h0 = hellos()
+core.onVehicleSpawned(42)
+core.onWorldReadyState(2)
+check(core.getState() == "waiting_rls" and hellos() == h0, "cars were just built: the hello waits")
+for _ = 1, 4 do core.onUpdate(1) end
+check(hellos() == h0, "still waiting after 4 s")
+core.onVehicleSpawned(43)
+for _ = 1, 5 do core.onUpdate(1) end
+check(hellos() == h0, "another car restarts the quiet time")
+for _ = 1, 2 do core.onUpdate(1) end
+check(hellos() == h0 + 1 and core.getState() == "hello_sent", "6 s without a new car: hello")
+core.onServerLeave()
+core.onVehicleSpawned(1)
+core.onWorldReadyState(2)
+for i = 1, 100 do core.onUpdate(1) if i % 3 == 0 then core.onVehicleSpawned(i) end end
+check(hellos() == h0 + 2, "cars keep coming: the join waits at most 90 s, then says hello anyway")
 print("core_start_test: " .. passed .. " checks passed")

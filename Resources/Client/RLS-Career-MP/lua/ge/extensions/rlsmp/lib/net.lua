@@ -125,6 +125,7 @@ local function onChunk(c)
     if n >= ORPHAN_IDS then return end
     o = {parts = {}, count = 0, wait = 0}
     orphans[id] = o
+    api.log("W", "Chunks of transfer " .. id .. " arrive without their header (it was lost): asking for it again")
     askHeader(id)
   end
   local i = tonumber(c.i)
