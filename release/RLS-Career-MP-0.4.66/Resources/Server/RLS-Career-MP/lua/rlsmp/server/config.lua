@@ -60,6 +60,8 @@ M.defaults = {
     maxStartingMoney = 1000000,
     -- Allow this much drift (rounding, fees) between client and server before correcting.
     tolerance = 1,
+    -- A save with more money than the server counted (income the server never saw) is adopted up to this much per window; more is corrected. 0 = always correct.
+    adoptUpTo = 25000,
     -- Lowest balance allowed (RLS has loans, so a bit of debt is fine).
     minBalance = -10000000,
   },

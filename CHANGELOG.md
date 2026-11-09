@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.4.66 (untested in-game)
+- Money: "Server balance sync -13,073" is fixed. At every save the server compares your saved money with its own count and used to force ITS number. If the server had missed income (a payout it was never told about), you lost it. Now extra money in a save is adopted up to `wallet.adoptUpTo` (25,000) per 5 minutes and logged (`RLSMP-WALLET adopted ...`); bigger jumps and LESS money than the server counted are still corrected (`RLSMP-WALLET corrected: client X, server Y`). Existing servers: add `adoptUpTo` to the `wallet` block in `config.json`. (Claude A)
+
 ## 0.4.65 (untested in-game)
 - Fit fake plate: "This car has no plate text yet" is fixed. RLS had no saved plate for the car (the plate was only on the live car), so the tile found nothing to replace. The tile now reads the plate from the live car when RLS's record is empty. (Claude A)
 

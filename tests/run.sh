@@ -29,6 +29,7 @@ lua5.3 tests/plate_records_test.lua "$(mktemp -d -p "$tmp")"
 lua5.3 tests/market_test.lua "$(mktemp -d -p "$tmp")"
 lua5.3 tests/theft_test.lua "$(mktemp -d -p "$tmp")"
 lua5.3 tests/fence_test.lua "$(mktemp -d -p "$tmp")"
+lua5.3 tests/wallet_adopt_test.lua
 lua5.3 tests/recall_test.lua "$(mktemp -d -p "$tmp")"
 lua5.3 tests/fake_plates_test.lua "$(mktemp -d -p "$tmp")"
 lua5.3 tests/meetup_test.lua "$(mktemp -d -p "$tmp")"
