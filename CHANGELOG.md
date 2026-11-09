@@ -1,9 +1,19 @@
 # Changelog
 
-## 0.4.65 (untested in-game)
+## 0.4.68 (untested in-game)
+- Lag, from the owner's career log `d0090703` (build 0.4.67, 34 cars in the game): our own per-frame code costs only 0.33 to 0.42 ms per frame (about 2 percent of a frame), so it is NOT what holds the game under 20 fps. The one spike in our code was a 75 ms hitch in the police re-placement (the road search asked the map for 9 road names); it asks for at most 4 now and reuses the player's own road for 10 s. What the log does show: about 36 separate browser clients for car screens (`VehicleTex-@covet_gauges_odo`, `vivace_gps_screen`, `generic_gauges_odo`, ... one for every car with a digital gauge, GPS or odometer) for 34 cars, plus `material cbv array exhausted (8192 slots)` in every log. Every extra car with a screen costs a browser, on top of its physics. (Claude B)
 - Joining when another player is already in (the owner's logs `88e86ae6` and `ec64663b`, server log of the same join): both stalled joins started their save download while the other player's ~25 synced cars were still loading, and the game log shows one packet of the BeamMP launcher link coming out cut in two (`jsonDecode ... {"ignLvl":0,"ICE":\5\1\0\0E:rlsmpChunkBegin:...`): our chunk header was swallowed. The three server retries (smaller chunks) did not help, so chunk size is not the cause. Now the hello waits until no car was built for 6 s (at most 90 s), so the save does not travel during the car-loading burst. (Claude B)
 - The server logs the five biggest files of a player's save (`[rlsmp-timing] ... save has N files, biggest: ...`) and the client logs when chunks arrive without their header. The save is 3 MB (396 chunks); if one file dominates it can be trimmed next. (Claude B)
 - Not ours, but in your log: the car mod VWG8 prints `UI texture '@VWG8_cockpit_R' not found` several times a second (log spam that costs time); remove or update that mod when you can. (Claude B)
+
+## 0.4.67 (untested in-game)
+- Money, root cause found in the server log: the server's money count is kept between sessions and was already out of step when you joined (-3,785 against your 9,288), so your first save of the session was "corrected" by 13,073. Now every join restarts the server count from the money in your stored save (logged as `RLSMP-WALLET <name>: server count X restarted from the stored save Y`). With 0.4.66 (adopt up to 25,000) this should not happen again. Your server was still on 0.4.64 in that log, so neither fix was running.
+
+## 0.4.66 (untested in-game)
+- Money: "Server balance sync -13,073" is fixed. At every save the server compares your saved money with its own count and used to force ITS number. If the server had missed income (a payout it was never told about), you lost it. Now extra money in a save is adopted up to `wallet.adoptUpTo` (25,000) per 5 minutes and logged (`RLSMP-WALLET adopted ...`); bigger jumps and LESS money than the server counted are still corrected (`RLSMP-WALLET corrected: client X, server Y`). Existing servers: add `adoptUpTo` to the `wallet` block in `config.json`. (Claude A)
+
+## 0.4.65 (untested in-game)
+- Fit fake plate: "This car has no plate text yet" is fixed. RLS had no saved plate for the car (the plate was only on the live car), so the tile found nothing to replace. The tile now reads the plate from the live car when RLS's record is empty. (Claude A)
 
 ## 0.4.64 (untested in-game)
 - A save download that stops is asked for again (handoff open problem 2 and the owner's log `88e86ae6`: 29 of 191 pieces, then nothing, and the game ended up in plain BeamMP): after 12 s without a new piece the game asks the server to send the whole save again, up to three times; the server sends it with smaller chunks and fewer per tick each time (8000 B x 3, 4000 B x 1, 2000 B x 1). No answer to the hello for 20 s: the hello is sent again (twice), and the server treats that as a retry. New event `rlsmpRetry {attempt}`; hello may carry `again`. The server logs `save download stalled: sending it again`. Needs the new build on BOTH server and client. (Claude B)

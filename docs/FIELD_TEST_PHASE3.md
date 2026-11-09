@@ -593,7 +593,7 @@ Known gaps: never played; each cop is one more BeamMP car for everybody (MaxCars
 4. Parked cars are stand-ins now. Check you can still steal a parked car (it turns into the real car).
 Known gaps: never played; the cause of the original stall is not known, the retry only works around it.
 
-## Join while another player is in (build 0.4.65)
+## Join while another player is in (build 0.4.68)
 
 1. Player A joins and plays (cars out). Player B joins after. B's log should show `cars are still being built...` only if the loading goes on for 90 s; normally the hello (`state hello_sent`) comes a few seconds after the last car loaded.
 2. Send B's game log and the server console from B's join. Look for: `save has N files, biggest: ...` (server), `Chunks of transfer N arrive without their header` (client), `jsonDecode` errors around the join (client).

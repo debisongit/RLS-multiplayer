@@ -103,6 +103,22 @@ function M.reconcile(ledger, clientMoney)
   end
   if not clientMoney then return ledger.money, true end
   if math.abs(clientMoney - ledger.money) > cfg.wallet.tolerance then
+    -- The save has MORE money than the server counted: income the server never saw (a payout that came in a way it was not told about, a
+    -- message lost on the way). A real player lost 13,073 to the old rule ("Server balance sync" -13,073), so a limited amount of extra money is
+    -- adopted instead of being taken away: at most `adoptUpTo` per `windowSeconds`, and every case is logged. Bigger jumps are still corrected.
+    local extra = clientMoney - ledger.money
+    local limit = tonumber(cfg.wallet.adoptUpTo) or 0
+    if extra > 0 and limit > 0 then
+      ledger.adoptWindow = ledger.adoptWindow or {}
+      local now = os.time()
+      if windowTotal(ledger, now, "adoptWindow") + extra <= limit then
+        table.insert(ledger.adoptWindow, {t = now, a = extra})
+        util.info(string.format("RLSMP-WALLET adopted %d more than the server counted (client %d, server %d)", extra, clientMoney, ledger.money))
+        ledger.money = clientMoney
+        return clientMoney, false
+      end
+    end
+    util.info(string.format("RLSMP-WALLET corrected: client %s, server %s (difference %d)", tostring(clientMoney), tostring(ledger.money), clientMoney - ledger.money))
     return ledger.money, true
   end
   -- Tiny rounding differences: adopt the client's number so drift never piles up.

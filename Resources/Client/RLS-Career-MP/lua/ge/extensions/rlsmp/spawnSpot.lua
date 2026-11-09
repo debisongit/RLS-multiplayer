@@ -13,7 +13,8 @@ local M = {}
 local S = require("rlsmp/lib/spawnSpot")
 local p3 = require("rlsmp/lib/p3")
 
-local TRIES, MAX_ROAD_CHECKS = 160, 8
+local TRIES, MAX_ROAD_CHECKS = 160, 3   -- (was 8: the owner's perf line showed a 75 ms hitch in policeRespawn; each findClosestRoad is a map search)
+local playerRoad = {pos = nil, name = nil, at = -math.huge}   -- the player's own road name, reused while they stand within 40 m of where it was asked
 local keys, keysFor = nil, nil       -- the node names as a list (rebuilt when the game's node table changes)
 
 local function xyz(p) return p and p.x and {x = p.x, y = p.y, z = p.z} or nil end
@@ -87,7 +88,13 @@ function M.find(o)
   end
   for i = 1, math.min(#ok, MAX_ROAD_CHECKS) do kept[i] = ok[i] end
   if not o.noRoad then
-    ctx.road = roadOf(ctx.player)
+    local now = os.clock()
+    if playerRoad.pos and now - playerRoad.at < 10 and (playerRoad.pos.x - ctx.player.x) ^ 2 + (playerRoad.pos.y - ctx.player.y) ^ 2 < 1600 then
+      ctx.road = playerRoad.name
+    else
+      ctx.road = roadOf(ctx.player)
+      playerRoad.pos, playerRoad.name, playerRoad.at = {x = ctx.player.x, y = ctx.player.y}, ctx.road, now
+    end
     for _, c in ipairs(kept) do c.road = roadOf(c) end
   end
   local best, why = S.pick(kept, ctx, o.preferRight)
