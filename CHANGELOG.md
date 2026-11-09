@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.4.67 (untested in-game)
+- Money, root cause found in the server log: the server's money count is kept between sessions and was already out of step when you joined (-3,785 against your 9,288), so your first save of the session was "corrected" by 13,073. Now every join restarts the server count from the money in your stored save (logged as `RLSMP-WALLET <name>: server count X restarted from the stored save Y`). With 0.4.66 (adopt up to 25,000) this should not happen again. Your server was still on 0.4.64 in that log, so neither fix was running.
+
 ## 0.4.66 (untested in-game)
 - Money: "Server balance sync -13,073" is fixed. At every save the server compares your saved money with its own count and used to force ITS number. If the server had missed income (a payout it was never told about), you lost it. Now extra money in a save is adopted up to `wallet.adoptUpTo` (25,000) per 5 minutes and logged (`RLSMP-WALLET adopted ...`); bigger jumps and LESS money than the server counted are still corrected (`RLSMP-WALLET corrected: client X, server Y`). Existing servers: add `adoptUpTo` to the `wallet` block in `config.json`. (Claude A)
 

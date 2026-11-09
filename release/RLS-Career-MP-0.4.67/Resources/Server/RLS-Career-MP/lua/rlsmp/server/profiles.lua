@@ -49,6 +49,12 @@ local function newProfile(accountId, name)
   }
 end
 
+local function readMoney(attributesText)
+  local attrs = util.jsonDecode(attributesText)
+  if type(attrs) ~= "table" or type(attrs.money) ~= "table" then return nil, attrs end
+  return tonumber(attrs.money.value), attrs
+end
+
 -- Returns profile, isNew
 function M.loadOrCreate(accountId, name)
   if cache[accountId] then return cache[accountId], false end
@@ -65,6 +71,16 @@ function M.loadOrCreate(accountId, name)
   -- A profile with no files yet is still a fresh career from RLS's point of view.
   if next(profile.save.files) == nil then isNew = true end
   cache[accountId] = profile
+  -- The client starts this session from the money in the stored save, so the server's count starts there too.
+  -- (A count left over from an earlier session could be out of step and later "correct" the player's real money.)
+  if profile.ledger.seeded and not isNew then
+    local attrsText = profile.save.files[M.ATTRIBUTES_FILE]
+    local saved = attrsText and select(1, readMoney(attrsText))
+    if saved and math.abs(saved - profile.ledger.money) > 1 then
+      util.info(string.format("RLSMP-WALLET %s: server count %d restarted from the stored save %d", tostring(profile.lastName), profile.ledger.money, saved))
+      profile.ledger.money = saved
+    end
+  end
   return profile, isNew
 end
 
@@ -101,12 +117,6 @@ end
 -- What we send to the client on join.
 function M.encodeForDownload(profile)
   return util.jsonEncode({files = profile.save.files})
-end
-
-local function readMoney(attributesText)
-  local attrs = util.jsonDecode(attributesText)
-  if type(attrs) ~= "table" or type(attrs.money) ~= "table" then return nil, attrs end
-  return tonumber(attrs.money.value), attrs
 end
 
 local function vehicleFile(inv) return "career/vehicles/" .. tostring(inv) .. ".json" end
