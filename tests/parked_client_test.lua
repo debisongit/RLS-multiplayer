@@ -16,7 +16,8 @@ local function check(c, m) if not c then error("FAIL: " .. m, 2) end passed = pa
 local plan = Pk.plan
 check(plan({wanted = 10, current = 2}) == "set", "too low: set")
 check(plan({wanted = 10, current = 0}) == "set", "automatic (0): set")
-check(plan({wanted = 10, current = 15}) == "idle", "the player already wants more: leave it")
+check(plan({wanted = 10, current = 15}) == "set", "the save keeps a bigger number from an older server: lower it to what the server wants")
+check(plan({wanted = 10, current = 10}) == "idle", "already the wanted number: nothing to do")
 check(plan({wanted = 0, current = 2}) == "idle", "0 = leave the game alone")
 check(plan({wanted = 10, current = 2, noParked = true}) == "skip", "parked cars switched off: skip")
 check(plan({wanted = 10, current = 10, applied = 10, have = 4}) == "sync", "set but too few cars: top up")
@@ -85,10 +86,10 @@ run(2)
 T.onServerLeave()
 check(values.trafficParkingAmount == 2 and saw("left the server, trafficParkingAmount back to 2"), "the old value is restored when leaving")
 
--- 5. a higher value of the player is never lowered ---------------------------------------------------------------------------------------------------
+-- 5. a higher value left in the save by an older server is lowered to what the server wants (a friend's game kept 16 while the server wanted 5) ---------------------------------------------------------------------------------------------------
 reset() setConfig(10) values.trafficParkingAmount = 15
 run(4)
-check(#writes == 0 and saw("already 15"), "the player's own 15 stays")
+check(values.trafficParkingAmount == 10 and #writes >= 1, "the save's 15 is lowered to the server's 10")
 
 -- 6. 0 = off ---------------------------------------------------------------------------------------------------------------------------------------------------
 reset() setConfig(0)

@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.4.72 (untested in-game)
+- Parked cars: the friend's log (`b0a1e551`) showed `trafficParkingAmount is already 16 (wanted 5)`. The parked amount lives in the player's own career save (RLS setting), so a save that an older server had set to 16 kept 16 and our code only ever RAISED the number. A player whose save held a bigger number than the server wants never got the lower amount, which is why that game had about 35 cars (16 parked + 8 traffic + the other player's) and 9 to 13 fps on a strong PC, while a game with a low saved number ran fine. Now the amount is also lowered to what the server wants (the old value is restored when you leave the server).
+
 ## 0.4.71 (untested in-game)
 - The settings menu (`[` key) opens on a SIMPLE page now: cars on the road (traffic per player, parked cars by day and night, one slider for how far traffic stays), police (cops never in front of you, no fines in a stolen car, most cops), and on/off switches (car theft, black market, fence, passengers, weather, car variety). The button "Advanced settings" shows all the old sections, "Back to simple" returns.
 - Traffic range is 1 km (was 4 km): `traffic.respawnDistance` and `traffic.spawnMaxDistance` default 1000. The simple slider sets both.

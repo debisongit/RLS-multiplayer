@@ -24,7 +24,8 @@ function M.plan(s)
   if s.noParked then return "skip" end
   if wanted <= 0 then return s.applied and "restore" or "idle" end
   if s.applied == nil then
-    if current >= wanted or s.released == wanted then return "idle" end
+    -- also LOWER a bigger number: a career save keeps the amount an older server set (a real friend's game had 16 while the server wanted 5)
+    if current == wanted or s.released == wanted then return "idle" end
     return "set"
   end
   if current ~= s.applied then return "forget" end
