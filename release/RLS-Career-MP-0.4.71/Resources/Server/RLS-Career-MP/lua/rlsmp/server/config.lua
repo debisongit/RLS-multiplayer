@@ -87,13 +87,13 @@ M.defaults = {
     -- respawnDelay: seconds a car stays at least after the game placed it, before it may be recycled (0 = off, the game's original).
     respawnRange = 1.0,
     -- respawnDistance: meters. A traffic car is recycled only when it is farther than this from EVERY player (never below the game's own radius). 0 = the game's original.
-    respawnDistance = 4000,
+    respawnDistance = 1000,
     respawnDelay = 0,
     -- spawnMinDistance / spawnMaxDistance: meters. A traffic car that the game has just re-placed (it puts it only 100 to 300 m from you) is moved to a
     -- road spot between these distances from the player (client rlsmp_trafficPlace); the traffic fill uses the same ring. Never within 120 m, in the
     -- camera view or near another player. spawnMaxDistance 0 = the game's own placement.
     spawnMinDistance = 250,
-    spawnMaxDistance = 4000,
+    spawnMaxDistance = 1000,
     -- Our own removal of stuck cars (client unjam.lua): only a car that stood still `seconds` and is `distance` m or more from EVERY player; one at a time.
     unjam = {enabled = true, seconds = 120, distance = 400, crashed = true, crashedSeconds = 60, inViewSeconds = 120},   -- crashed: a wrecked car near you also goes (hidden after crashedSeconds, in view after inViewSeconds)
   },
@@ -574,6 +574,16 @@ function M.load(path)
       cfg.trafficVariety.parked.fullPool = false
       util.info("RLSMP-P3 lag trim: trafficVariety.parked.fullPool is now false (cheap stand-ins for parked cars); change it in the [ menu")
     end
+  end
+  -- Lag (0.4.70): fewer cars and a 1 km traffic range. A config.json written before keeps the old numbers, so set the new defaults once (change them again in the [ menu).
+  if not cfg.migrations.carTrim70 then
+    cfg.migrations.carTrim70 = true
+    local d = M.defaults
+    cfg.traffic.maxPerPlayer, cfg.traffic.baseBudget, cfg.traffic.perPlayerBudget, cfg.traffic.minAmount = d.traffic.maxPerPlayer, d.traffic.baseBudget, d.traffic.perPlayerBudget, d.traffic.minAmount
+    cfg.traffic.respawnDistance, cfg.traffic.spawnMaxDistance = d.traffic.respawnDistance, d.traffic.spawnMaxDistance
+    local pk, dp = cfg.trafficVariety.parked, d.trafficVariety.parked
+    pk.amount, pk.nightAmount, pk.nearCount, pk.nearNightCount = dp.amount, dp.nightAmount, dp.nearCount, dp.nearNightCount
+    util.info("RLSMP-P3 lag trim 0.4.70: fewer cars (traffic " .. d.traffic.maxPerPlayer .. " per player, parked " .. dp.amount .. "/" .. dp.nightAmount .. ") and traffic range " .. d.traffic.respawnDistance .. " m; change them in the [ menu")
   end
   if type(cfg.serverTag) ~= "string" or not cfg.serverTag:match("^[a-z0-9]+$") then
     cfg.serverTag = randomTag()

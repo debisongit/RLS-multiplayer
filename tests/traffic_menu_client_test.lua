@@ -68,8 +68,23 @@ M.toggle()
 server("rlsmpTrafficAdminState", {ok = true, cfg = SNAP})
 check(ui.visible == true and ui.toggles == 1, "hidden ImGui made visible")
 M.onUpdate()
-check(drawn.Begin == 1 and drawn.SliderFloat and drawn.SliderFloat >= 3, "window and sliders drawn (Car/Truck types, models)")
-check(not saw("draw failed"), "no draw error")
+check(drawn.Begin == 1 and not saw("draw failed"), "window drawn: the simple page opens first")
+check(seenButtons["Advanced settings"] and not seenButtons["Where & when"], "simple page: one 'Advanced settings' button, no section tabs")
+-- the simple page edits the common settings; the distance slider sets both distances
+sliders["How far traffic stays (metres)##simpledist"] = 1200
+M.onUpdate()
+check(M.getState().pending["traffic.respawnDistance"].value == 1200 and M.getState().pending["traffic.spawnMaxDistance"].value == 1200, "one slider sets both traffic distances")
+clicks["Revert"] = true
+M.onUpdate()
+check(next(M.getState().pending) == nil, "revert clears the simple page edits")
+M.close()
+M.toggle()
+server("rlsmpTrafficAdminState", {ok = true, cfg = SNAP})
+clicks["Advanced settings"] = true
+M.onUpdate()
+M.onUpdate()
+check(seenButtons["Back to simple"] and seenButtons["Where & when"], "Advanced settings shows the old section tabs")
+check(drawn.SliderFloat and drawn.SliderFloat >= 3, "sliders drawn (Car/Truck types, models)")
 
 -- 3. every section draws without error --------------------------------------------------------------------------------------------
 for _, s in ipairs({"Where & when", "Behaviour", "Amount", "Swapping", "Weather", "Police", "Theft", "Fence", "Market", "Cars"}) do

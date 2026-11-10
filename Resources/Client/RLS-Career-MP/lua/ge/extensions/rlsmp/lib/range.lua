@@ -6,7 +6,7 @@
 
 local M = {}
 
-M.DEFAULTS = {respawnRange = 1, respawnDistance = 4000, respawnDelay = 0, spawnMinDistance = 250, spawnMaxDistance = 4000, unjam = {enabled = true, seconds = 120, distance = 400, crashed = true, crashedSeconds = 60, inViewSeconds = 120}}
+M.DEFAULTS = {respawnRange = 1, respawnDistance = 1000, respawnDelay = 0, spawnMinDistance = 250, spawnMaxDistance = 1000, unjam = {enabled = true, seconds = 120, distance = 400, crashed = true, crashedSeconds = 60, inViewSeconds = 120}}
 
 local function num(v, lo, hi, d)
   v = tonumber(v)

@@ -3,7 +3,7 @@
 --
 -- Opened with the [ key (action rlsmpTrafficMenu, see core/input/actions/rlsmp.json) or the chat command /trafficmenu. Anybody can press the key, but the SERVER
 -- decides what may be changed and to what range (server/trafficAdmin.lua). Since 0.4.29 every player can open it: there is no admin list.
--- The menu is an ImGui window (the same kind RLS's own debug tools use): sections Cars, Where & when, Behaviour, Amount, Swapping, Weather, Police, Theft, Fence, Market.
+-- The menu is an ImGui window (the same kind RLS's own debug tools use). It opens on a SIMPLE page (a few plain settings); the button "Advanced settings" shows the old sections: Cars, Where & when, Behaviour, Amount, Swapping, Weather, Police, Theft, Fence, Market.
 -- Changes are collected and sent as one patch with the Apply button; the server answers with what it applied and the fresh settings.
 -- Pure logic (pending changes, the patch, the car lists): lib/trafficMenu.lua. Draw code only uses ImGui calls RLS itself uses.
 
@@ -23,6 +23,7 @@ local modelList = nil              -- the game's car list, read when the menu op
 local toggledImgui = false         -- we made ImGui visible and must put it back
 local probed = false
 local drawFailed = false
+local advanced = false           -- false: the simple page, true: the old detailed sections
 local inChild = false             -- between BeginChild1 and EndChild: a draw error must close it too (ImGui asserts on a mismatched stack)
 local searchBuf, modBuf            -- ImGui text buffers
 local readText = function(buf) local ok, s = pcall(ffi.string, buf) return ok and s or "" end
@@ -85,7 +86,7 @@ local function doOpen()
   readModels()
   probeImgui()
   ensureVisible()
-  open, wantOpen, drawFailed = true, false, false
+  open, wantOpen, drawFailed, advanced = true, false, false, false
   p3.log("I", "traffic menu opened")
 end
 
@@ -504,6 +505,37 @@ local function sectionMarket(ui)
   num(ui, "Keep the author's price when within", {"modPrice", "tolerance"}, 0, 2, "%.2f")
 end
 
+-- The simple page (shown first): the few settings people actually change, in plain words. Everything else is under "Advanced settings".
+local function sectionSimple(ui)
+  colored(ui, 0.6, 0.9, 1, "Cars on the road (fewer cars = better frame rate)")
+  intInput(ui, "Traffic cars around each player", {"traffic", "maxPerPlayer"}, 1, 30)
+  intInput(ui, "Parked cars by day", {"trafficVariety", "parked", "amount"}, 0, 30)
+  intInput(ui, "Parked cars at night", {"trafficVariety", "parked", "nightAmount"}, 0, 30)
+  -- one slider for how far traffic stays: it sets both distances
+  local dist = tonumber(L.get(st, {"traffic", "respawnDistance"}, 1000)) or 1000
+  local ptr = ui.FloatPtr(dist)
+  ui.SetNextItemWidth(240)
+  if ui.SliderFloat("How far traffic stays (metres)##simpledist", ptr, 300, 3000, "%.0f") then
+    L.set(st, {"traffic", "respawnDistance"}, ptr[0])
+    L.set(st, {"traffic", "spawnMaxDistance"}, ptr[0])
+  end
+  ui.Separator()
+  colored(ui, 0.6, 0.9, 1, "Police")
+  checkbox(ui, "Cops never appear in front of a chased player", {"police", "antiTeleport"})
+  checkbox(ui, "No fines in a stolen car or with a fake plate", {"police", "noFineInStolenCar"})
+  num(ui, "Most police cars at once", {"police", "maxCops"}, 0, 3, "%.0f")
+  ui.Separator()
+  colored(ui, 0.6, 0.9, 1, "Switch features on or off")
+  checkbox(ui, "Car theft", {"theft", "enabled"})
+  checkbox(ui, "Black market", {"market", "enabled"})
+  checkbox(ui, "Fence (sell stolen cars)", {"fence", "enabled"})
+  checkbox(ui, "Passengers in other players' cars", {"vehicles", "allowPassengers"})
+  checkbox(ui, "Shared weather", {"weather", "enabled"})
+  checkbox(ui, "Different car models in traffic", {"trafficVariety", "enabled"})
+  ui.Separator()
+  ui.TextWrapped("Press Apply to save your changes for everyone on the server.")
+end
+
 local SECTIONS = {cars = sectionCars, where = sectionWhere, behaviour = sectionBehaviour, amount = sectionAmount, swap = sectionSwap,
   weather = sectionWeather, police = sectionPolice, theft = sectionTheft, fence = sectionFence, market = sectionMarket}
 
@@ -522,15 +554,19 @@ local function drawWindow(ui)
     if ui.Button("Refresh") then ask() end
     ui.SameLine()
     if ui.Button("Close") then M.close() end
+    ui.SameLine()
+    if ui.Button(advanced and "Back to simple" or "Advanced settings") then advanced = not advanced end
     ui.Separator()
-    for i, s in ipairs(L.SECTIONS) do
-      if ui.Button((st.section == s.id and "> " or "") .. s.label) then st.section = s.id end
-      if i % 5 ~= 0 and i < #L.SECTIONS then ui.SameLine() end   -- five tabs to a row: ten in one row would run out of the window
+    if advanced then
+      for i, s in ipairs(L.SECTIONS) do
+        if ui.Button((st.section == s.id and "> " or "") .. s.label) then st.section = s.id end
+        if i % 5 ~= 0 and i < #L.SECTIONS then ui.SameLine() end   -- five tabs to a row: ten in one row would run out of the window
+      end
+      ui.Separator()
     end
-    ui.Separator()
     ui.BeginChild1("rlsmpTrafficBody", ui.ImVec2(0, 460), true)
     inChild = true
-    local body = SECTIONS[st.section] or sectionCars
+    local body = advanced and (SECTIONS[st.section] or sectionCars) or sectionSimple
     body(ui)
     inChild = false
     ui.EndChild()

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.71 (untested in-game)
+- The settings menu (`[` key) opens on a SIMPLE page now: cars on the road (traffic per player, parked cars by day and night, one slider for how far traffic stays), police (cops never in front of you, no fines in a stolen car, most cops), and on/off switches (car theft, black market, fence, passengers, weather, car variety). The button "Advanced settings" shows all the old sections, "Back to simple" returns.
+- Traffic range is 1 km (was 4 km): `traffic.respawnDistance` and `traffic.spawnMaxDistance` default 1000. The simple slider sets both.
+- The new lower car numbers from 0.4.70 are now applied to existing servers too: the first start with this build rewrites `config.json` once (traffic 8 per player, budget 16 + 4 per player, start amount 6, parked 5 by day and 8 at night, near you 3 and 5, range 1000 m) and logs `RLSMP-P3 lag trim 0.4.70`. Values you change afterwards stay.
+
 ## 0.4.70 (untested in-game)
 - Lag, from the owner's friend's log (`94ce0a5c`): about 17 fps with 35 to 38 cars in the game against 45 to 50 fps with 23 to 24. New defaults for fewer cars: traffic per player at most 8 (was 18; budget 16 + 4 per player, was 30 + 10; lowest start amount 6, was 10), parked cars 5 by day and 8 at night (was 10 and 16), kept near the player 3 and 5 at night (was 6 and 10). Existing servers keep their old values: change them in the `[` menu or in `config.json` (`traffic.maxPerPlayer`, `traffic.baseBudget`, `traffic.perPlayerBudget`, `traffic.minAmount`, `trafficVariety.parked.amount/nightAmount/nearCount/nearNightCount`).
 - Save upload hitch (`saveBridge` 140 to 255 ms at every autosave): the checksum of the save was a slow per-byte loop that ran over every file and again over the whole 3 MB payload. It is now about 15 times faster with exactly the same result (new test compares it with the old formula), files are read with a 4 ms budget per frame, and the big encode runs in its own frame.

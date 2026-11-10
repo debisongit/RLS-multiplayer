@@ -1,4 +1,4 @@
-RLS-Career-MP build 0.4.70
+RLS-Career-MP build 0.4.71
 
 1. Copy the Resources folder from here into your BeamMP server folder (merge it; your config, profiles and businesses are not touched).
    Or run: tools/install_to_server.sh /path/to/BeamMP-Server

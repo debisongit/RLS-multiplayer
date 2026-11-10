@@ -370,9 +370,9 @@ local pc = require("rlsmp.server.trafficPolice").payload()
 check(pc.range.respawnRange == 2.5 and pc.range.respawnDelay == 45 and pc.range.unjam.enabled == true, "range: the payload follows the edit")
 cfg.traffic.respawnRange, cfg.traffic.respawnDelay = 1.0, 0
 
--- respawnDistance: default 4000 m, 0 to 6000, sent with the range
-check(cfg.traffic.respawnDistance == 4000, "range: default recycle distance 4000 m")
-check(require("rlsmp.server.trafficPolice").payload().range.respawnDistance == 4000, "range: the distance is in the payload")
+-- respawnDistance: default 1000 m, 0 to 6000, sent with the range
+check(cfg.traffic.respawnDistance == 1000, "range: default recycle distance 1000 m")
+check(require("rlsmp.server.trafficPolice").payload().range.respawnDistance == 1000, "range: the distance is in the payload")
 set(0, {{p = {"traffic", "respawnDistance"}, v = 2500}, {p = {"traffic", "respawnDistance"}, v = 7000}, {p = {"traffic", "respawnDistance"}, v = -1}})
 r = lastResult()
 check(r.applied == 1 and #r.rejected == 2 and cfg.traffic.respawnDistance == 2500, "range: distance edited, above 6000 and below 0 refused")
