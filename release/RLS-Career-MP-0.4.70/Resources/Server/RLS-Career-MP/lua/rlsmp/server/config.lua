@@ -74,12 +74,12 @@ M.defaults = {
     -- Any number above 0 fixes the budget instead.
     totalBudget = 0,
     -- Lowest traffic amount a player starts with (0 = leave each player's own RLS setting). A game set to 4 shows the same few cars again and again.
-    minAmount = 10,
-    baseBudget = 30,
-    perPlayerBudget = 10,
+    minAmount = 6,
+    baseBudget = 16,
+    perPlayerBudget = 4,
     -- Every player gets at least / at most this many (a lone player gets maxPerPlayer).
     minPerPlayer = 3,
-    maxPerPlayer = 18,
+    maxPerPlayer = 8,
     -- How often the director looks for players joining or leaving.
     checkSeconds = 1,
     -- How far from a player a traffic car may be before the game recycles it (docs/RESEARCH_RESPAWN_RANGE.md).
@@ -233,11 +233,11 @@ M.defaults = {
     -- fullPool: parked cars can be EVERY available model/config (full cars, also those with no simple_traffic stand-in), under RLS's own parked filter
     -- (no police or taxi; junk stays out through excludeWords). simplifiedShare: of the picks that have a stand-in model, this share is shown as the cheap stand-in;
     -- the car you get when you steal it is still the exact picked config (client rlsmp/trafficVariety.lua remembers it). 0 = always full cars.
-    parked = {amount = 10, nightAmount = 16, fullPool = false, simplifiedShare = 0.5,
+    parked = {amount = 5, nightAmount = 8, fullPool = false, simplifiedShare = 0.5,
       -- Keep parked cars NEAR the player (RLS leaves its cars where they were created once they are far and switched off, docs/RESEARCH_PARKED_NEAR.md):
       -- when fewer than nearCount (nearNightCount at night) of your parked cars are within nearRadius m, one parked car that is farther than farRadius m from
       -- every player is moved to a free parking spot 120..nearRadius m from you, out of view, at most one per moveEverySeconds. 0 = off.
-      nearCount = 6, nearNightCount = 10, nearRadius = 350, farRadius = 700, moveEverySeconds = 8},   -- nightAmount: wanted at night (people park); 0 or below amount = same as day
+      nearCount = 3, nearNightCount = 5, nearRadius = 350, farRadius = 700, moveEverySeconds = 8},   -- nightAmount: wanted at night (people park); 0 or below amount = same as day
     -- Rarity: everyday cars are the clear majority. Shares of the picks per tier (renormalised over the tiers that exist). A config is "rare" when its model or
     -- config name has a rareWords word / is in rareModels / has Config Type Race or Drift / a Value of rareValue or more; "uncommon" for uncommonWords or
     -- uncommonValue; else common. Words of 5+ letters match inside names ("offroad" in "offroada331972"), shorter ones whole words only.
