@@ -240,4 +240,44 @@ do
   local m = named("rlsmpChunkMissing")
   check(#m == 3 and m[1].id == 95 and m[2].id == 96 and m[3].id == 95 and #m[1].list == 4, "one transfer per request, taking turns")
 end
+-- 9. Leaving: the "leave" call waits for a save and its upload (the connection is gone right after it)
+do
+  local calls, requested = {}, 0
+  MPCoreNetwork = {leaveServer = function(goBack) calls[#calls + 1] = goBack end}
+  overhaul_career_saveSystem = {requestSave = function() requested = requested + 1 return true end, getLastSaveStats = function() return {path = slotPath} end}
+  bridge.enable(true, {chunkSize = 20})
+  for _ = 1, 50 do bridge.onUpdate() end
+  while bridge._inFlight() do server("rlsmpUpAck", {id = bridge._inFlight().id, ok = true}) for _ = 1, 20 do bridge.onUpdate() end end   -- an earlier test's upload
+  bridge.onUpdate()   -- installs the wrapper
+  disk[root .. "rlsmpabc1001/autosave2/career/playerAttributes.json"] = '{"money":{"value":999}}'
+  MPCoreNetwork.leaveServer(true)
+  check(requested == 1 and #calls == 0, "leaving asks RLS for a save and does not leave yet")
+  MPCoreNetwork.leaveServer(true)
+  check(requested == 1 and #calls == 0, "a second press changes nothing")
+  for _ = 1, 20 do bridge.onUpdate() end
+  check(#calls == 0, "no save finished yet: still waiting")
+  sent = {}
+  bridge.onOverhaulSaveFinished()
+  for _ = 1, 200 do bridge.onUpdate() end
+  check(#calls == 0 and sent[1] and sent[1].name == "rlsmpUpBegin", "the save is uploading: still waiting")
+  server("rlsmpUpAck", {id = sent[1].data.id, ok = true})
+  bridge.onUpdate()
+  check(#calls == 1 and calls[1] == true, "after the upload is acknowledged the real leave runs with its arguments")
+  -- nothing to save (RLS never answers): leaves after the time limit
+  calls = {}
+  local realClock = os.clock
+  MPCoreNetwork.leaveServer(false)
+  check(#calls == 0, "waiting again")
+  os.clock = function() return realClock() + 60 end
+  bridge.onUpdate()
+  os.clock = realClock
+  check(#calls == 1 and calls[1] == false, "no answer: it leaves after the time limit")
+  -- not in a session: leaves at once
+  bridge.enable(false)
+  calls = {}
+  MPCoreNetwork.leaveServer(true)
+  check(#calls == 1, "not enabled: leaves at once")
+  bridge.enable(true, {chunkSize = 20})
+end
+
 print(string.format("client_test: %d checks passed", passed))

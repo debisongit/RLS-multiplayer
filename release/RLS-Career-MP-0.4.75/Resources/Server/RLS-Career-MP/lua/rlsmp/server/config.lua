@@ -535,7 +535,7 @@ M.defaults = {
   },
 
   -- How often the server asks clients to save, in minutes (0 = rely on RLS autosave only).
-  forceSaveMinutes = 5,
+  forceSaveMinutes = 2,
 
   -- One-time changes already applied to this file (the server writes it; do not edit).
   migrations = {},
@@ -586,6 +586,11 @@ function M.load(path)
     local pk, dp = cfg.trafficVariety.parked, d.trafficVariety.parked
     pk.amount, pk.nightAmount, pk.nearCount, pk.nearNightCount = dp.amount, dp.nightAmount, dp.nearCount, dp.nearNightCount
     util.info("RLSMP-P3 lag trim 0.4.70: fewer cars (traffic " .. d.traffic.maxPerPlayer .. " per player, parked " .. dp.amount .. "/" .. dp.nightAmount .. ") and traffic range " .. d.traffic.respawnDistance .. " m; change them in the [ menu")
+  end
+  -- Saves lagged behind (0.4.75): the server asked for a save every 5 minutes; now every 2. An old config.json with the old 5 gets 2 once.
+  if not cfg.migrations.saveEvery2 then
+    cfg.migrations.saveEvery2 = true
+    if cfg.forceSaveMinutes == 5 then cfg.forceSaveMinutes = 2 util.info("RLSMP forceSaveMinutes was 5: now 2 (saves lag less)") end
   end
   if type(cfg.serverTag) ~= "string" or not cfg.serverTag:match("^[a-z0-9]+$") then
     cfg.serverTag = randomTag()

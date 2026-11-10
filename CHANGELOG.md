@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.75 (untested in-game)
+- Saves lag behind: leaving the server now saves first. Pressing "leave / back to the menu" (BeamMP's `MPCoreNetwork.leaveServer`) asks RLS to save, waits until the upload to the server is acknowledged (at most 12 s, with a small "Saving your career before you leave..." message) and then leaves. The server already stores the profile when a player disconnects, but the last save never reached it because the connection was gone first. Closing the game window cannot wait, so that case is as fresh as the last save. Logged as `leave: saving first`, `leave: saved and uploaded` or `leave: timed out`.
+- The server asks every player to save every 2 minutes now (`forceSaveMinutes`, was 5); an old `config.json` with 5 is set to 2 once.
+- Not changed, cannot be fixed from our side: "stuck at downloading the first mod" happens in the BeamMP launcher before any of our code runs. Send the server log and the launcher's `Launcher.log` from a failed join.
+
 ## 0.4.74 (untested in-game)
 - No mod cars as traffic, take 2 (owner's log `c8c2656c`: two Aventadors in the first traffic group "autoTraffic"). Cause: that group was built while the career did not count as active yet, so our createGroup rule never ran (no `variety` line in the log at all). Now a sweep runs every 3 s: a mod car (or a switched-off model) that is already in traffic or parked and is 120 m or more from every player and not seen by the camera is deleted, one at a time and at most 8 a minute; the traffic fill and RLS's parked top-up bring a replacement through the filtered picks. Never the player's car, a stolen car, a car in the garage or another player's car. Logged as `mod sweep: traffic car 99146 (aventf) removed`.
 - How a mod is recognised: the real path of the model's `info.json` is not under `content/vehicles/` (a real log shows the game's own cars there); a car with no known path counts as a game car. Every model is logged once as `mod check: <model> is a MOD car / a game car (<path>)` (first 80), so a wrong guess is easy to see.

@@ -35,6 +35,7 @@ local uploadSeq = 0
 local inFlight              -- {id, sums}
 local pendingUpload = false -- another save finished while we were uploading
 local collect               -- current file-reading job, spread over frames
+local leaving = nil         -- {proceed, at, saved}: the player pressed "leave", we save and upload first
 
 local function norm(p) return (tostring(p):gsub("\\", "/"):gsub("^/+", "")) end
 
@@ -182,16 +183,78 @@ local function onUpAck(ack)
   end
 end
 
+-- Leaving the server -----------------------------------------------------------------------------------
+-- A player who leaves used to lose everything since the last autosave: the connection is gone before a save could be uploaded. Now leaving (BeamMP's
+-- MPCoreNetwork.leaveServer, the "back to the menu" button) first asks RLS to save, waits for the upload to finish (at most LEAVE_MAX seconds), and then
+-- leaves. Closing the game window cannot wait, so that case is still only as fresh as the last save.
+local LEAVE_MAX = 12
+local leaveBypass = false
+
+local function toastLeave(msg)
+  if guihooks and guihooks.trigger then
+    guihooks.trigger("toastrMsg", {type = "info", title = "RLS Career MP", msg = msg, config = {timeOut = 4000}})
+  end
+end
+
+local function finishLeave(why)
+  local l = leaving
+  leaving = nil
+  if not l then return end
+  log("I", "RLS-Career-MP", "leave: " .. why)
+  leaveBypass = true
+  local ok, err = pcall(l.proceed)
+  leaveBypass = false
+  if not ok then log("E", "RLS-Career-MP", "leave failed: " .. tostring(err)) end
+end
+
+-- Returns true when `proceed` will be called later (after the save and its upload); false = leave right away.
+function M.leaveAfterSave(proceed)
+  if not enabled or not overhaul_career_saveSystem then return false end
+  if leaving then return true end
+  if not pcall(M.requestSave, "leaving") then return false end
+  leaving = {proceed = proceed, at = os.clock(), saved = false}
+  toastLeave("Saving your career before you leave...")
+  log("I", "RLS-Career-MP", "leave: saving first")
+  return true
+end
+
+local function leaveStep()
+  if not leaving then return end
+  if not enabled then return finishLeave("the session ended meanwhile") end
+  if os.clock() - leaving.at > LEAVE_MAX then return finishLeave("timed out after " .. LEAVE_MAX .. " s") end
+  if leaving.saved and not collect and not inFlight and not pendingUpload and not (net.isUploading and net.isUploading()) then
+    finishLeave("saved and uploaded")
+  end
+end
+
+local function wrapLeave()
+  local n = rawget(_G, "MPCoreNetwork")
+  if type(n) ~= "table" or type(n.leaveServer) ~= "function" then return end
+  if n.__rlsmpLeave ~= nil and n.leaveServer == n.__rlsmpLeave then return end
+  local original = n.leaveServer
+  local wrapper = function(...)
+    if leaveBypass or not enabled then return original(...) end
+    local args = {n = select("#", ...), ...}
+    if M.leaveAfterSave(function() original((unpack or table.unpack)(args, 1, args.n)) end) then return end
+    return original(...)
+  end
+  n.leaveServer = wrapper
+  n.__rlsmpLeave = wrapper
+end
+
 -- Hooks ------------------------------------------------------------------------------------------------
 
 function M.onOverhaulSaveFinished()
   if not enabled then return end
+  if leaving then leaving.saved = true end
   M.uploadSlot(lastSavedSlot())
 end
 
 function M.onUpdate()
+  wrapLeave()
   if collect then stepCollect() end
   net.pump(4)
+  leaveStep()
 end
 
 function M.onExtensionLoaded()
