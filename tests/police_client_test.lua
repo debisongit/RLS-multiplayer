@@ -346,4 +346,27 @@ check(#paid == 1, "own car with the real plate: the chase fine is charged")
 flash(SP, "Traffic Violation (Speeding): x")
 check(#paid == 1, "back in an own car: charged")
 
+-- Passenger: the car the player sits in is another player's (BeamMP lists it as not local) -> never a fine, never a pursuit target
+local registered
+package.loaded["overhaul/lib/vehicles/policy"] = {register = function(owner, fns, life) registered = {owner = owner, fns = fns, life = life} return function() end end}
+MPVehicleGE = {getVehicles = function() return {["1-3"] = {isLocal = false, gameVehicleID = 99}, ["0-1"] = {isLocal = true, gameVehicleID = 1}} end}
+traffic[99] = {role = {name = "none"}, pursuit = {mode = 2}, pos = at(0)}
+playerId = 99
+tick()
+check(registered and registered.owner == "rlsmpPassenger" and registered.life == "loaded", "passenger policy registered with RLS")
+for _, dom in ipairs({"speedImmune", "offenseExempt", "pursuitImmune", "pursuitOutcomeIgnored"}) do
+  check(registered.fns[dom](99) == true, "passenger policy covers " .. dom .. " for the car the player rides in")
+  check(registered.fns[dom](1) ~= true and registered.fns[dom](5) ~= true, dom .. ": not for other cars")
+end
+flash(SP, "Traffic Violation (Speeding): x")
+check(#paid == 0 and #tickets == 0, "passenger: no radar fine, no ticket")
+paid = {}
+overhaul_career_economy_payment.pay({money = {amount = 300}}, {label = "Police fine", tags = {"fine"}})
+check(#paid == 0, "passenger: no police fine")
+playerId = 1
+MPVehicleGE = nil
+paid = {}
+overhaul_career_economy_payment.pay({money = {amount = 300}}, {label = "Police fine", tags = {"fine"}})
+check(#paid == 1, "driver of an own car: the police fine is still charged")
+
 print(string.format("police_client_test: %d checks passed", passed))

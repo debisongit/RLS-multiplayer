@@ -67,6 +67,7 @@ package.loaded["rlsmp/trafficVariety"] = {
     if pickNil then return nil end
     return V.pickOne(mem, entries, function(e) return {type = "Car", brand = brands[e.model]} end, {}, config, math.random, current, census)
   end,
+  isBannedModel = function(m) return m == "wydra" end,
   candidates = function() return entries end,
   contextNow = function() return {} end,
 }
@@ -134,6 +135,12 @@ check(replaceCalls[1].options.config ~= nil and replaceCalls[1].options.autoEnte
 check(#inserted == 1 and saw("reroll: respawned car 10 sedan/cfg -> "), "the new car is in RLS traffic, and it is logged")
 run(30)
 check(#replaceCalls == 1, "the new car did not respawn: not swapped again")
+
+-- 2b. a model switched off in the menu that is in traffic anyway is replaced (no respawn needed)
+reset() addObject(1, "unicycle") addCar(10, "wydra") addCar(11, "sedan") setConfig()
+run(3)
+check(#replaceCalls == 1 and replaceCalls[1].old:getID() == 10 and replaceCalls[1].model ~= "wydra", "a switched-off model in traffic is replaced by another model")
+check(not saw("reroll: respawned car 11"), "an allowed model stays")
 
 -- 3. repaint --------------------------------------------------------------------------------------------------------------------------------------
 reset() addObject(1, "unicycle") addCar(10, "sedan") setConfig({respawn = {repaintChance = 1}})

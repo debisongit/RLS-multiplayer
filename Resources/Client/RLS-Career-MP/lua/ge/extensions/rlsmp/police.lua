@@ -32,6 +32,7 @@ local M = {}
 local net = require("rlsmp/lib/net")
 local p3 = require("rlsmp/lib/p3")
 local theftLib = require("rlsmp/lib/theft")
+local mp = require("rlsmp/lib/mp")
 
 local CHECK_EVERY = 0.5   -- seconds between pursuit checks
 local FREEZE_RADIUS = 300 -- metres: police this close to the player's car are frozen
@@ -289,6 +290,31 @@ local function fakePlateCar(id)
   return t ~= nil and t.hasFakePlate ~= nil and t.hasFakePlate(id) == true
 end
 
+-- Riding as a passenger: the car the player sits in belongs to another player (rlsmp/vehicleGuard.lua). On the passenger's game RLS still sees "the
+-- player's car", so a radar would fine them and the police could pick them as the target. Only the driver (the car's owner) can be fined or chased.
+local function ridingOther()
+  if not (isMP() and be ~= nil) then return false end
+  local id = be:getPlayerVehicleID(0)
+  return id ~= nil and id >= 0 and mp.isRemote(id) == true
+end
+
+local policyUndo = nil
+local function registerPassengerPolicy()
+  if policyUndo ~= nil then return end
+  local ok, policy = pcall(require, "overhaul/lib/vehicles/policy")
+  if not (ok and type(policy) == "table" and policy.register) then return end
+  local function riding(vehId) return vehId ~= nil and be ~= nil and vehId == be:getPlayerVehicleID(0) and ridingOther() end
+  local ok2, undo = pcall(policy.register, "rlsmpPassenger", {
+    speedImmune = riding, offenseExempt = riding, pursuitImmune = riding, pursuitOutcomeIgnored = riding,
+  }, "loaded")
+  if ok2 then
+    policyUndo = undo
+    p3.log("I", "passenger policy registered: no radar fine, no offence, no pursuit target, no pursuit outcome in another player's car")
+  else
+    p3.log("W", "passenger policy could not be registered: " .. tostring(undo))
+  end
+end
+
 local function inStolenCar()
   return settings.noFineInStolenCar and isMP() and overhaul_career_career ~= nil and overhaul_career_career.isActive()
     and be ~= nil and (theftLib.isConverted(be:getPlayerVehicleID(0)) or fakePlateCar(be:getPlayerVehicleID(0)))
@@ -334,6 +360,12 @@ end
 
 local function patchFines()
   wrapAround(overhaul_career_economy_payment, "pay", "finePay", function(original, price, reason, ...)
+    if (isPoliceFine(reason) or isRadarFine(reason)) and ridingOther() then
+      if isRadarFine(reason) then radarSkipped = os.time() end
+      p3.count("fine refused (passenger)")
+      p3.log("I", "RLSMP-FINE refused: the player only rides in another player's car")
+      return true
+    end
     if isPoliceFine(reason) and inStolenCar() then
       fineSkipped = os.time()
       fineFake = not theftLib.isConverted(be:getPlayerVehicleID(0))
@@ -404,6 +436,12 @@ end
 local function sync()
   if not isMP() or not be or not overhaul_career_career or not overhaul_career_career.isActive() then return end
   setPursuit(playerPursuitMode() >= 1)
+  registerPassengerPolicy()
+  if ridingOther() and playerPursuitMode() >= 1 then   -- safety net if a pursuit still started
+    local svc = overhaul_integration_services_police
+    if svc and svc.evadeVehicle then pcall(svc.evadeVehicle, be:getPlayerVehicleID(0), false) end
+    p3.log("I", "pursuit against a passenger cancelled")
+  end
   patchFines()   -- independent of antiTeleport: the fine wrappers only act when the player is in a stolen car
   if not watching() then return end
   patch()   -- retry wrappers until RLS's police service exists (installed before a chase, not after)

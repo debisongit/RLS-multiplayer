@@ -587,7 +587,7 @@ local function cleanOwn(group)
   local words = config.excludeWords
   local out, changed = {}, 0
   for _, e in ipairs(group) do
-    if V.isExcluded(e, words) then
+    if V.isExcluded(e, words) or M.isBannedModel(e.model) then
       changed = changed + 1
       local ok, pick = pcall(M.pickReplacement, e, nil)
       if ok and pick and pick.model then out[#out + 1] = {model = pick.model, config = pick.config} end
@@ -705,6 +705,11 @@ function M.brandOf(model) return brandOfModel(model) end
 function M.premadeCount() return premadeList and #premadeList or 0 end
 function M.getMemory() return mem end
 function M.noteWarm(model) if type(model) == "string" then warm[model] = true end end
+
+-- A model the player set to weight 0 in the menu (see lib V.isBanned).
+function M.isBannedModel(model)
+  return config ~= nil and V.isBanned(model, typeOfModel(model), config)
+end
 
 -- One replacement for a traffic car that is being re-rolled: a different model (different config too) from the premade pool, round robin.
 -- current = {model, config}; census = {brand = cars of that brand on the street now}. nil = leave the car alone.

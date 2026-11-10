@@ -243,6 +243,14 @@ local function pick(map, model, t)
   return nil
 end
 
+-- A model the player switched OFF (its own weight 0, or no weight of its own and its Type at 0): never traffic or parked, whatever path picked it.
+function M.isBanned(model, typeName, cfg)
+  if type(cfg) ~= "table" or type(model) ~= "string" then return false end
+  local w = pick(cfg.models, model, nil)
+  if w == nil and typeName and cfg.typeWeights then w = cfg.typeWeights[typeName] end
+  return w ~= nil and tonumber(w) == 0
+end
+
 -- entry = {model, config}; info = {type = "Car" | nil, mod = bool}; ctx = {zone = "city" | nil, night = bool}.
 function M.weight(entry, info, ctx, cfg)
   info = info or {}

@@ -74,9 +74,19 @@ function M.check()
   end
   local data = gameplay_traffic.getTrafficData()
   local alive, ids = {}, {}
+  local banned = {}
   for id, veh in pairs(data) do
     alive[id] = true
     ids[#ids + 1] = id
+    -- a model switched off in the menu (weight 0) that still got into traffic (the game's own group, a path we do not control): replace it too
+    if v.isBannedModel and not mp.isRemote(id) then
+      local m = ts.modelOf(id, veh)
+      if m and v.isBannedModel(m) then
+        banned[id] = true
+        if tracker.due[id] == nil then tracker.due[id] = clock end
+        p3.count("reroll: switched-off model seen")
+      end
+    end
     if R.observe(tracker, id, veh.respawnCount, clock) then
       p3.count("reroll respawns seen")
       if math.random() >= cfg.respawn.chance then tracker.due[id] = nil end
@@ -100,7 +110,7 @@ function M.check()
     if not hidden and dist then p3.count("reroll skipped (" .. tostring(dist) .. ")") end
     if hidden then
       tracker.due[id] = nil                                     -- looked at: once per respawn, swapped or not
-      if not S.allowed(tracker, clock, cfg.respawn) then p3.count("reroll skipped (rate)") return nil end
+      if not banned[id] and not S.allowed(tracker, clock, cfg.respawn) then p3.count("reroll skipped (rate)") return nil end
       local model, name = ts.modelOf(id, veh), ts.configOf(id)
       if not model then goto continue end
       local simp = ext("simplified")

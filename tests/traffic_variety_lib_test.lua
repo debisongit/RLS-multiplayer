@@ -204,4 +204,8 @@ for i = 1, 60 do
 end
 check(#V.select({junkList[1], junkList[2]}, 2, function() return {} end, {}, dc, lcg(1)) == 0, "only junk: nothing picked")
 
+check(V.isBanned("wydra", "Car", {models = {wydra = 0}, typeWeights = {}}) == true, "a model at weight 0 is banned")
+check(V.isBanned("sedan", "Car", {models = {wydra = 0}, typeWeights = {Car = 1}}) == false, "other models are not")
+check(V.isBanned("sedan", "Car", {models = {}, typeWeights = {Car = 0}}) == true, "a Type at 0 bans its models without their own weight")
+check(V.isBanned("sedan", "Car", {models = {sedan = 2}, typeWeights = {Car = 0}}) == false, "an own weight beats the Type")
 print(string.format("traffic_variety_lib_test: %d checks passed", passed))
