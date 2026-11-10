@@ -209,6 +209,8 @@ M.defaults = {
     -- Moving traffic and/or parked cars.
     applyToTraffic = true,
     applyToParked = true,
+    -- Modded cars (from a mod zip) never appear as traffic or parked cars: they are heavy for every player. They can still be bought and driven. false = allowed again.
+    noMods = true,
     -- Road class limits in m/s: slower than city = city, slower than main = main, else highway.
     zoneSpeedLimits = {city = 17, main = 27},
     -- Live swapping: a traffic car that nobody can see is replaced by a model that fits the road class and day or night better.

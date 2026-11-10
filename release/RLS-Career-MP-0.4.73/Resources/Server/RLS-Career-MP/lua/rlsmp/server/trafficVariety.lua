@@ -150,6 +150,7 @@ function M.payload()
     excludeWords = type(cfg.excludeWords) == "table" and wordList(cfg.excludeWords) or nil,
     applyToTraffic = cfg.applyToTraffic ~= false,
     applyToParked = cfg.applyToParked ~= false,
+    noMods = cfg.noMods ~= false,
     zoneSpeedLimits = {city = tonumber(limits.city), main = tonumber(limits.main)},
     swap = M.swap(),
     police = M.police(),

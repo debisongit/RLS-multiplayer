@@ -275,6 +275,8 @@ showParkedLook = function(group)
 end
 
 -- Builds the new group, or returns nil to let the game keep its own.
+local dropBanned   -- defined below with the banned-model rules
+
 local function build(original, amount, params)
   local parked = isParkedIntent(params)
   if parked and not config.applyToParked then return nil end
@@ -295,7 +297,7 @@ local function build(original, amount, params)
   for _, e in ipairs(pool) do
     if spawnable(e.model) then candidates[#candidates + 1] = e end
   end
-  local mods = modCandidates(params)
+  local mods = config.noMods and {} or modCandidates(params)
   for _, e in ipairs(mods) do candidates[#candidates + 1] = e end
   -- Parked cars can be EVERY model and config (full cars), also those with no stand-in. The game's own parked offer is only stand-ins, and a stand-in cannot be
   -- traced to ONE real config, so with the full pool the stand-ins come back only as a look of a full pick (below), with that pick remembered.
@@ -317,6 +319,7 @@ local function build(original, amount, params)
     p3.log("I", string.format("simplified: parked group offered %d stand-ins of %d entries (%s)", n, #candidates, only ~= candidates and "stand-ins only" or "list kept"))
     candidates = only
   end
+  candidates = dropBanned(candidates)
   local ctx = context()
   local function infoOf(e) return {type = typeOfModel(e.model), mod = config.mods[e.model] ~= nil, brand = brandOfModel(e.model)} end
   if not parked then remember(candidates) end
@@ -663,6 +666,7 @@ local function rotateFocus()
   local list = {}
   for _, e in ipairs(premadeList or {}) do list[#list + 1] = e end
   if #list == 0 then for _, e in ipairs(recent) do list[#list + 1] = e end end
+  list = dropBanned(list)
   if #list == 0 then return end
   list = V.dropExcluded(list, config.excludeWords)
   local ok, chosen = pcall(V.select, list, math.max(6, config.focus.configs * 3), M.infoOf, context(), config, nil, mem)
@@ -706,9 +710,35 @@ function M.premadeCount() return premadeList and #premadeList or 0 end
 function M.getMemory() return mem end
 function M.noteWarm(model) if type(model) == "string" then warm[model] = true end end
 
--- A model the player set to weight 0 in the menu (see lib V.isBanned).
+-- Is this model from a mod? Read once per model from the real path of its info.json.
+local modModel = {}
+local function isModModel(model)
+  if type(model) ~= "string" then return false end
+  if modModel[model] == nil then
+    local path
+    if FS and FS.getFileRealPath then
+      local ok, p = pcall(FS.getFileRealPath, FS, "/vehicles/" .. model .. "/info.json")
+      path = ok and type(p) == "string" and p or nil
+    end
+    if path == nil then return false end   -- not known yet: ask again next time (nothing is remembered)
+    modModel[model] = V.isModPath(path)
+    if modModel[model] then p3.log("I", string.format("mod car %s (%s): kept out of traffic and parked cars", model, tostring(path))) end
+  end
+  return modModel[model]
+end
+
+-- A model that must never be traffic or a parked car: the player set it to weight 0 (see lib V.isBanned), or it is a mod car and noMods is on.
 function M.isBannedModel(model)
-  return config ~= nil and V.isBanned(model, typeOfModel(model), config)
+  if config == nil then return false end
+  if config.noMods and isModModel(model) then return true end
+  return V.isBanned(model, typeOfModel(model), config)
+end
+
+dropBanned = function(list)
+  if type(list) ~= "table" or not config then return list end
+  local out = {}
+  for _, e in ipairs(list) do if not (type(e) == "table" and M.isBannedModel(e.model)) then out[#out + 1] = e end end
+  return #out == #list and list or out
 end
 
 -- One replacement for a traffic car that is being re-rolled: a different model (different config too) from the premade pool, round robin.
@@ -746,7 +776,7 @@ end
 -- A real (full) car entry of `model` from the premade pool, or nil (rlsmp_simplified upgrades a stand-in with it).
 function M.fullEntryFor(model)
   local list = {}
-  for _, e in ipairs(premadeList or {}) do if e.model == model and not V.isExcluded(e, config and config.excludeWords) then list[#list + 1] = e end end
+  for _, e in ipairs(premadeList or {}) do if e.model == model and not V.isExcluded(e, config and config.excludeWords) and not M.isBannedModel(e.model) then list[#list + 1] = e end end
   if #list == 0 then return nil end
   return list[math.random(#list)]
 end

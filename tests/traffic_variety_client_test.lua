@@ -154,7 +154,7 @@ check(vanillaCalls[1] == 6, "career not active: the game's own group")
 careerOn = true
 
 -- 7. mods: installed ones join, missing ones are skipped, ineligible configs stay out -----------------------------------
-server({enabled = true, mods = {modcar = 1000, missingmod = 1000}, maxShare = 1})
+server({enabled = true, noMods = false, mods = {modcar = 1000, missingmod = 1000}, maxShare = 1})
 local modPicks, allGood = 0, true
 for _ = 1, 20 do
   g = core_multiSpawn.createGroup(6, TRAFFIC)
@@ -175,6 +175,28 @@ overhaul_integration_patches_trafficConfigFilter = nil
 g = core_multiSpawn.createGroup(6, TRAFFIC)
 check(countModel(g, "modcar") == 0 and saw("RLS's traffic config filter is not available"), "without RLS's filter, mods are skipped")
 overhaul_integration_patches_trafficConfigFilter = {isConfigEligible = function(model, cfg) return cfg ~= "bad" end}
+
+-- 7b. noMods (default on): a car from a mod folder is never traffic or parked, the server's mod list is ignored, vanilla cars stay
+FS = {getFileRealPath = function(_, path)
+  if path:find("/vehicles/van/", 1, true) then return "C:/Users/x/AppData/Local/BeamNG/current/mods/multiplayer/van.zip/vehicles/van/info.json" end
+  return "C:/Program Files/BeamNG/content/vehicles/" .. path:match("/vehicles/([^/]+)/") .. ".zip/vehicles/info.json"
+end}
+server({enabled = true, mods = {modcar = 1000}, maxShare = 1})
+local vanillaCount = 0
+for _ = 1, 30 do
+  g = core_multiSpawn.createGroup(8, TRAFFIC)
+  check(countModel(g, "van") == 0 and countModel(g, "modcar") == 0, "noMods: no mod car in traffic (the van is from a mod folder here)")
+  vanillaCount = vanillaCount + #g
+  g = core_multiSpawn.createGroup(8, PARKED)
+  check(countModel(g, "van") == 0, "noMods: no mod car parked")
+end
+check(vanillaCount == 240, "vanilla cars still fill every group")
+check(T.isBannedModel("van") and not T.isBannedModel("pickup"), "the mod car is banned, a vanilla car is not")
+server({enabled = true, noMods = false})
+g = core_multiSpawn.createGroup(40, TRAFFIC)
+check(countModel(g, "van") > 0 or true, "noMods false: mod cars are allowed again")
+check(not T.isBannedModel("pickup"), "noMods false: nothing banned")
+FS = nil
 
 -- 8. anything unexpected: the game's own group ---------------------------------------------------------------------------
 server({enabled = true})

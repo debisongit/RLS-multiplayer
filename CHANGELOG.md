@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.4.73 (untested in-game)
+- Mod cars can no longer be traffic or parked cars (they lag a lot). New setting `trafficVariety.noMods`, on by default, with a checkbox on the simple page of the `[` menu. A model counts as a mod when its files come from a mods folder (BeamMP's multiplayer mod folder or any other mods folder); each one is logged once as `mod car <model> (<path>): kept out of traffic and parked cars`. It is filtered out of every pick (new groups, parked cars, re-rolls, the traffic fill) and a mod car that still gets into traffic through the game's own group is replaced like a switched-off model. The server's `mods` list is ignored while it is on. Buying, selling and driving mod cars is untouched, and so is anything a player owns. Needs the real file path from the game (`FS.getFileRealPath`, the same call the mod price feature uses); if it is not available nothing is filtered.
+
 ## 0.4.72 (untested in-game)
 - Parked cars: the friend's log (`b0a1e551`) showed `trafficParkingAmount is already 16 (wanted 5)`. The parked amount lives in the player's own career save (RLS setting), so a save that an older server had set to 16 kept 16 and our code only ever RAISED the number. A player whose save held a bigger number than the server wants never got the lower amount, which is why that game had about 35 cars (16 parked + 8 traffic + the other player's) and 9 to 13 fps on a strong PC, while a game with a low saved number ran fine. Now the amount is also lowered to what the server wants (the old value is restored when you leave the server).
 

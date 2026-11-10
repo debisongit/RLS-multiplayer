@@ -25,6 +25,7 @@ M.DEFAULTS = {
   excludeWords = {"junk", "wreck", "derby", "crash", "rolling", "shell", "undriveable", "parts"},
   applyToTraffic = true,
   applyToParked = true,
+  noMods = true,        -- cars from mods are never traffic or parked cars (they lag); they can still be bought
   zoneSpeedLimits = {city = 17, main = 27},   -- m/s: slower than city = "city", slower than main = "main", else "highway"
   swap = {enabled = false, live = false, perMinute = 2, hiddenSeconds = 5, checkSeconds = 2, minRatio = 1.5, maxFailures = 3},
   -- Police groups: weight per model (Bastion low), at most `undercoverShare` of the cars undercover, at most `maxShare` of a group one model.
@@ -211,6 +212,7 @@ function M.sanitize(src)
     maxCars = math.floor(number(src.maxCars, 0, 0, 1000)),     -- BeamMP's MaxCars per player (0 = unknown)
     applyToTraffic = src.applyToTraffic ~= false,
     applyToParked = src.applyToParked ~= false,
+    noMods = src.noMods ~= false,
     zoneSpeedLimits = {city = city, main = main},
     swap = swapSettings(src.swap),
     police = policeSettings(src.police),
@@ -241,6 +243,13 @@ local function pick(map, model, t)
   if v ~= nil then return v end
   if t then return map[t] end
   return nil
+end
+
+-- Does this real file path belong to a mod (BeamMP's mod folder, or any mods folder)? Vanilla files are not under a mods folder.
+function M.isModPath(path)
+  if type(path) ~= "string" then return false end
+  local p = path:lower():gsub("\\", "/")
+  return p:find("/mods/", 1, true) ~= nil or p:find("/multiplayer/", 1, true) ~= nil
 end
 
 -- A model the player switched OFF (its own weight 0, or no weight of its own and its Type at 0): never traffic or parked, whatever path picked it.

@@ -519,6 +519,7 @@ local function sectionSimple(ui)
     L.set(st, {"traffic", "respawnDistance"}, ptr[0])
     L.set(st, {"traffic", "spawnMaxDistance"}, ptr[0])
   end
+  checkbox(ui, "Mod cars never appear as traffic or parked (they lag; you can still buy them)", {"trafficVariety", "noMods"})
   ui.Separator()
   colored(ui, 0.6, 0.9, 1, "Police")
   checkbox(ui, "Cops never appear in front of a chased player", {"police", "antiTeleport"})
