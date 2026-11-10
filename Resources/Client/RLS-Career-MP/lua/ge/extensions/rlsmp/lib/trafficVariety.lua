@@ -245,11 +245,13 @@ local function pick(map, model, t)
   return nil
 end
 
--- Does this real file path belong to a mod (BeamMP's mod folder, or any mods folder)? Vanilla files are not under a mods folder.
+-- Is this real file path a mod's? A real log shows the game's own cars at ".../BeamNG.drive/content/vehicles/<model>.zip/vehicles/<model>/info.json";
+-- anything else with a path (BeamMP's mods/multiplayer folder, mods/repo, mods/unpacked) is a mod. No path = unknown = not a mod.
 function M.isModPath(path)
-  if type(path) ~= "string" then return false end
+  if type(path) ~= "string" or path == "" then return false end
   local p = path:lower():gsub("\\", "/")
-  return p:find("/mods/", 1, true) ~= nil or p:find("/multiplayer/", 1, true) ~= nil
+  if p:find("/content/vehicles/", 1, true) then return false end
+  return true
 end
 
 -- A model the player switched OFF (its own weight 0, or no weight of its own and its Type at 0): never traffic or parked, whatever path picked it.

@@ -592,4 +592,35 @@ do
   gameplay_traffic_trafficUtils = nil
 end
 
+-- 10. the sweep: a mod car that is already in traffic or parked (built before the rule was active) is deleted when nobody is near, one at a time
+do
+  FS = {getFileRealPath = function(_, path)
+    if path:find("/vehicles/aventf/", 1, true) then return "C:\\Users\\x\\AppData\\Local\\BeamNG\\current\\mods\\multiplayer\\Aventador.zip\\vehicles\\aventf\\info.json" end
+    return "C:\\Program Files (x86)\\Steam\\steamapps\\common\\BeamNG.drive\\content\\vehicles\\" .. path:match("/vehicles/([^/]+)/") .. ".zip\\vehicles\\x\\info.json"
+  end}
+  server({enabled = true})
+  local deleted, dist = {}, 500
+  local objs = {}
+  local function car(id, jb) objs[id] = {jbeam = jb, getPosition = function() return {x = 0, y = 0, z = 0} end, delete = function() deleted[#deleted + 1] = id objs[id] = nil end} end
+  car(1, "unicycle") car(10, "aventf") car(11, "sedan") car(12, "aventf")
+  be = {getObjectByID = function(_, id) return objs[id] end, getPlayerVehicleID = function() return 1 end}
+  local trafficData = {[10] = {pos = {x = 0, y = 0, z = 0}}, [11] = {pos = {x = 0, y = 0, z = 0}}}
+  gameplay_traffic = {getTrafficData = function() return trafficData end}
+  overhaul_integration_services_parking = {getParkedCarsList = function() return {12} end}
+  package.loaded["rlsmp/bubble"] = {minPlayerDistance = function() return dist end}
+  dist = 50
+  check(T.sweepMods() == nil and #deleted == 0, "sweep: a mod car near a player stays")
+  dist = 500
+  check(T.sweepMods() == 10 and deleted[1] == 10, "sweep: the hidden mod car in traffic is deleted")
+  trafficData[10] = nil
+  check(T.sweepMods() == 12 and deleted[2] == 12, "sweep: then the parked mod car")
+  check(T.sweepMods() == nil and #deleted == 2 and objs[11] ~= nil, "sweep: game cars and the player's car are never touched")
+  trafficData[10] = {pos = {x = 0, y = 0, z = 0}, camVisible = true}
+  car(10, "aventf")
+  check(T.sweepMods() == nil, "sweep: a car the camera sees stays")
+  T.onServerLeave()
+  FS, be, gameplay_traffic, overhaul_integration_services_parking = nil, nil, nil, nil
+  package.loaded["rlsmp/bubble"] = nil
+end
+
 print(string.format("traffic_variety_client_test: %d checks passed", passed))

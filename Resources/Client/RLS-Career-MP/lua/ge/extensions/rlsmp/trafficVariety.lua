@@ -678,9 +678,73 @@ local function rotateFocus()
   end
 end
 
+-- Mod cars (and switched-off models) that are in traffic or parked anyway: the game's first traffic group is often built BEFORE the career counts as active (a real
+-- log: the group "autoTraffic" had two Aventadors and our createGroup rule never ran), so nothing was filtered. Every few seconds one such car that nobody can see is
+-- deleted; the traffic fill and RLS's parked top-up bring a replacement through the filtered picks. Never a car of the player, a stolen car or a car in the garage.
+local SWEEP_EVERY, SWEEP_MIN_DIST, SWEEP_PER_MINUTE = 3, 120, 8
+local sweepTimer, sweepTimes = 0, {}
+
+local function jbeamOfObj(o)
+  return o and (o.jbeam or o.JBeam or (o.getJBeamFilename and o:getJBeamFilename())) or nil
+end
+
+local function sweepVictim(id, pos)
+  if not (be and be.getObjectByID) or mp.isRemote(id) then return nil end
+  if be.getPlayerVehicleID and id == be:getPlayerVehicleID(0) then return nil end
+  local o = be:getObjectByID(id)
+  local jb = jbeamOfObj(o)
+  if not jb or jb == "unicycle" or jb == SM.MODEL then return nil end
+  if not M.isBannedModel(jb, config or V.sanitize({})) then return nil end
+  local inv = rawget(_G, "overhaul_career_garage_inventory")
+  if inv and inv.getInventoryIdFromVehicleId and inv.getInventoryIdFromVehicleId(id) ~= nil then return nil end
+  if T.isConverted and T.isConverted(id) then return nil end
+  local b = package.loaded["rlsmp/bubble"] or rawget(_G, "rlsmp_bubble")
+  local d = pos and b and b.minPlayerDistance and b.minPlayerDistance({pos = pos})
+  if not d or d < SWEEP_MIN_DIST then return nil end   -- unknown or near a player: leave it
+  return o, jb, d
+end
+
+function M.sweepMods()
+  if not (mp.isMPSession() and careerActive()) then return nil end
+  local now = os.time()
+  for i = #sweepTimes, 1, -1 do if now - sweepTimes[i] > 60 then table.remove(sweepTimes, i) end end
+  if #sweepTimes >= SWEEP_PER_MINUTE then return nil end
+  local function remove(o, jb, d, id, kind)
+    p3.count("mod car removed (" .. kind .. ")")
+    p3.log("I", string.format("mod sweep: %s car %s (%s) removed, %.0f m from every player", kind, tostring(id), tostring(jb), d))
+    sweepTimes[#sweepTimes + 1] = now
+    o:delete()
+    return id
+  end
+  if gameplay_traffic and gameplay_traffic.getTrafficData then
+    for id, veh in pairs(gameplay_traffic.getTrafficData()) do
+      if not (veh.camVisible == true) and not (veh.role and veh.role.name == "police") then
+        local o, jb, d = sweepVictim(id, veh.pos)
+        if o then return remove(o, jb, d, id, "traffic") end
+      end
+    end
+  end
+  local pk = rawget(_G, "overhaul_integration_services_parking")
+  if pk and pk.getParkedCarsList then
+    for _, id in ipairs(pk.getParkedCarsList() or {}) do
+      local o0 = be and be.getObjectByID and be:getObjectByID(id)
+      local p = o0 and o0.getPosition and o0:getPosition()
+      local o, jb, d = sweepVictim(id, p)
+      if o then return remove(o, jb, d, id, "parked") end
+    end
+  end
+  return nil
+end
+
 function M.onUpdate(dtReal)
   M.install()
   clock = clock + (dtReal or 0)
+  sweepTimer = sweepTimer + (dtReal or 0)
+  if sweepTimer >= SWEEP_EVERY then
+    sweepTimer = 0
+    local ok, err = pcall(M.sweepMods)
+    if not ok then p3.logOnChange("sweepfail", tostring(err), "W", "mod sweep failed: " .. tostring(err)) end
+  end
   if config and config.enabled and config.focus and config.focus.enabled and focus.entries and FO.due(focus, config.focus, clock) and mp.isMPSession() and careerActive() then
     rotateFocus()
   end
@@ -711,7 +775,7 @@ function M.getMemory() return mem end
 function M.noteWarm(model) if type(model) == "string" then warm[model] = true end end
 
 -- Is this model from a mod? Read once per model from the real path of its info.json.
-local modModel = {}
+local modModel, modLogged = {}, 0
 local function isModModel(model)
   if type(model) ~= "string" then return false end
   if modModel[model] == nil then
@@ -722,16 +786,18 @@ local function isModModel(model)
     end
     if path == nil then return false end   -- not known yet: ask again next time (nothing is remembered)
     modModel[model] = V.isModPath(path)
-    if modModel[model] then p3.log("I", string.format("mod car %s (%s): kept out of traffic and parked cars", model, tostring(path))) end
+    modLogged = modLogged + 1
+    if modLogged <= 80 then p3.log("I", string.format("mod check: %s is %s (%s)", model, modModel[model] and "a MOD car: kept out of traffic and parked cars" or "a game car", tostring(path))) end
   end
   return modModel[model]
 end
 
 -- A model that must never be traffic or a parked car: the player set it to weight 0 (see lib V.isBanned), or it is a mod car and noMods is on.
-function M.isBannedModel(model)
-  if config == nil then return false end
-  if config.noMods and isModModel(model) then return true end
-  return V.isBanned(model, typeOfModel(model), config)
+function M.isBannedModel(model, cfg)
+  cfg = cfg or config
+  if cfg == nil then return false end
+  if cfg.noMods and isModModel(model) then return true end
+  return V.isBanned(model, typeOfModel(model), cfg)
 end
 
 dropBanned = function(list)
