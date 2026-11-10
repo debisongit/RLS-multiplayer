@@ -71,7 +71,7 @@ fromClient(2, "rlsmpTrafficAdminGet", {})
 local m = take()
 check(#m == 1 and m[1].data.ok == true and type(m[1].data.cfg) == "table", "an ordinary player gets the settings")
 local snap = m[1].data.cfg
-check(snap.smartTraffic.mix.normal == 80 and snap.traffic.maxPerPlayer == 18 and snap.weather.mix.clear == 35 and snap.police.antiTeleport == true, "...the current values")
+check(snap.smartTraffic.mix.normal == 80 and snap.traffic.maxPerPlayer == 8 and snap.weather.mix.clear == 35 and snap.police.antiTeleport == true, "...the current values")
 check(snap.trafficAdmin == nil and snap.serverTag == nil and snap.identity == nil, "...and only the editable parts, never the server tag or other config")
 nextSecond()
 fromClient(99, "rlsmpTrafficAdminGet", {})

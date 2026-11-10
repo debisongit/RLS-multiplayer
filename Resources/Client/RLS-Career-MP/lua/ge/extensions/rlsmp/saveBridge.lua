@@ -126,6 +126,8 @@ end
 -- Called from onUpdate: read a few files per frame so big garages don't freeze the game.
 local function stepCollect()
   local job = collect
+  if job.reading == false then return finishCollect() end   -- everything is read: the (big) encode runs in a frame of its own
+  local t0 = os.clock()
   local last = math.min(job.index + FILES_PER_FRAME - 1, #job.list)
   for i = job.index, last do
     local entry = job.list[i]
@@ -138,9 +140,10 @@ local function stepCollect()
         job.changedCount = job.changedCount + 1
       end
     end
+    if os.clock() - t0 > 0.004 then last = i break end   -- a few milliseconds per frame at most (the rest follows next frame)
   end
   job.index = last + 1
-  if job.index > #job.list then finishCollect() end
+  if job.index > #job.list then job.reading = false end
 end
 
 function M.uploadSlot(slotPath)

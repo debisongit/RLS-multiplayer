@@ -20,6 +20,8 @@ package.loaded["rlsmp.server.sessions"] = {
 }
 
 local cfg = require("rlsmp.server.config").defaults
+-- the director maths is tested with these numbers, whatever the shipped defaults are
+cfg.traffic.baseBudget, cfg.traffic.perPlayerBudget, cfg.traffic.maxPerPlayer = 30, 10, 18
 local net = require("rlsmp.server.net")
 net.init(cfg)
 local traffic = require("rlsmp.server.traffic")

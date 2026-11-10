@@ -65,6 +65,7 @@ luajit tests/traffic_menu_lib_test.lua
 luajit tests/traffic_menu_client_test.lua
 luajit tests/phone_app_manifest_test.lua
 luajit tests/traffic_variety_client_test.lua
+luajit tests/transfer_checksum_test.lua
 luajit tests/traffic_swap_lib_test.lua
 luajit tests/traffic_swap_client_test.lua
 luajit tests/traffic_pool_lib_test.lua
