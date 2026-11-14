@@ -243,7 +243,7 @@ end
 -- 9. Leaving: the "leave" call waits for a save and its upload (the connection is gone right after it)
 do
   local calls, requested = {}, 0
-  MPCoreNetwork = {leaveServer = function(goBack) calls[#calls + 1] = goBack end}
+  MPCoreNetwork = {leaveServer = function(goBack) calls[#calls + 1] = goBack == nil and "nil" or goBack end}
   overhaul_career_saveSystem = {requestSave = function() requested = requested + 1 return true end, getLastSaveStats = function() return {path = slotPath} end}
   bridge.enable(true, {chunkSize = 20})
   for _ = 1, 50 do bridge.onUpdate() end
@@ -266,12 +266,46 @@ do
   -- nothing to save (RLS never answers): leaves after the time limit
   calls = {}
   local realClock = os.clock
-  MPCoreNetwork.leaveServer(false)
+  MPCoreNetwork.leaveServer(true)
   check(#calls == 0, "waiting again")
   os.clock = function() return realClock() + 60 end
   bridge.onUpdate()
   os.clock = realClock
-  check(#calls == 1 and calls[1] == false, "no answer: it leaves after the time limit")
+  check(#calls == 1 and calls[1] == true, "no answer: it leaves after the time limit")
+  -- 0.4.76: only the player's own leave (leaveServer(true)) may wait. BeamMP's own resets (joining a server while still in one calls
+  -- leaveServer() and connects right after) must run at once, and a leave that was waiting must never fire later into the new session.
+  calls = {}
+  MPCoreNetwork.leaveServer()
+  check(#calls == 1 and calls[1] == "nil" and requested == 2, "leaveServer() without goBack leaves at once, no save is asked for (calls " .. #calls .. ", requested " .. requested .. ")")
+  calls = {}
+  MPCoreNetwork.leaveServer(false)
+  check(#calls == 1 and calls[1] == false, "leaveServer(false) leaves at once")
+  calls = {}
+  MPCoreNetwork.leaveServer(true)            -- the player presses leave: waiting for the save
+  check(#calls == 0, "a leave is waiting")
+  MPCoreNetwork.leaveServer()                -- ...and joins another server meanwhile: BeamMP resets the session now
+  check(#calls == 1, "BeamMP's own reset runs at once")
+  os.clock = function() return realClock() + 60 end
+  for _ = 1, 5 do bridge.onUpdate() end
+  os.clock = realClock
+  check(#calls == 1, "the leave that was waiting never fires afterwards (it would reset the session being joined)")
+  -- the session ended another way while a leave waited: nothing more is called
+  calls = {}
+  MPCoreNetwork.leaveServer(true)
+  check(#calls == 0, "waiting once more")
+  MPCoreNetwork.isMPSession = function() return false end
+  bridge.enable(false)
+  for _ = 1, 5 do bridge.onUpdate() end
+  check(#calls == 0, "session already over: the waiting leave is dropped, not run")
+  -- the career closed but we are still on the server: the leave the player asked for is finished
+  MPCoreNetwork.isMPSession = function() return true end
+  bridge.enable(true, {chunkSize = 20})
+  MPCoreNetwork.leaveServer(true)
+  bridge.enable(false)
+  bridge.onUpdate()
+  check(#calls == 1 and calls[1] == true, "career closed but still on the server: the leave runs")
+  bridge.enable(true, {chunkSize = 20})
+  MPCoreNetwork.isMPSession = nil
   -- not in a session: leaves at once
   bridge.enable(false)
   calls = {}

@@ -86,6 +86,17 @@ function M.find(o)
   for _, c in ipairs(rough) do
     if not S.reject(c, ctx) then ok[#ok + 1] = c end
   end
+  if o.preferRight then
+    -- only a few survivors get a road name (each one is a map search): take the ones on the player's right first, so "right side preferred"
+    -- still holds with the short list (with the first three in random order the pick landed on the left about one time in ten)
+    local right, left = {}, {}
+    for _, c in ipairs(ok) do
+      local _, _, side = S.rel(ctx.player, ctx.dir or {x = 0, y = 0}, c)
+      if side < 0 then right[#right + 1] = c else left[#left + 1] = c end
+    end
+    for _, c in ipairs(left) do right[#right + 1] = c end
+    ok = right
+  end
   for i = 1, math.min(#ok, MAX_ROAD_CHECKS) do kept[i] = ok[i] end
   if not o.noRoad then
     local now = os.clock()
