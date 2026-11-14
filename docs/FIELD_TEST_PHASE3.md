@@ -598,3 +598,12 @@ Known gaps: never played; the cause of the original stall is not known, the retr
 1. Player A joins and plays (cars out). Player B joins after. B's log should show `cars are still being built...` only if the loading goes on for 90 s; normally the hello (`state hello_sent`) comes a few seconds after the last car loaded.
 2. Send B's game log and the server console from B's join. Look for: `save has N files, biggest: ...` (server), `Chunks of transfer N arrive without their header` (client), `jsonDecode` errors around the join (client).
 Known gaps: the cause (a cut packet on the launcher link) is only inferred from two logs; the calm wait may not be enough.
+
+## Join after leaving, and joining while still on a server (build 0.4.76)
+
+1. Join, play, press leave in the menu: the message "Saving your career before you leave..." shows, then you are back in the menu. Log: `leave: saving first`, then `leave: saved and uploaded` (or `timed out after 12 s`).
+2. Join again: the career must start. Log: `state hello_sent`, `state downloading`, `state starting`, `state active`.
+3. While in a career, open the server list and join the same server again without leaving first. The career must start. Log: `leave: the waiting leave is dropped` only if you had pressed leave before.
+4. Join while another player drives around with traffic: if the career does not start at once, the message "Loading the other players' cars..." shows and the hello goes out within about 20 s (`the game is calm after N s` or `waited 20 s: saying hello anyway`).
+If you stay in plain BeamMP ("spectator") again: send the game log and the server console of that join. The lines that matter: `[rlsmp-timing]`, `leave:`, `Career start failed`, and on the server `joined with client build`, `Sending saved profile`, `stalled`.
+Known gaps: never played; the two faults were found by reading the code, not from a log of the failure.

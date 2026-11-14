@@ -218,9 +218,28 @@ function M.leaveAfterSave(proceed)
   return true
 end
 
+-- Forget a leave that is waiting, without running it: the session is being left (or was left) another way.
+local function dropLeave(why)
+  if not leaving then return end
+  leaving = nil
+  log("I", "RLS-Career-MP", "leave: the waiting leave is dropped (" .. why .. ")")
+end
+
+local function inSession()
+  local n = rawget(_G, "MPCoreNetwork")
+  if type(n) ~= "table" or type(n.isMPSession) ~= "function" then return true end   -- cannot tell: assume yes
+  local ok, yes = pcall(n.isMPSession)
+  return not ok or yes == true
+end
+
 local function leaveStep()
   if not leaving then return end
-  if not enabled then return finishLeave("the session ended meanwhile") end
+  if not enabled then
+    -- the career closed while we waited. Still on the server: finish the leave the player asked for. Already off it: nothing left to do
+    -- (a second leave now could hit the NEXT session the player is joining).
+    if inSession() then return finishLeave("the career closed meanwhile") end
+    return dropLeave("the session ended meanwhile")
+  end
   if os.clock() - leaving.at > LEAVE_MAX then return finishLeave("timed out after " .. LEAVE_MAX .. " s") end
   if leaving.saved and not collect and not inFlight and not pendingUpload and not (net.isUploading and net.isUploading()) then
     finishLeave("saved and uploaded")
@@ -233,7 +252,15 @@ local function wrapLeave()
   if n.__rlsmpLeave ~= nil and n.leaveServer == n.__rlsmpLeave then return end
   local original = n.leaveServer
   local wrapper = function(...)
-    if leaveBypass or not enabled then return original(...) end
+    if leaveBypass then return original(...) end
+    -- Only the player's own leave may wait for a save: BeamMP's menu and its "disconnected" box call leaveServer(true). Every other call is
+    -- BeamMP resetting the session as ONE STEP of something else, and it must happen now, in order: joining a server while still in one
+    -- (connectToServer calls leaveServer() and connects right after), or a map that is missing. A leave that waited there fired up to 12 s
+    -- later and reset the NEW session in the middle of its join: joined, but no save ever came (plain BeamMP, "spectator").
+    if not enabled or (...) ~= true then
+      dropLeave("BeamMP leaves the session now")
+      return original(...)
+    end
     local args = {n = select("#", ...), ...}
     if M.leaveAfterSave(function() original((unpack or table.unpack)(args, 1, args.n)) end) then return end
     return original(...)

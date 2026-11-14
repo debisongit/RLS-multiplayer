@@ -32,7 +32,12 @@ local RLS_WAIT_TIMEOUT = 60   -- seconds to wait for RLS itself to finish loadin
 -- The save is asked for only when the game has calmed down after loading the other players' cars. Both logs of a stalled join show the same
 -- thing: the other player's ~25 synced cars were still loading when the save started to come, and a packet of the BeamMP launcher link came
 -- out cut in two (`jsonDecode: {"ignLvl":0,"ICE":\5\1\0\0E:rlsmpChunkBegin:...`): our header was swallowed. So: no hello while cars were built in the last CALM_SECONDS (at most CALM_MAX).
-local CALM_SECONDS, CALM_MAX = 6, 90
+-- The wait is SHORT and never silent (0.4.76). It used to be 6 s of quiet within 90 s: on a busy server (traffic fill, re-rolls, the mod car sweep
+-- build a car every few seconds) the player sat up to 90 s in plain BeamMP with no message, which looks exactly like "my save is not downloading",
+-- and with a slow map load the server's own 120 s hello limit (handshake.helloTimeoutSeconds) could end the join with a kick.
+local CALM_SECONDS, CALM_MAX = 3, 20
+local CALM_TELL_AFTER = 4     -- seconds of waiting before the player is told why nothing happens yet
+local calmTold = false
 local lastCarBuilt = nil      -- stateClock when a vehicle was last spawned
 local stateClock = 0
 local function calmNow()
@@ -99,7 +104,7 @@ end
 
 local function sendHello()
   downloadWatch.reset(watch)
-  retries, helloRetries = 0, 0
+  retries, helloRetries, calmTold = 0, 0, false
   pending = nil   -- set again only when this attempt's profile download completes
   setState("hello_sent")
   net.send("rlsmpHello", {v = transfer.PROTOCOL, build = transfer.BUILD})
@@ -208,8 +213,13 @@ function M.onUpdate(dtReal)
   if state == "waiting_rls" then
     if rlsReady() then
       if calmNow() or stateTime > CALM_MAX then
-        if not calmNow() then timing("cars are still being built, but the join waited long enough: saying hello") end
+        timing(calmNow() and string.format("the game is calm after %.0f s: saying hello", stateTime)
+          or string.format("cars are still being built, but the join waited %d s: saying hello anyway", CALM_MAX))
         sendHello()
+      elseif stateTime > CALM_TELL_AFTER and not calmTold then
+        calmTold = true
+        timing("waiting for the other players' cars to finish loading before asking for the save (at most " .. CALM_MAX .. " s)")
+        toast("info", "Loading the other players' cars. Your career starts in a few seconds.")
       end
     elseif stateTime > RLS_WAIT_TIMEOUT then
       fail("rls_missing", "RLS Career Overhaul is not installed or failed to load.")
@@ -296,7 +306,7 @@ function M.onServerLeave()
   setModules(false)
   net.reset()
   pending, firstSaveTimer, staleCars, staleTimer = nil, nil, nil, nil
-  started = false
+  started, calmTold = false, false
   setState("idle")
 end
 

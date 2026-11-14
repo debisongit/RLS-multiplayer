@@ -144,22 +144,36 @@ local again
 for k = #sentData, 1, -1 do if sentData[k].name == "rlsmpHello" then again = sentData[k].data break end end
 check(again.again == 2, "...marked as a repeat")
 
--- 0.4.65: no hello while the game is still building cars (other players' cars); it goes out once calm, or after 90 s
+-- No hello while the game is still building cars (other players' cars); it goes out once calm, or after a SHORT limit (0.4.76: 3 s of quiet,
+-- at most 20 s, and the player is told why nothing happens yet)
+local toasts = {}
+guihooks.trigger = function(name, data) if name == "toastrMsg" then toasts[#toasts + 1] = data.msg end end
 core.onServerLeave()
 local h0 = hellos()
 core.onVehicleSpawned(42)
 core.onWorldReadyState(2)
 check(core.getState() == "waiting_rls" and hellos() == h0, "cars were just built: the hello waits")
-for _ = 1, 4 do core.onUpdate(1) end
-check(hellos() == h0, "still waiting after 4 s")
-core.onVehicleSpawned(43)
-for _ = 1, 5 do core.onUpdate(1) end
-check(hellos() == h0, "another car restarts the quiet time")
 for _ = 1, 2 do core.onUpdate(1) end
-check(hellos() == h0 + 1 and core.getState() == "hello_sent", "6 s without a new car: hello")
+check(hellos() == h0, "still waiting after 2 s")
+core.onVehicleSpawned(43)
+for _ = 1, 2 do core.onUpdate(1) end
+check(hellos() == h0, "another car restarts the quiet time")
+core.onUpdate(1)
+check(hellos() == h0 + 1 and core.getState() == "hello_sent", "3 s without a new car: hello")
+check(#toasts == 0, "a short wait shows no message")
 core.onServerLeave()
 core.onVehicleSpawned(1)
 core.onWorldReadyState(2)
-for i = 1, 100 do core.onUpdate(1) if i % 3 == 0 then core.onVehicleSpawned(i) end end
-check(hellos() == h0 + 2, "cars keep coming: the join waits at most 90 s, then says hello anyway")
+local saidAt
+for i = 1, 30 do
+  core.onUpdate(1)
+  if i % 2 == 0 then core.onVehicleSpawned(i) end
+  if not saidAt and hellos() == h0 + 2 then saidAt = i end
+end
+check(saidAt ~= nil and saidAt <= 22, "cars keep coming: the join waits at most about 20 s, then says hello anyway (said at " .. tostring(saidAt) .. " s)")
+local told = 0
+for _, m in ipairs(toasts) do if m:find("other players' cars", 1, true) then told = told + 1 end end
+check(told == 1, "a longer wait tells the player once why the career has not started yet (" .. told .. ")")
+-- the wait can never reach the server's hello limit (120 s by default) on its own
+check(saidAt < 60, "the calm wait stays far below the server's hello timeout")
 print("core_start_test: " .. passed .. " checks passed")
